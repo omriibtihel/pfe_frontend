@@ -160,8 +160,27 @@ class ApiClient {
     }
   }
 
+  async getBlob(url: string): Promise<{ blob: Blob; filename?: string }> {
+  try {
+    const res = await this.axios.get(url, { responseType: "blob" });
 
+    // axios met les headers en lower-case
+    const cd = (res.headers?.["content-disposition"] as string | undefined) ?? undefined;
 
+    let filename: string | undefined;
+    if (cd) {
+      // filename*=UTF-8''... (RFC5987) ou filename="..."
+      const m1 = /filename\*\=UTF-8''([^;]+)/i.exec(cd);
+      const m2 = /filename="?([^"]+)"?/i.exec(cd);
+      const raw = (m1?.[1] ?? m2?.[1])?.trim();
+      if (raw) filename = decodeURIComponent(raw);
+    }
+
+    return { blob: res.data as Blob, filename };
+  } catch (err) {
+    throw new Error(extractErrorMessage(err));
+  }
+}
 
   
 }

@@ -25,6 +25,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Checkbox } from "@/components/ui/checkbox";
 import { DataTable } from "@/components/ui/data-table";
 import { useToast } from "@/hooks/use-toast";
+import { Input } from "@/components/ui/input";
+import { Modal } from "@/components/ui/modal";
 
 import dataService from "@/services/dataService";
 import datasetService, { DatasetOut as DatasetListItem } from "@/services/datasetService";
@@ -38,13 +40,13 @@ const imputationMethods = [
   { value: "median", label: "Médiane" },
   { value: "mode", label: "Mode" },
   { value: "constant", label: "Constante" },
-  // { value: "knn", label: "KNN" }, // si non supporté backend, laisse commenté
+  { value: "KNNImputer", label: "KNN Imputer" },
 ];
 
 const normalizationMethods = [
-  { value: "minmax", label: "Min-Max (0-1)" },
-  { value: "zscore", label: "Z-Score" },
-  { value: "robust", label: "Robust Scaler" },
+  { value: "StandardScaler", label: "StandardScaler" },
+  { value: "RobustScaler", label: "RobustScaler" },
+  { value: "MinMaxScaler", label: "MinMaxScaler (0-1)" },
 ];
 
 // helpers
@@ -58,14 +60,30 @@ function uniq(arr: string[]) {
 function asNonEmptyArray(cols: string[]) {
   return (cols ?? []).filter(Boolean);
 }
+function normalizeDType(dt?: string) {
+  return (dt ?? "").toLowerCase();
+}
+function looksNumericDType(dt?: string) {
+  const s = normalizeDType(dt);
+  return (
+    s.includes("int") ||
+    s.includes("float") ||
+    s.includes("double") ||
+    s.includes("number") ||
+    s.includes("numeric") ||
+    s.includes("uint") ||
+    s.includes("bool")
+  );
+}
+function parseConstantValue(raw: string) {
+  const t = (raw ?? "").trim();
+  if (t === "") return "";
+  const n = Number(t);
+  if (Number.isFinite(n) && /^[-+]?\d*\.?\d+(e[-+]?\d+)?$/i.test(t)) return n;
+  return t;
+}
 
 type OpKind = "cleaning" | "imputation" | "normalization" | "encoding" | "other";
-
-function getDatasetTarget(ds: DatasetListItem): string | null {
-  const anyDs = ds as any;
-  const v = anyDs?.target_column ?? anyDs?.targetColumn ?? null;
-  return typeof v === "string" && v.trim() ? v.trim() : null;
-}
 
 const ColumnSelector = ({
   columns,
@@ -126,11 +144,6 @@ export function ProcessingPage() {
   const { toast } = useToast();
 
   const [datasets, setDatasets] = useState<DatasetListItem[]>([]);
-  const datasetsRef = useRef<DatasetListItem[]>([]);
-  useEffect(() => {
-    datasetsRef.current = datasets;
-  }, [datasets]);
-
   const [activeDatasetId, setActiveDatasetId] = useState<number | null>(null);
 
   const [operations, setOperations] = useState<ProcessingOperation[]>([]);
@@ -145,9 +158,15 @@ export function ProcessingPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [isSwitchingDataset, setIsSwitchingDataset] = useState(false);
 
-  // Target (optionnel, utile plus tard pour le training)
+  // Target
   const [targetColumn, setTargetColumn] = useState<string | null>(null);
   const [isSavingTarget, setIsSavingTarget] = useState(false);
+  const [isTargetLoaded, setIsTargetLoaded] = useState(false);
+
+  // Modal target (si target manquante)
+  const [showTargetModal, setShowTargetModal] = useState(false);
+  const [tempTarget, setTempTarget] = useState<string>("");
+  const [promptedTargetForDatasetId, setPromptedTargetForDatasetId] = useState<number | null>(null);
 
   // selections per op kind
   const [cleaningColumns, setCleaningColumns] = useState<string[]>([]);
@@ -155,6 +174,18 @@ export function ProcessingPage() {
   const [normalizationColumns, setNormalizationColumns] = useState<string[]>([]);
   const [encodingColumns, setEncodingColumns] = useState<string[]>([]);
   const [otherColumns, setOtherColumns] = useState<string[]>([]);
+
+  // Imputation UI state (pour constant + KNNImputer)
+  const [selectedImputationMethod, setSelectedImputationMethod] = useState<string | null>(null);
+  const [constantValue, setConstantValue] = useState<string>("");
+
+  const [knnNeighbors, setKnnNeighbors] = useState<number>(5);
+  const [knnWeights, setKnnWeights] = useState<"uniform" | "distance">("uniform");
+  const [knnAddIndicator, setKnnAddIndicator] = useState(false);
+
+  // NEW: download/save states
+  const [isDownloading, setIsDownloading] = useState(false);
+  const [isSavingProcessed, setIsSavingProcessed] = useState(false);
 
   // anti race-condition
   const requestTokenRef = useRef(0);
@@ -171,6 +202,11 @@ export function ProcessingPage() {
     setNormalizationColumns([]);
     setEncodingColumns([]);
     setOtherColumns([]);
+    setSelectedImputationMethod(null);
+    setConstantValue("");
+    setKnnNeighbors(5);
+    setKnnWeights("uniform");
+    setKnnAddIndicator(false);
   };
 
   const sanitizeSelections = (allowedCols: string[]) => {
@@ -198,25 +234,22 @@ export function ProcessingPage() {
     }
   };
 
-  const updateDatasetTargetInList = (datasetId: number, value: string | null) => {
-    setDatasets((prev) =>
-      prev.map((d) => {
-        if (d.id !== datasetId) return d;
-        return { ...(d as any), target_column: value } as DatasetListItem;
-      })
-    );
-    // maintient la ref en sync immédiatement (évite stale dans refreshProcessing)
-    datasetsRef.current = datasetsRef.current.map((d) =>
-      d.id === datasetId ? ({ ...(d as any), target_column: value } as DatasetListItem) : d
-    );
+  const fetchTarget = async (datasetId: number) => {
+    try {
+      const t = await apiClient.get<{ target_column: string | null }>(`/projects/${projectId}/datasets/${datasetId}/target`);
+      return { ok: true as const, target: (t?.target_column ?? null) as string | null };
+    } catch {
+      return { ok: false as const, target: null as string | null };
+    }
   };
 
   const refreshProcessing = async (datasetId: number, nextPage = page) => {
     const token = ++requestTokenRef.current;
 
-    const [ops, preview] = await Promise.all([
+    const [ops, preview, tgt] = await Promise.all([
       dataService.getOperations(projectId, datasetId),
       dataService.getProcessingPreview(projectId, datasetId, nextPage, pageSize),
+      fetchTarget(datasetId),
     ]);
 
     if (token !== requestTokenRef.current) return;
@@ -231,10 +264,23 @@ export function ProcessingPage() {
 
     sanitizeSelections(cols);
 
-    // target depuis list
-    const ds = datasetsRef.current.find((d) => d.id === datasetId);
-    setTargetColumn(ds ? getDatasetTarget(ds) : null);
+    setTargetColumn(tgt.ok ? tgt.target : null);
+    setIsTargetLoaded(tgt.ok);
   };
+
+  // Ouvre le modal si aucune target n'a été définie (1 fois par dataset)
+  useEffect(() => {
+    if (isLoading || isSwitchingDataset) return;
+    if (!activeDatasetId) return;
+    if (!columns.length) return;
+    if (!isTargetLoaded) return;
+
+    if (!targetColumn && promptedTargetForDatasetId !== activeDatasetId) {
+      setTempTarget("");
+      setShowTargetModal(true);
+      setPromptedTargetForDatasetId(activeDatasetId);
+    }
+  }, [isLoading, isSwitchingDataset, activeDatasetId, columns.length, targetColumn, promptedTargetForDatasetId, isTargetLoaded]);
 
   // initial load
   useEffect(() => {
@@ -247,18 +293,29 @@ export function ProcessingPage() {
         if (!mounted) return;
 
         setDatasets(list);
-        datasetsRef.current = list;
 
-        const first = list?.[0]?.id ?? null;
-        setActiveDatasetId(first);
+        const active = await datasetService.getActive(projectId).catch(() => ({ active_dataset_id: null }));
+        let chosen: number | null = active.active_dataset_id ?? null;
 
-        if (first) {
+        if (chosen && !list.some((d) => d.id === chosen)) chosen = null;
+
+        if (!chosen) {
+          chosen = list?.[0]?.id ?? null;
+          if (chosen) {
+            await datasetService.setActive(projectId, chosen).catch(() => {});
+          }
+        }
+
+        setActiveDatasetId(chosen);
+
+        if (chosen) {
           resetSelections();
-          const ds = list.find((d) => d.id === first);
-          setTargetColumn(ds ? getDatasetTarget(ds) : null);
-          await refreshProcessing(first, 1);
+          setTargetColumn(null);
+          setIsTargetLoaded(false);
+          await refreshProcessing(chosen, 1);
         } else {
           setTargetColumn(null);
+          setIsTargetLoaded(false);
         }
       } catch (e) {
         toast({ title: "Erreur", description: (e as Error).message, variant: "destructive" });
@@ -276,11 +333,8 @@ export function ProcessingPage() {
 
   const onDatasetChange = async (nextId: number) => {
     setIsSwitchingDataset(true);
-
-    // invalide toutes les réponses en cours
     requestTokenRef.current += 1;
 
-    // reset UI
     setColumns([]);
     setDtypes({});
     setPreviewRows([]);
@@ -290,12 +344,11 @@ export function ProcessingPage() {
     resetSelections();
 
     setActiveDatasetId(nextId);
-
-    // target immédiat depuis list
-    const ds = datasetsRef.current.find((d) => d.id === nextId);
-    setTargetColumn(ds ? getDatasetTarget(ds) : null);
+    setTargetColumn(null);
+    setIsTargetLoaded(false);
 
     try {
+      await datasetService.setActive(projectId, nextId).catch(() => {});
       await refreshProcessing(nextId, 1);
     } catch (e) {
       toast({ title: "Erreur", description: (e as Error).message, variant: "destructive" });
@@ -316,7 +369,7 @@ export function ProcessingPage() {
 
       const newVal = (out?.target_column ?? value) as string | null;
       setTargetColumn(newVal);
-      updateDatasetTargetInList(activeDatasetId, newVal);
+      setIsTargetLoaded(true);
 
       toast({
         title: "Target mis à jour",
@@ -329,11 +382,6 @@ export function ProcessingPage() {
     }
   };
 
-  /**
-   * IMPORTANT:
-   * Ne PAS passer operationColumns en paramètre (stale après switch).
-   * On relit la sélection depuis le state au moment du clic.
-   */
   const runOperation = async (kind: OpKind, description: string, params: Record<string, any> = {}) => {
     if (!activeDatasetId) {
       toast({
@@ -344,7 +392,6 @@ export function ProcessingPage() {
       return;
     }
 
-    // Cleaning/Other ont besoin d'une action côté backend
     if ((kind === "cleaning" || kind === "other") && (!params?.action || typeof params.action !== "string")) {
       toast({
         title: "Erreur de configuration",
@@ -367,6 +414,19 @@ export function ProcessingPage() {
         variant: "destructive",
       });
       return;
+    }
+
+    // Petit garde-fou UI pour KNNImputer (numérique only)
+    if (kind === "imputation" && String(params?.method ?? "").toLowerCase() === "knnimputer") {
+      const nonNumeric = safeCols.filter((c) => dtypes[c] && !looksNumericDType(dtypes[c]));
+      if (nonNumeric.length) {
+        toast({
+          title: "KNNImputer: colonnes invalides",
+          description: `Sélectionne uniquement des colonnes numériques. Problème: ${nonNumeric.join(", ")}`,
+          variant: "destructive",
+        });
+        return;
+      }
     }
 
     try {
@@ -405,6 +465,81 @@ export function ProcessingPage() {
 
   const tableColumns = useMemo(() => columns.map((c) => ({ key: c, header: c })), [columns]);
 
+  const applySelectedImputation = async () => {
+    if (!selectedImputationMethod) return;
+
+    const m = selectedImputationMethod;
+
+    if (m === "constant") {
+      const constant = parseConstantValue(constantValue);
+      await runOperation("imputation", `Imputation: constant`, { method: "constant", constant });
+      return;
+    }
+
+    if (m === "KNNImputer") {
+      await runOperation("imputation", `Imputation: KNNImputer`, {
+        method: "KNNImputer",
+        n_neighbors: knnNeighbors,
+        weights: knnWeights,
+        add_indicator: knnAddIndicator,
+      });
+      return;
+    }
+
+    await runOperation("imputation", `Imputation: ${m}`, { method: m });
+  };
+
+  // -----------------------
+  // Download + Save processed dataset (as VERSION)
+  // -----------------------
+  const triggerBrowserDownload = (blob: Blob, filename: string) => {
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    window.URL.revokeObjectURL(url);
+  };
+
+  const handleDownloadProcessed = async () => {
+    if (!activeDatasetId) return;
+
+    setIsDownloading(true);
+    try {
+      const { blob, filename } = await dataService.exportProcessed(projectId, activeDatasetId);
+      triggerBrowserDownload(blob, filename ?? `dataset_${activeDatasetId}_processed.csv`);
+      toast({ title: "Téléchargement", description: "Le fichier prétraité a été téléchargé." });
+    } catch (e) {
+      toast({ title: "Erreur", description: (e as Error).message, variant: "destructive" });
+    } finally {
+      setIsDownloading(false);
+    }
+  };
+
+  const handleSaveProcessed = async () => {
+    if (!activeDatasetId) return;
+
+    setIsSavingProcessed(true);
+    try {
+      const out = await dataService.saveProcessedAsVersion(projectId, activeDatasetId, {});
+      const versionId = (out as any)?.id;
+
+      toast({
+        title: "Version enregistrée",
+        description: versionId ? `Version #${versionId} ajoutée à l'historique.` : "Version ajoutée à l'historique.",
+      });
+
+      // Optionnel: si tu veux rafraîchir l'historique local (si tu l’affiches ici) -> pas nécessaire
+      // Optionnel: si tu veux rediriger directement vers /projects/:id/versions -> à toi de décider
+    } catch (e) {
+      toast({ title: "Erreur", description: (e as Error).message, variant: "destructive" });
+    } finally {
+      setIsSavingProcessed(false);
+    }
+  };
+
   return (
     <AppLayout>
       <div className="space-y-6">
@@ -435,55 +570,22 @@ export function ProcessingPage() {
 
             <Badge variant="outline">Colonnes: {columns.length}</Badge>
             <Badge variant="outline">
+              {!activeDatasetId ? "Target: —" : !isTargetLoaded ? "Target: …" : targetColumn ? `Target: ${targetColumn}` : "Target: —"}
+            </Badge>
+            <Badge variant="outline">
               Page {page}/{totalPages}
             </Badge>
+            {isTargetLoaded && !targetColumn && (
+              <Button variant="outline" size="sm" disabled={disableActions || isSavingTarget} onClick={() => setShowTargetModal(true)}>
+                <Target className="h-4 w-4 mr-2" />
+                Définir target
+              </Button>
+            )}
           </div>
         </div>
 
         {/* Action Cards */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {/* TARGET */}
-          <Card className="card-hover border-l-4 border-l-muted">
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2 text-lg">
-                <Target className="h-5 w-5" />
-                Target (optionnel)
-              </CardTitle>
-              <CardDescription>
-                Utile plus tard pour le <b>training</b> (classification/régression). Pendant la préparation, ce n&apos;est
-                pas obligatoire.
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              <div className="flex items-center justify-between">
-                <p className="text-sm font-medium">Colonne target</p>
-                <Badge variant="outline">{targetColumn ? `Target: ${targetColumn}` : "Aucun target"}</Badge>
-              </div>
-
-              <Select
-                value={targetColumn ?? "__none__"}
-                onValueChange={(v) => saveTarget(v === "__none__" ? null : v)}
-                disabled={disableActions || isSavingTarget}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Choisir la target..." />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="__none__">— Aucun —</SelectItem>
-                  {columns.map((c) => (
-                    <SelectItem key={c} value={c}>
-                      {c}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-
-              <p className="text-xs text-muted-foreground">
-                On activera le <b>split</b> seulement dans la phase &quot;modèles&quot; pour éviter le data leakage.
-              </p>
-            </CardContent>
-          </Card>
-
           {/* CLEANING */}
           <Card className="card-hover border-l-4 border-l-primary">
             <CardHeader>
@@ -544,11 +646,14 @@ export function ProcessingPage() {
             <CardContent className="space-y-3">
               <Select
                 disabled={disableActions}
-                onValueChange={(val) =>
-                  runOperation("imputation", `Imputation: ${val}`, {
-                    method: val,
-                  })
-                }
+                value={selectedImputationMethod ?? undefined}
+                onValueChange={(val) => {
+                  setSelectedImputationMethod(val);
+
+                  if (val === "mean" || val === "median" || val === "mode") {
+                    runOperation("imputation", `Imputation: ${val}`, { method: val });
+                  }
+                }}
               >
                 <SelectTrigger>
                   <SelectValue placeholder="Méthode..." />
@@ -561,6 +666,67 @@ export function ProcessingPage() {
                   ))}
                 </SelectContent>
               </Select>
+
+              {selectedImputationMethod === "constant" && (
+                <div className="space-y-2 rounded-md border border-border p-3 bg-muted/30">
+                  <p className="text-xs text-muted-foreground">Valeur constante à utiliser (nombre ou texte)</p>
+                  <Input
+                    value={constantValue}
+                    onChange={(e) => setConstantValue(e.target.value)}
+                    placeholder='Ex: 0 ou "Unknown"'
+                    disabled={disableActions}
+                  />
+                </div>
+              )}
+
+              {selectedImputationMethod === "KNNImputer" && (
+                <div className="space-y-3 rounded-md border border-border p-3 bg-muted/30">
+                  <div className="grid grid-cols-2 gap-2">
+                    <div className="space-y-1">
+                      <p className="text-xs text-muted-foreground">n_neighbors</p>
+                      <Input
+                        type="number"
+                        min={1}
+                        value={knnNeighbors}
+                        onChange={(e) => setKnnNeighbors(Math.max(1, Number(e.target.value || 1)))}
+                        disabled={disableActions}
+                      />
+                    </div>
+
+                    <div className="space-y-1">
+                      <p className="text-xs text-muted-foreground">weights</p>
+                      <Select
+                        value={knnWeights}
+                        onValueChange={(v) => setKnnWeights(v === "distance" ? "distance" : "uniform")}
+                        disabled={disableActions}
+                      >
+                        <SelectTrigger>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="uniform">uniform</SelectItem>
+                          <SelectItem value="distance">distance</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+
+                  <label className="flex items-center gap-2 text-sm">
+                    <Checkbox checked={knnAddIndicator} onCheckedChange={(v) => setKnnAddIndicator(Boolean(v))} disabled={disableActions} />
+                    Ajouter des indicateurs “missing”
+                  </label>
+
+                  <p className="text-xs text-muted-foreground">
+                    KNNImputer fonctionne uniquement sur des <b>colonnes numériques</b>.
+                  </p>
+                </div>
+              )}
+
+              {(selectedImputationMethod === "constant" || selectedImputationMethod === "KNNImputer") && (
+                <Button className="w-full" disabled={disableActions || !selectedImputationMethod} onClick={applySelectedImputation}>
+                  Appliquer l&apos;imputation
+                </Button>
+              )}
 
               <ColumnSelector
                 key={`imp-${activeDatasetId}`}
@@ -579,7 +745,7 @@ export function ProcessingPage() {
                 <BarChart2 className="h-5 w-5 text-accent" />
                 Normalisation
               </CardTitle>
-              <CardDescription>Standardiser les échelles</CardDescription>
+              <CardDescription>Standardiser les échelles (scikit-learn)</CardDescription>
             </CardHeader>
             <CardContent className="space-y-3">
               <Select
@@ -715,14 +881,23 @@ export function ProcessingPage() {
                 Annuler dernière
               </Button>
 
-              <Button variant="outline" className="w-full justify-start" disabled={disableActions}>
+              <Button
+                variant="outline"
+                className="w-full justify-start"
+                disabled={disableActions || isDownloading}
+                onClick={handleDownloadProcessed}
+              >
                 <Download className="h-4 w-4 mr-2" />
-                Télécharger
+                {isDownloading ? "Téléchargement..." : "Télécharger"}
               </Button>
 
-              <Button className="w-full bg-gradient-to-r from-primary to-secondary" disabled={disableActions}>
+              <Button
+                className="w-full bg-gradient-to-r from-primary to-secondary"
+                disabled={disableActions || isSavingProcessed}
+                onClick={handleSaveProcessed}
+              >
                 <Save className="h-4 w-4 mr-2" />
-                Enregistrer
+                {isSavingProcessed ? "Enregistrement..." : "Enregistrer"}
               </Button>
             </CardContent>
           </Card>
@@ -777,9 +952,7 @@ export function ProcessingPage() {
                 </div>
 
                 {columns.length > 10 && (
-                  <p className="text-xs text-muted-foreground mt-2">
-                    Astuce: scrolle horizontalement pour voir toutes les colonnes.
-                  </p>
+                  <p className="text-xs text-muted-foreground mt-2">Astuce: scrolle horizontalement pour voir toutes les colonnes.</p>
                 )}
               </CardContent>
             </Card>
@@ -805,9 +978,7 @@ export function ProcessingPage() {
                       <div className="min-w-0">
                         <p className="text-sm font-medium truncate">{op.description}</p>
                         <p className="text-xs text-muted-foreground">
-                          {new Date((op as any).timestamp ?? (op as any).created_at ?? Date.now()).toLocaleTimeString(
-                            "fr-FR"
-                          )}
+                          {new Date((op as any).timestamp ?? (op as any).created_at ?? Date.now()).toLocaleTimeString("fr-FR")}
                         </p>
                       </div>
                     </div>
@@ -818,6 +989,52 @@ export function ProcessingPage() {
           </Card>
         </div>
       </div>
+
+      {/* Target modal */}
+      <Modal isOpen={showTargetModal} onClose={() => setShowTargetModal(false)} title="Définir la variable cible" size="lg">
+        <div className="space-y-4">
+          <p className="text-sm text-muted-foreground">
+            Aucune <b>target</b> n&apos;est définie pour ce dataset. Sélectionne la colonne cible et confirme pour l&apos;enregistrer dans la base.
+          </p>
+
+          <Select value={tempTarget} onValueChange={setTempTarget} disabled={isSavingTarget}>
+            <SelectTrigger>
+              <SelectValue placeholder="Sélectionner une colonne..." />
+            </SelectTrigger>
+            <SelectContent>
+              {columns.map((c) => (
+                <SelectItem key={c} value={c}>
+                  {c}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+
+          <div className="flex justify-end gap-2">
+            <Button variant="outline" onClick={() => setShowTargetModal(false)} disabled={isSavingTarget}>
+              Plus tard
+            </Button>
+            <Button
+              onClick={async () => {
+                const v = (tempTarget ?? "").trim();
+                if (!v) {
+                  toast({
+                    title: "Target requise",
+                    description: "Sélectionne une colonne cible avant de confirmer.",
+                    variant: "destructive",
+                  });
+                  return;
+                }
+                await saveTarget(v);
+                setShowTargetModal(false);
+              }}
+              disabled={isSavingTarget || !(tempTarget ?? "").trim()}
+            >
+              Confirmer
+            </Button>
+          </div>
+        </div>
+      </Modal>
     </AppLayout>
   );
 }
