@@ -515,7 +515,7 @@ export function ChartsPage() {
               Visualisation des données
             </h1>
             <p className="mt-2 max-w-3xl text-slate-600 dark:text-slate-300">
-              Les axes et options s’adaptent automatiquement selon le type de graphique (style Dataiku).
+              Les axes et options s’adaptent automatiquement selon le type de graphique .
             </p>
 
             <div className="mt-5 flex flex-wrap items-center gap-2">

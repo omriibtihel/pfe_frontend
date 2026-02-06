@@ -11,7 +11,6 @@ export type ApiErrorPayload =
   | undefined;
 
 function extractErrorMessage(err: unknown): string {
-  // Axios error
   if (axios.isAxiosError(err)) {
     const data = err.response?.data as ApiErrorPayload;
 
@@ -31,10 +30,9 @@ function extractErrorMessage(err: unknown): string {
       if (typeof message === "string" && message.trim()) return message;
     }
 
-    // Plain string error payload
+    // Plain string payload
     if (typeof data === "string" && data.trim()) return data;
 
-    // Fallback
     return err.response?.statusText || err.message || "Network error";
   }
 
@@ -47,16 +45,12 @@ class ApiClient {
   private token: string | null = null;
 
   constructor() {
-    // IMPORTANT:
-    // - baseURL pointe vers .../api
-    // - ensuite tu appelles "/auth/login" etc.
     this.axios = axios.create({
       baseURL: import.meta.env.VITE_API_URL || "http://127.0.0.1:8000/api",
       withCredentials: false,
       timeout: 30000,
     });
 
-    // attach token automatically
     this.axios.interceptors.request.use((config) => {
       const token = this.getToken();
       if (token) {
@@ -91,6 +85,15 @@ class ApiClient {
     }
   }
 
+  async post<T>(url: string, body?: unknown): Promise<T> {
+    try {
+      const res = await this.axios.post<T>(url, body);
+      return res.data;
+    } catch (err) {
+      throw new Error(extractErrorMessage(err));
+    }
+  }
+
   async postJson<T>(url: string, body: unknown): Promise<T> {
     try {
       const res = await this.axios.post<T>(url, body, {
@@ -102,10 +105,6 @@ class ApiClient {
     }
   }
 
-  /**
-   * For FastAPI OAuth2PasswordRequestForm:
-   * Content-Type: application/x-www-form-urlencoded
-   */
   async postForm<T>(url: string, body: Record<string, string>): Promise<T> {
     try {
       const form = new URLSearchParams(body);
@@ -117,6 +116,8 @@ class ApiClient {
       throw new Error(extractErrorMessage(err));
     }
   }
+
+  
 
   async putJson<T>(url: string, body: unknown): Promise<T> {
     try {
@@ -161,28 +162,24 @@ class ApiClient {
   }
 
   async getBlob(url: string): Promise<{ blob: Blob; filename?: string }> {
-  try {
-    const res = await this.axios.get(url, { responseType: "blob" });
+    try {
+      const res = await this.axios.get(url, { responseType: "blob" });
 
-    // axios met les headers en lower-case
-    const cd = (res.headers?.["content-disposition"] as string | undefined) ?? undefined;
+      const cd = (res.headers?.["content-disposition"] as string | undefined) ?? undefined;
 
-    let filename: string | undefined;
-    if (cd) {
-      // filename*=UTF-8''... (RFC5987) ou filename="..."
-      const m1 = /filename\*\=UTF-8''([^;]+)/i.exec(cd);
-      const m2 = /filename="?([^"]+)"?/i.exec(cd);
-      const raw = (m1?.[1] ?? m2?.[1])?.trim();
-      if (raw) filename = decodeURIComponent(raw);
+      let filename: string | undefined;
+      if (cd) {
+        const m1 = /filename\*\=UTF-8''([^;]+)/i.exec(cd);
+        const m2 = /filename="?([^"]+)"?/i.exec(cd);
+        const raw = (m1?.[1] ?? m2?.[1])?.trim();
+        if (raw) filename = decodeURIComponent(raw);
+      }
+
+      return { blob: res.data as Blob, filename };
+    } catch (err) {
+      throw new Error(extractErrorMessage(err));
     }
-
-    return { blob: res.data as Blob, filename };
-  } catch (err) {
-    throw new Error(extractErrorMessage(err));
   }
-}
-
-  
 }
 
 export const apiClient = new ApiClient();

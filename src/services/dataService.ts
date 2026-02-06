@@ -36,17 +36,15 @@ export type DatasetVersionOut = {
 
   operations?: string[] | null;
 
-  // backend returns created_at (iso str)
   created_at?: string | null;
 
-  // optional future fields
   can_predict?: boolean | null;
   canPredict?: boolean | null;
 };
 
 export type VersionUI = {
   id: number;
-  projectId: number;
+  projectId: number | null;
   sourceDatasetId: number | null;
   name: string;
   filePath?: string | null;
@@ -69,20 +67,14 @@ function normalizeVersion(v: DatasetVersionOut): VersionUI {
     sourceDatasetId: toNum((v as any)?.source_dataset_id),
     name: String(v?.name ?? `Version #${id}`),
     filePath: (v as any)?.file_path ?? null,
-    operations: Array.isArray(v?.operations) ? v.operations : [],
+    operations: Array.isArray(v?.operations) ? (v.operations as string[]) : [],
     createdAt: (v as any)?.created_at ?? null,
     canPredict: Boolean((v as any)?.canPredict ?? (v as any)?.can_predict),
   };
 }
 
-
 function processingBase(projectId: string | number, datasetId: number) {
   return `/projects/${projectId}/datasets/${datasetId}/processing`;
-}
-
-// Versions (stockées séparément, liées au dataset source)
-function versionsProjectBase(projectId: string | number) {
-  return `/projects/${projectId}/versions`;
 }
 
 function versionsBase(projectId: string | number) {
@@ -90,7 +82,6 @@ function versionsBase(projectId: string | number) {
 }
 
 export type SaveProcessedVersionPayload = {
-  // optionnel si tu veux permettre un nom manuel plus tard
   name?: string;
 };
 
@@ -98,6 +89,7 @@ export type SaveProcessedVersionOut =
   | DataVersion
   | {
       id: number;
+      version_id?: number;
       name?: string;
       createdAt?: string;
       created_at?: string;
@@ -108,9 +100,16 @@ export type SaveProcessedVersionOut =
       operations?: string[];
     };
 
+export async function getVersionColumns(projectId: string, versionId: string): Promise<string[]> {
+  const res = await apiClient.get<{ columns: string[] }>(
+    `/projects/${projectId}/versions/${versionId}/columns`
+  );
+  return res.columns ?? [];
+};
+
 export const dataService = {
   // -------------------------
-  // Processing
+  // Processing (dataset/workspace)
   // -------------------------
   async getOperations(projectId: string | number, datasetId: number): Promise<OperationOut[]> {
     return apiClient.get<OperationOut[]>(`${processingBase(projectId, datasetId)}/operations`);
@@ -141,30 +140,17 @@ export const dataService = {
     );
   },
 
-
   async exportProcessed(projectId: string | number, datasetId: number) {
-    // nécessite apiClient.getBlob()
     return apiClient.getBlob(`${processingBase(projectId, datasetId)}/export`);
   },
 
-  
   async saveProcessedAsVersion(
     projectId: string | number,
     datasetId: number,
     payload: SaveProcessedVersionPayload = {}
   ): Promise<SaveProcessedVersionOut> {
     const base = processingBase(projectId, datasetId);
-
-    try {
-      return await apiClient.postJson<SaveProcessedVersionOut>(`${base}/save`, payload);
-    } catch (e) {
-      // fallback si tu préfères l’endpoint /versions
-      const msg = String((e as Error)?.message ?? "").toLowerCase();
-      const shouldTryFallback = msg.includes("not found") || msg.includes("404") || msg.includes("cannot post");
-      if (!shouldTryFallback) throw e;
-
-      return apiClient.postJson<SaveProcessedVersionOut>(`${base}/versions`, payload);
-    }
+    return apiClient.postJson<SaveProcessedVersionOut>(`${base}/save`, payload);
   },
 
   // -------------------------
@@ -173,14 +159,72 @@ export const dataService = {
   async getVersions(projectId: string | number): Promise<VersionUI[]> {
     const out = await apiClient.get<DatasetVersionOut[]>(`${versionsBase(projectId)}`);
     const list = Array.isArray(out) ? out.map(normalizeVersion) : [];
-    // remove invalid ids (id=0 means unparseable)
     return list.filter((v) => v.id > 0);
+  },
+
+async getVersionPreview(
+    projectId: string | number,
+    versionId: number | string,
+    page = 1,
+    pageSize = 25
+  ): Promise<ProcessingPreviewOut> {
+    const vid = toNum(versionId);
+    if (!vid) throw new Error("Invalid version id");
+
+    const p = Math.max(1, Number(page) || 1);
+    const ps = Math.min(Math.max(1, Number(pageSize) || 25), 200);
+
+    // ✅ nécessite backend: GET /versions/{version_id}/preview
+    return apiClient.get<ProcessingPreviewOut>(
+      `${versionsBase(projectId)}/${vid}/preview?page=${p}&page_size=${ps}`
+    );
+  },
+
+  async downloadVersion(projectId: string | number, versionId: number | string) {
+    const vid = toNum(versionId);
+    if (!vid) throw new Error("Invalid version id");
+    return apiClient.getBlob(`${versionsBase(projectId)}/${vid}/download`);
+  },
+
+  async overwriteVersion(
+    projectId: string | number,
+    versionId: number,
+    payload: {
+      content_base64: string;
+      content_type?: string | null;
+      operations?: any[] | null;
+    }
+  ) {
+    return apiClient.postJson(`${versionsBase(projectId)}/${versionId}/overwrite`, payload);
   },
 
   async deleteVersion(projectId: string | number, versionId: number | string): Promise<void> {
     const vid = toNum(versionId);
     if (!vid) throw new Error("Invalid version id");
     await apiClient.delete<unknown>(`${versionsBase(projectId)}/${vid}`);
+  },
+
+  // -------------------------
+  // ✅ Workspace for version edit
+  // -------------------------
+  async getOrCreateVersionWorkspace(projectId: string | number, versionId: number) {
+    // POST /api/projects/{project_id}/versions/{version_id}/workspace
+    return apiClient.postJson<{ workspace_dataset_id: number }>(
+      `${versionsBase(projectId)}/${versionId}/workspace`,
+      {}
+    );
+  },
+
+  async commitVersionWorkspace(projectId: string | number, versionId: number, workspaceDatasetId: number) {
+    // POST /api/projects/{project_id}/versions/{version_id}/commit-workspace
+    return apiClient.postJson<{ ok: boolean }>(`${versionsBase(projectId)}/${versionId}/commit-workspace`, {
+      workspace_dataset_id: workspaceDatasetId,
+    });
+  },
+
+  async closeVersionWorkspace(projectId: string | number, versionId: number) {
+    // DELETE /api/projects/{project_id}/versions/{version_id}/workspace
+    return apiClient.delete<{ ok: boolean }>(`${versionsBase(projectId)}/${versionId}/workspace`);
   },
 };
 

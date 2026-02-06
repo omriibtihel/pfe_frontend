@@ -103,14 +103,22 @@ export type ImputationMethod = 'mean' | 'median' | 'mode' | 'constant' | 'knn';
 export type NormalizationMethod = 'minmax' | 'zscore' | 'robust';
 export type EncodingMethod = 'onehot' | 'label' | 'frequency';
 
-export interface ProcessingOperation {
-  id: string;
-  type: 'cleaning' | 'imputation' | 'normalization' | 'encoding' | 'other';
+export type ProcessingOperation = {
+  id: number;
+  project_id: number;
+  dataset_id: number;
+  user_id?: number | null;
+
+  op_type: "cleaning" | "imputation" | "normalization" | "encoding" | "other" | string;
   description: string;
+
   columns: string[];
-  timestamp: string;
-  parameters?: Record<string, unknown>;
-}
+  params: Record<string, any>;
+  created_at: string;
+
+  result?: Record<string, any> | null;
+};
+
 
 // Training Types
 export type TaskType = 'classification' | 'regression';

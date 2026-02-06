@@ -3,6 +3,7 @@ import { useNavigate, useParams } from "react-router-dom";
 import { motion } from "framer-motion";
 import { GitBranch, Search, Eye, Trash2, Target, Calendar, FileText, Info, Layers } from "lucide-react";
 
+
 import { AppLayout } from "@/layouts/AppLayout";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -168,33 +169,39 @@ export function VersionsPage() {
                 variant="outline"
                 size="sm"
                 className="flex-1"
-                onClick={() => {
-                  // Choisis UNE de ces options selon ton routing :
-                  // 1) page de détail
-                  // navigate(`/projects/${projectId}/versions/${v.id}`);
-                  // 2) ouvrir dans processing (si tu supportes ?version=)
-                  navigate(`/projects/${projectId}/processing?version=${v.id}`);
-                }}
+                onClick={() => navigate(`/projects/${projectId}/processing?version=${v.id}&mode=view`)}
               >
                 <Eye className="h-4 w-4 mr-1" />
                 Voir
               </Button>
 
-              {canPredict && (
-                <Button
-                  size="sm"
-                  className="flex-1 bg-gradient-to-r from-primary to-secondary"
-                  onClick={() => navigate(`/projects/${projectId}/predict?version=${v.id}`)}
-                >
-                  <Target className="h-4 w-4 mr-1" />
-                  Prédire
-                </Button>
-              )}
+              <Button
+                size="sm"
+                className="flex-1 bg-gradient-to-r from-primary to-secondary"
+                onClick={() => navigate(`/projects/${projectId}/processing?version=${v.id}&mode=edit`)}
+              >
+                <Target className="h-4 w-4 mr-1" />
+                Prétraiter
+              </Button>
+
+              {/* ✅ NOUVEAU: Entraîner */}
+              <Button
+                size="sm"
+                variant="secondary"
+                className="flex-1"
+                disabled={!canPredict} // optionnel: uniquement si "Prêt"
+                onClick={() => navigate(`/projects/${projectId}/versions/${v.id}/training`)}
+                title={!canPredict ? "Définis une target + assure-toi que la version est prête" : "Lancer l'entraînement"}
+              >
+                <GitBranch className="h-4 w-4 mr-1" />
+                Entraîner
+              </Button>
 
               <Button variant="ghost" size="icon" onClick={() => setDeleteVersion(v)}>
                 <Trash2 className="h-4 w-4 text-destructive" />
               </Button>
             </div>
+
           </CardContent>
         </Card>
       </motion.div>
@@ -236,6 +243,8 @@ export function VersionsPage() {
 
   const unknown = versionsByDataset.unknown;
   const showUnknown = datasetFilter === "all" && unknown.length > 0;
+
+
 
   return (
     <AppLayout>

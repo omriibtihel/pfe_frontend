@@ -1,277 +1,346 @@
-import { useState } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
-import { motion } from 'framer-motion';
-import { Brain, Target, Settings, Sliders, BarChart3, Code, Play, Loader2 } from 'lucide-react';
-import { AppLayout } from '@/layouts/AppLayout';
-import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Checkbox } from '@/components/ui/checkbox';
-import { Slider } from '@/components/ui/slider';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Textarea } from '@/components/ui/textarea';
-import { useToast } from '@/hooks/use-toast';
-import { trainingService } from '@/services/trainingService';
-import { ModelType, MetricType, TrainingConfig } from '@/types';
-import { staggerContainer, staggerItem } from '@/components/ui/page-transition';
+import { useEffect, useMemo, useState } from "react";
+import { useParams, useNavigate } from "react-router-dom";
+import { motion } from "framer-motion";
+import { Play, Loader2, Rocket, ChevronRight, AlertCircle } from "lucide-react";
 
-const models: { value: ModelType; label: string; color: string }[] = [
-  { value: 'lightgbm', label: 'LightGBM', color: 'bg-primary' },
-  { value: 'xgboost', label: 'XGBoost', color: 'bg-secondary' },
-  { value: 'randomforest', label: 'Random Forest', color: 'bg-success' },
-  { value: 'svm', label: 'SVM', color: 'bg-accent' },
-  { value: 'knn', label: 'KNN', color: 'bg-warning' },
-  { value: 'decisiontree', label: 'Decision Tree', color: 'bg-destructive' },
-];
+import { AppLayout } from "@/layouts/AppLayout";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent } from "@/components/ui/card";
+import { useToast } from "@/hooks/use-toast";
 
-const metrics: { value: MetricType; label: string }[] = [
-  { value: 'accuracy', label: 'Accuracy' },
-  { value: 'precision', label: 'Precision' },
-  { value: 'recall', label: 'Recall' },
-  { value: 'f1', label: 'F1-Score' },
-  { value: 'roc_auc', label: 'ROC AUC' },
-];
+import trainingService from "@/services/trainingService";
+import apiClient from "@/services/apiClient";
+
+import type { ModelType, MetricType, TrainingConfig } from "@/types";
+import { staggerContainer, staggerItem } from "@/components/ui/page-transition";
+import { ModelSelector } from "@/components/training/ModelSelector";
+import { TrainingParameters } from "@/components/training/TrainingParameters";
+import { ConfigurationPanel } from "@/components/training/ConfigurationPanel";
+import { MetricsSelector } from "@/components/training/MetricsSelector";
+import { TrainingProgress } from "@/components/training/TrainingProgress";
 
 export function TrainingPage() {
-  const { id } = useParams();
+  const { projectId, versionId } = useParams<{ projectId: string; versionId: string }>();
   const navigate = useNavigate();
   const { toast } = useToast();
+
   const [isTraining, setIsTraining] = useState(false);
-  
+
+  // ✅ colonnes de la version
+  const [columns, setColumns] = useState<string[]>([]);
+  const [columnsLoading, setColumnsLoading] = useState(false);
+
   const [config, setConfig] = useState<TrainingConfig>({
-    targetColumn: 'target',
-    taskType: 'classification',
-    models: ['randomforest'],
+    targetColumn: "",
+    taskType: "classification",
+    models: ["randomforest"],
     useGridSearch: false,
     useSmote: false,
-    splitMethod: 'holdout',
+    splitMethod: "holdout",
     trainRatio: 70,
     valRatio: 15,
     testRatio: 15,
     kFolds: 5,
-    metrics: ['accuracy', 'f1'],
-    customCode: '',
+    metrics: ["accuracy", "f1"],
+    customCode: "",
   });
 
+  const updateConfig = (updates: Partial<TrainingConfig>) => {
+    setConfig((prev) => ({ ...prev, ...updates }));
+  };
+
   const toggleModel = (model: ModelType) => {
-    setConfig(prev => ({
+    setConfig((prev) => ({
       ...prev,
       models: prev.models.includes(model)
-        ? prev.models.filter(m => m !== model)
-        : [...prev.models, model]
+        ? prev.models.filter((m) => m !== model)
+        : [...prev.models, model],
     }));
   };
 
   const toggleMetric = (metric: MetricType) => {
-    setConfig(prev => ({
+    setConfig((prev) => ({
       ...prev,
       metrics: prev.metrics.includes(metric)
-        ? prev.metrics.filter(m => m !== metric)
-        : [...prev.metrics, metric]
+        ? prev.metrics.filter((m) => m !== metric)
+        : [...prev.metrics, metric],
     }));
   };
 
+  // ✅ validations
+  const ratiosSum = useMemo(
+    () => Number(config.trainRatio) + Number(config.valRatio) + Number(config.testRatio),
+    [config.trainRatio, config.valRatio, config.testRatio]
+  );
+
+  const isHoldoutOk = config.splitMethod !== "holdout" || ratiosSum === 100;
+  const isKFoldOk = config.splitMethod !== "kfold" || Number(config.kFolds) >= 2;
+
+  const isConfigValid =
+    Boolean(projectId) &&
+    Boolean(versionId) &&
+    Boolean(config.targetColumn) &&
+    config.models.length > 0 &&
+    config.metrics.length > 0 &&
+    isHoldoutOk &&
+    isKFoldOk;
+
+  // ✅ load columns depuis /versions/{versionId}/columns
+  useEffect(() => {
+    const loadColumns = async () => {
+      if (!projectId || !versionId) return;
+      setColumnsLoading(true);
+      try {
+        const res = await apiClient.get<{ columns: string[] }>(
+          `/projects/${projectId}/versions/${versionId}/columns`
+        );
+        const cols = (res?.columns ?? []).map((c) => String(c).trim()).filter(Boolean);
+        setColumns(cols);
+
+        // ✅ auto-select targetColumn si vide ou invalide
+        setConfig((prev) => {
+          if (prev.targetColumn && cols.includes(prev.targetColumn)) return prev;
+          return { ...prev, targetColumn: cols[cols.length - 1] ?? "" };
+        });
+      } catch (e: any) {
+        setColumns([]);
+        toast({
+          title: "Erreur",
+          description: e?.message || "Impossible de charger les colonnes",
+          variant: "destructive",
+        });
+      } finally {
+        setColumnsLoading(false);
+      }
+    };
+
+    loadColumns();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [projectId, versionId]);
+
+  // ✅ polling session
+  const pollSessionUntilReady = async (sessionId: string, timeoutMs = 120_000) => {
+    if (!projectId) return null;
+
+    const startedAt = Date.now();
+    const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+    while (Date.now() - startedAt < timeoutMs) {
+      const s = await trainingService.getSession(projectId, sessionId);
+      const results = (s as any).results as any[] | undefined;
+      const completedAt = (s as any).completedAt as string | undefined;
+      const status = (s as any).status as string | undefined;
+
+      if ((results && results.length > 0) || completedAt || status === "failed" || status === "succeeded") {
+        return s;
+      }
+      await sleep(1500);
+    }
+
+    return await trainingService.getSession(projectId, sessionId);
+  };
+
   const handleTrain = async () => {
-    if (config.models.length === 0) {
-      toast({ title: 'Erreur', description: 'Sélectionnez au moins un modèle', variant: 'destructive' });
+    if (!projectId || !versionId) {
+      toast({
+        title: "Contexte introuvable",
+        description: "ID projet/version manquant dans l'URL.",
+        variant: "destructive",
+      });
       return;
     }
+
+    if (!config.targetColumn) {
+      toast({
+        title: "Colonne cible manquante",
+        description: "Sélectionne une colonne cible.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (config.splitMethod === "holdout" && ratiosSum !== 100) {
+      toast({
+        title: "Ratios invalides",
+        description: "Pour Holdout, train + val + test doit être = 100.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (config.splitMethod === "kfold" && Number(config.kFolds) < 2) {
+      toast({
+        title: "K-Folds invalide",
+        description: "Le nombre de folds doit être ≥ 2.",
+        variant: "destructive",
+      });
+      return;
+    }
+
     setIsTraining(true);
     try {
-      const session = await trainingService.startTraining(id!, config);
-      toast({ title: 'Entraînement terminé' });
-      navigate(`/projects/${id}/training/results?session=${session.id}`);
-    } catch (error) {
-      toast({ title: 'Erreur', variant: 'destructive' });
+      // ✅ startTraining est maintenant typé => session.id OK
+      const session = await trainingService.startTraining(projectId, versionId, config);
+
+      const finalSession = await pollSessionUntilReady(String(session.id));
+      const status = (finalSession as any)?.status as string | undefined;
+      const errorMessage = (finalSession as any)?.errorMessage as string | undefined;
+
+      if (status === "failed") {
+        toast({
+          title: "Erreur lors de l'entraînement",
+          description: errorMessage || "Le backend a échoué.",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      toast({
+        title: "Entraînement lancé",
+        description: "Session créée. Redirection vers les résultats…",
+      });
+
+      navigate(`/projects/${projectId}/versions/${versionId}/training/results?session=${session.id}`);
+    } catch (error: any) {
+      toast({
+        title: "Erreur lors de l'entraînement",
+        description: error?.message || "Not Found",
+        variant: "destructive",
+      });
     } finally {
       setIsTraining(false);
     }
   };
 
+  // auto-correction kfold
+  useEffect(() => {
+    if (config.splitMethod === "kfold" && Number(config.kFolds) < 2) {
+      setConfig((prev) => ({ ...prev, kFolds: 5 }));
+    }
+  }, [config.splitMethod]);
+
   return (
     <AppLayout>
-      <motion.div 
-        className="space-y-6"
-        initial="initial"
-        animate="animate"
-        variants={staggerContainer}
-      >
+      <TrainingProgress isTraining={isTraining} selectedModels={config.models} />
+
+      <motion.div className="space-y-8 pb-8" initial="initial" animate="animate" variants={staggerContainer}>
+        {/* Header */}
         <motion.div variants={staggerItem} className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
           <div>
-            <h1 className="text-3xl font-bold text-foreground">Studio d'entraînement</h1>
-            <p className="text-muted-foreground mt-1">Configurez et lancez vos modèles d'IA</p>
+            <div className="flex items-center gap-3 mb-2">
+              <div className="p-3 rounded-2xl bg-gradient-to-r from-primary via-secondary to-accent">
+                <Rocket className="h-6 w-6 text-white" />
+              </div>
+              <h1 className="text-3xl font-bold text-foreground">Studio d'entraînement</h1>
+            </div>
+            <p className="text-muted-foreground">
+              Configurez et lancez vos modèles d'intelligence artificielle pour analyser vos données.
+            </p>
           </div>
-          <Badge variant="secondary" className="self-start">
-            <Target className="h-3 w-3 mr-1" /> target
-          </Badge>
         </motion.div>
 
+        {/* Summary */}
+        <motion.div variants={staggerItem}>
+          <Card className="bg-gradient-to-r from-primary/5 via-secondary/5 to-accent/5 border-primary/20">
+            <CardContent className="py-4">
+              <div className="flex flex-wrap items-center gap-6">
+                <div className="flex items-center gap-2">
+                  <span className="text-sm text-muted-foreground">Modèles:</span>
+                  <span className="font-bold text-primary">{config.models.length}</span>
+                </div>
+
+                <ChevronRight className="h-4 w-4 text-muted-foreground hidden sm:block" />
+
+                <div className="flex items-center gap-2">
+                  <span className="text-sm text-muted-foreground">Métriques:</span>
+                  <span className="font-bold text-secondary">{config.metrics.length}</span>
+                </div>
+
+                <ChevronRight className="h-4 w-4 text-muted-foreground hidden sm:block" />
+
+                <div className="flex items-center gap-2">
+                  <span className="text-sm text-muted-foreground">Validation:</span>
+                  <span className="font-bold text-accent">
+                    {config.splitMethod === "kfold"
+                      ? `${config.kFolds}-Fold CV`
+                      : `${config.trainRatio}/${config.valRatio}/${config.testRatio}`}
+                  </span>
+                </div>
+
+                {config.splitMethod === "holdout" && (
+                  <>
+                    <ChevronRight className="h-4 w-4 text-muted-foreground hidden sm:block" />
+                    <span
+                      className={`text-xs px-2 py-1 rounded-full font-medium ${
+                        ratiosSum === 100 ? "bg-accent/10 text-accent" : "bg-destructive/10 text-destructive"
+                      }`}
+                      title="train + val + test"
+                    >
+                      Total: {ratiosSum}%
+                    </span>
+                  </>
+                )}
+              </div>
+            </CardContent>
+          </Card>
+        </motion.div>
+
+        {/* Config grid */}
         <motion.div variants={staggerItem} className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          {/* Configuration */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Settings className="h-5 w-5 text-primary" />
-                Configuration
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div>
-                <label className="text-sm font-medium">Variable cible</label>
-                <Select value={config.targetColumn} onValueChange={(v) => setConfig({ ...config, targetColumn: v })}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="target">target</SelectItem>
-                    <SelectItem value="diagnosis">diagnosis</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              <div>
-                <label className="text-sm font-medium">Type de tâche</label>
-                <Select value={config.taskType} onValueChange={(v: any) => setConfig({ ...config, taskType: v })}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="classification">Classification</SelectItem>
-                    <SelectItem value="regression">Régression</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* Model Selection */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Brain className="h-5 w-5 text-secondary" />
-                Sélection des modèles
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="grid grid-cols-2 gap-3">
-                {models.map((model) => (
-                  <label
-                    key={model.value}
-                    className={`flex items-center gap-3 p-3 rounded-lg border-2 cursor-pointer transition-all ${
-                      config.models.includes(model.value) ? 'border-primary bg-primary/5' : 'border-border hover:border-primary/50'
-                    }`}
-                  >
-                    <Checkbox checked={config.models.includes(model.value)} onCheckedChange={() => toggleModel(model.value)} />
-                    <div className={`w-3 h-3 rounded-full ${model.color}`} />
-                    <span className="font-medium text-sm">{model.label}</span>
-                  </label>
-                ))}
-              </div>
-              <div className="flex gap-4 pt-2">
-                <label className="flex items-center gap-2">
-                  <Checkbox checked={config.useGridSearch} onCheckedChange={(c) => setConfig({ ...config, useGridSearch: !!c })} />
-                  <span className="text-sm">GridSearch</span>
-                </label>
-                <label className="flex items-center gap-2">
-                  <Checkbox checked={config.useSmote} onCheckedChange={(c) => setConfig({ ...config, useSmote: !!c })} />
-                  <span className="text-sm">SMOTE</span>
-                </label>
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* Training Parameters */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Sliders className="h-5 w-5 text-accent" />
-                Paramètres d'entraînement
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <Tabs value={config.splitMethod} onValueChange={(v: any) => setConfig({ ...config, splitMethod: v })}>
-                <TabsList className="grid w-full grid-cols-2">
-                  <TabsTrigger value="holdout">Train/Val/Test</TabsTrigger>
-                  <TabsTrigger value="kfold">K-Fold</TabsTrigger>
-                </TabsList>
-                <TabsContent value="holdout" className="space-y-4 mt-4">
-                  <div>
-                    <div className="flex justify-between text-sm mb-2">
-                      <span>Train: {config.trainRatio}%</span>
-                      <span>Val: {config.valRatio}%</span>
-                      <span>Test: {config.testRatio}%</span>
-                    </div>
-                    <div className="h-4 rounded-full overflow-hidden flex">
-                      <div className="bg-primary" style={{ width: `${config.trainRatio}%` }} />
-                      <div className="bg-secondary" style={{ width: `${config.valRatio}%` }} />
-                      <div className="bg-accent" style={{ width: `${config.testRatio}%` }} />
-                    </div>
-                  </div>
-                  <Slider value={[config.trainRatio]} onValueChange={([v]) => setConfig({ ...config, trainRatio: v, valRatio: Math.floor((100 - v) / 2), testRatio: 100 - v - Math.floor((100 - v) / 2) })} max={90} min={50} step={5} />
-                </TabsContent>
-                <TabsContent value="kfold" className="mt-4">
-                  <div>
-                    <label className="text-sm font-medium">Nombre de folds: {config.kFolds}</label>
-                    <Slider value={[config.kFolds || 5]} onValueChange={([v]) => setConfig({ ...config, kFolds: v })} max={10} min={2} step={1} className="mt-2" />
-                  </div>
-                </TabsContent>
-              </Tabs>
-            </CardContent>
-          </Card>
-
-          {/* Metrics */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <BarChart3 className="h-5 w-5 text-success" />
-                Métriques d'évaluation
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="flex flex-wrap gap-2">
-                {metrics.map((metric) => (
-                  <Badge
-                    key={metric.value}
-                    variant={config.metrics.includes(metric.value) ? 'default' : 'outline'}
-                    className="cursor-pointer px-4 py-2"
-                    onClick={() => toggleMetric(metric.value)}
-                  >
-                    {metric.label}
-                  </Badge>
-                ))}
-              </div>
-            </CardContent>
-          </Card>
+          <ConfigurationPanel
+            config={config}
+            onConfigChange={updateConfig}
+            columns={columns}
+            columnsLoading={columnsLoading}
+          />
+          <TrainingParameters config={config} onConfigChange={updateConfig} />
         </motion.div>
 
-        {/* Custom Code */}
         <motion.div variants={staggerItem}>
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Code className="h-5 w-5 text-warning" />
-                Code personnalisé (optionnel)
-              </CardTitle>
-              <CardDescription>Ajoutez du code Python pour des transformations personnalisées</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <Textarea
-                placeholder="# Votre code Python ici..."
-                value={config.customCode}
-                onChange={(e) => setConfig({ ...config, customCode: e.target.value })}
-                className="font-mono min-h-32"
-              />
-            </CardContent>
-          </Card>
+          <ModelSelector
+            selectedModels={config.models}
+            onToggleModel={toggleModel}
+            useGridSearch={config.useGridSearch}
+            onGridSearchChange={(v) => updateConfig({ useGridSearch: v })}
+            useSmote={config.useSmote}
+            onSmoteChange={(v) => updateConfig({ useSmote: v })}
+          />
         </motion.div>
 
-        {/* Train Button */}
         <motion.div variants={staggerItem}>
-          <Button size="lg" className="w-full h-14 text-lg bg-gradient-to-r from-primary via-secondary to-accent shadow-glow" onClick={handleTrain} disabled={isTraining}>
+          <MetricsSelector selectedMetrics={config.metrics} onToggleMetric={toggleMetric} />
+        </motion.div>
+
+        {!isConfigValid && (
+          <motion.div variants={staggerItem} className="flex items-center gap-3 p-4 rounded-xl bg-destructive/10 border border-destructive/20">
+            <AlertCircle className="h-5 w-5 text-destructive" />
+            <p className="text-sm text-destructive">
+              {!projectId && "Projet introuvable. "}
+              {!versionId && "Version introuvable. "}
+              {!config.targetColumn && "Sélectionne une colonne cible. "}
+              {config.models.length === 0 && "Sélectionne au moins un modèle. "}
+              {config.metrics.length === 0 && "Sélectionne au moins une métrique. "}
+              {config.splitMethod === "holdout" && ratiosSum !== 100 && "Ratios Holdout: total doit être 100. "}
+              {config.splitMethod === "kfold" && Number(config.kFolds) < 2 && "K-Folds doit être ≥ 2. "}
+            </p>
+          </motion.div>
+        )}
+
+        <motion.div variants={staggerItem}>
+          <Button
+            size="lg"
+            className="w-full h-16 text-lg bg-gradient-to-r from-primary via-secondary to-accent shadow-lg hover:shadow-xl transition-all duration-300 hover:-translate-y-1 disabled:opacity-50 disabled:hover:translate-y-0"
+            onClick={handleTrain}
+            disabled={isTraining || !isConfigValid}
+          >
             {isTraining ? (
               <>
-                <Loader2 className="h-5 w-5 mr-2 animate-spin" />
+                <Loader2 className="h-6 w-6 mr-3 animate-spin" />
                 Entraînement en cours...
               </>
             ) : (
               <>
-                <Play className="h-5 w-5 mr-2" />
+                <Play className="h-6 w-6 mr-3" />
                 Lancer l'entraînement
               </>
             )}
