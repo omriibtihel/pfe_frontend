@@ -1,5 +1,5 @@
 // src/services/apiClient.ts
-import axios, { AxiosInstance } from "axios";
+import axios, { AxiosError, AxiosInstance, AxiosRequestConfig } from "axios";
 
 const TOKEN_KEY = "auth_token";
 
@@ -12,12 +12,13 @@ export type ApiErrorPayload =
 
 function extractErrorMessage(err: unknown): string {
   if (axios.isAxiosError(err)) {
-    const data = err.response?.data as ApiErrorPayload;
+    const ax = err as AxiosError<ApiErrorPayload>;
+    const data = ax.response?.data;
 
     // FastAPI typical: {"detail":"..."} or {"detail":[{msg:"..."}]}
     if (data && typeof data === "object" && "detail" in data) {
       const detail = (data as any).detail;
-      if (typeof detail === "string") return detail;
+      if (typeof detail === "string" && detail.trim()) return detail;
       if (Array.isArray(detail)) {
         const msg = detail.map((x: any) => x?.msg).filter(Boolean).join(", ");
         if (msg) return msg;
@@ -30,15 +31,37 @@ function extractErrorMessage(err: unknown): string {
       if (typeof message === "string" && message.trim()) return message;
     }
 
-    // Plain string payload
     if (typeof data === "string" && data.trim()) return data;
 
-    return err.response?.statusText || err.message || "Network error";
+    return ax.response?.statusText || ax.message || "Network error";
   }
 
   if (err instanceof Error) return err.message;
   return "Network error";
 }
+
+function parseFilenameFromContentDisposition(cd?: string): string | undefined {
+  if (!cd) return undefined;
+  // RFC5987: filename*=UTF-8''...
+  const m1 = /filename\*\=UTF-8''([^;]+)/i.exec(cd);
+  const m2 = /filename="?([^"]+)"?/i.exec(cd);
+  const raw = (m1?.[1] ?? m2?.[1])?.trim();
+  if (!raw) return undefined;
+
+  try {
+    return decodeURIComponent(raw);
+  } catch {
+    return raw;
+  }
+}
+
+export type RequestOptions = {
+  /**
+   * Optional AbortSignal for cancellation (useful for pagination / fast switching).
+   * Example: const controller = new AbortController(); apiClient.get(url, { signal: controller.signal })
+   */
+  signal?: AbortSignal;
+};
 
 class ApiClient {
   private axios: AxiosInstance;
@@ -76,104 +99,113 @@ class ApiClient {
     this.setToken(null);
   }
 
-  async get<T>(url: string): Promise<T> {
+  private cfg(opts?: RequestOptions): AxiosRequestConfig {
+    return opts?.signal ? { signal: opts.signal } : {};
+  }
+
+  async get<T>(url: string, opts?: RequestOptions): Promise<T> {
     try {
-      const res = await this.axios.get<T>(url);
+      const res = await this.axios.get<T>(url, this.cfg(opts));
       return res.data;
     } catch (err) {
       throw new Error(extractErrorMessage(err));
     }
   }
 
-  async post<T>(url: string, body?: unknown): Promise<T> {
+  async post<T>(url: string, body?: unknown, opts?: RequestOptions): Promise<T> {
     try {
-      const res = await this.axios.post<T>(url, body);
+      const res = await this.axios.post<T>(url, body, this.cfg(opts));
       return res.data;
     } catch (err) {
       throw new Error(extractErrorMessage(err));
     }
   }
 
-  async postJson<T>(url: string, body: unknown): Promise<T> {
+  async postJson<T>(url: string, body: unknown, opts?: RequestOptions): Promise<T> {
     try {
-      const res = await this.axios.post<T>(url, body, {
-        headers: { "Content-Type": "application/json" },
-      });
+      const res = await this.axios.post<T>(
+        url,
+        body,
+        {
+          headers: { "Content-Type": "application/json" },
+          ...this.cfg(opts),
+        }
+      );
       return res.data;
     } catch (err) {
       throw new Error(extractErrorMessage(err));
     }
   }
 
-  async postForm<T>(url: string, body: Record<string, string>): Promise<T> {
+  async putJson<T>(url: string, body: unknown, opts?: RequestOptions): Promise<T> {
+    try {
+      const res = await this.axios.put<T>(
+        url,
+        body,
+        {
+          headers: { "Content-Type": "application/json" },
+          ...this.cfg(opts),
+        }
+      );
+      return res.data;
+    } catch (err) {
+      throw new Error(extractErrorMessage(err));
+    }
+  }
+
+  async delete<T>(url: string, opts?: RequestOptions): Promise<T> {
+    try {
+      const res = await this.axios.delete<T>(url, this.cfg(opts));
+      return res.data;
+    } catch (err) {
+      throw new Error(extractErrorMessage(err));
+    }
+  }
+
+  async postForm<T>(url: string, body: Record<string, string>, opts?: RequestOptions): Promise<T> {
     try {
       const form = new URLSearchParams(body);
-      const res = await this.axios.post<T>(url, form, {
-        headers: { "Content-Type": "application/x-www-form-urlencoded" },
-      });
+      const res = await this.axios.post<T>(
+        url,
+        form,
+        {
+          headers: { "Content-Type": "application/x-www-form-urlencoded" },
+          ...this.cfg(opts),
+        }
+      );
       return res.data;
     } catch (err) {
       throw new Error(extractErrorMessage(err));
     }
   }
 
-  
-
-  async putJson<T>(url: string, body: unknown): Promise<T> {
+  async postFormData<T>(url: string, body: FormData, opts?: RequestOptions): Promise<T> {
     try {
-      const res = await this.axios.put<T>(url, body, {
-        headers: { "Content-Type": "application/json" },
-      });
+      const res = await this.axios.post<T>(
+        url,
+        body,
+        {
+          headers: { "Content-Type": "multipart/form-data" },
+          ...this.cfg(opts),
+        }
+      );
       return res.data;
     } catch (err) {
       throw new Error(extractErrorMessage(err));
     }
   }
 
-  async delete<T>(url: string): Promise<T> {
-    try {
-      const res = await this.axios.delete<T>(url);
-      return res.data;
-    } catch (err) {
-      throw new Error(extractErrorMessage(err));
-    }
+  // alias kept (some codebases use postMultipart)
+  async postMultipart<T>(url: string, formData: FormData, opts?: RequestOptions): Promise<T> {
+    return this.postFormData<T>(url, formData, opts);
   }
 
-  async postFormData<T>(url: string, body: FormData): Promise<T> {
+  async getBlob(url: string, opts?: RequestOptions): Promise<{ blob: Blob; filename?: string }> {
     try {
-      const res = await this.axios.post<T>(url, body, {
-        headers: { "Content-Type": "multipart/form-data" },
-      });
-      return res.data;
-    } catch (err) {
-      throw new Error(extractErrorMessage(err));
-    }
-  }
-
-  async postMultipart<T>(url: string, formData: FormData): Promise<T> {
-    try {
-      const res = await this.axios.post<T>(url, formData, {
-        headers: { "Content-Type": "multipart/form-data" },
-      });
-      return res.data;
-    } catch (err) {
-      throw new Error(extractErrorMessage(err));
-    }
-  }
-
-  async getBlob(url: string): Promise<{ blob: Blob; filename?: string }> {
-    try {
-      const res = await this.axios.get(url, { responseType: "blob" });
+      const res = await this.axios.get(url, { responseType: "blob", ...this.cfg(opts) });
 
       const cd = (res.headers?.["content-disposition"] as string | undefined) ?? undefined;
-
-      let filename: string | undefined;
-      if (cd) {
-        const m1 = /filename\*\=UTF-8''([^;]+)/i.exec(cd);
-        const m2 = /filename="?([^"]+)"?/i.exec(cd);
-        const raw = (m1?.[1] ?? m2?.[1])?.trim();
-        if (raw) filename = decodeURIComponent(raw);
-      }
+      const filename = parseFilenameFromContentDisposition(cd);
 
       return { blob: res.data as Blob, filename };
     } catch (err) {

@@ -1,6 +1,6 @@
 import { ReactNode } from "react";
-import { Button } from "./button";
 import { cn } from "@/lib/utils";
+import { Button } from "@/components/ui/button";
 
 import {
   Dialog,
@@ -10,7 +10,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 
-type ModalSize = "sm" | "md" | "lg" | "xl";
+type ModalSize = "sm" | "md" | "lg" | "xl" | "2xl";
 
 interface ModalProps {
   isOpen: boolean;
@@ -27,6 +27,7 @@ const sizeClasses: Record<ModalSize, string> = {
   md: "sm:max-w-md",
   lg: "sm:max-w-lg",
   xl: "sm:max-w-xl",
+  "2xl": "sm:max-w-2xl",
 };
 
 export function Modal({
@@ -42,19 +43,34 @@ export function Modal({
     <Dialog open={isOpen} onOpenChange={(open) => (!open ? onClose() : undefined)}>
       <DialogContent
         className={cn(
-          "rounded-2xl",
+          // responsive width
+          "w-[calc(100vw-1.25rem)] sm:w-full",
           sizeClasses[size],
+
+          // height & layout
+          "max-h-[calc(100vh-1.25rem)]",
+          "overflow-hidden flex flex-col",
+
+          // look
+          "p-0 rounded-2xl",
+          "border border-border/50",
+          "bg-background/95 supports-[backdrop-filter]:bg-background/75 backdrop-blur-xl",
+          "shadow-dark-elevated",
+
           className
         )}
       >
         {(title || description) && (
-          <DialogHeader>
-            {title ? <DialogTitle>{title}</DialogTitle> : null}
+          <DialogHeader className="px-6 pt-6 pb-4 border-b border-border/40">
+            {title ? <DialogTitle className="pr-8">{title}</DialogTitle> : null}
             {description ? <DialogDescription>{description}</DialogDescription> : null}
           </DialogHeader>
         )}
 
-        {children}
+        {/* Scroll zone */}
+        <div className="flex-1 min-h-0 overflow-y-auto px-6 py-5 scrollbar-modern">
+          {children}
+        </div>
       </DialogContent>
     </Dialog>
   );

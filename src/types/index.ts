@@ -130,6 +130,7 @@ export interface TrainingConfig {
   taskType: TaskType;
   models: ModelType[];
   useGridSearch: boolean;
+  useClassWeight?: boolean;
   useSmote: boolean;
   splitMethod: 'holdout' | 'kfold';
   trainRatio: number;

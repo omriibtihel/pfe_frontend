@@ -1,8 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { motion } from "framer-motion";
-import { GitBranch, Search, Eye, Trash2, Target, Calendar, FileText, Info, Layers } from "lucide-react";
-
+import { GitBranch, Search, Trash2, Target, Calendar, FileText, Info, Layers } from "lucide-react";
 
 import { AppLayout } from "@/layouts/AppLayout";
 import { Button } from "@/components/ui/button";
@@ -165,16 +164,7 @@ export function VersionsPage() {
             )}
 
             <div className="flex gap-2 pt-2">
-              <Button
-                variant="outline"
-                size="sm"
-                className="flex-1"
-                onClick={() => navigate(`/projects/${projectId}/processing?version=${v.id}&mode=view`)}
-              >
-                <Eye className="h-4 w-4 mr-1" />
-                Voir
-              </Button>
-
+              {/* ✅ On garde seulement EDIT / workspace */}
               <Button
                 size="sm"
                 className="flex-1 bg-gradient-to-r from-primary to-secondary"
@@ -184,12 +174,12 @@ export function VersionsPage() {
                 Prétraiter
               </Button>
 
-              {/* ✅ NOUVEAU: Entraîner */}
+              {/* ✅ Entraîner */}
               <Button
                 size="sm"
                 variant="secondary"
                 className="flex-1"
-                disabled={!canPredict} // optionnel: uniquement si "Prêt"
+                disabled={!canPredict}
                 onClick={() => navigate(`/projects/${projectId}/versions/${v.id}/training`)}
                 title={!canPredict ? "Définis une target + assure-toi que la version est prête" : "Lancer l'entraînement"}
               >
@@ -201,7 +191,6 @@ export function VersionsPage() {
                 <Trash2 className="h-4 w-4 text-destructive" />
               </Button>
             </div>
-
           </CardContent>
         </Card>
       </motion.div>
@@ -243,8 +232,6 @@ export function VersionsPage() {
 
   const unknown = versionsByDataset.unknown;
   const showUnknown = datasetFilter === "all" && unknown.length > 0;
-
-
 
   return (
     <AppLayout>

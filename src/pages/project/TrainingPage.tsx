@@ -36,6 +36,7 @@ export function TrainingPage() {
     models: ["randomforest"],
     useGridSearch: false,
     useSmote: false,
+    useClassWeight: false,
     splitMethod: "holdout",
     trainRatio: 70,
     valRatio: 15,

@@ -1,10 +1,21 @@
 // src/components/training/TrainingParameters.tsx
-import { Sliders, Layers, GitFork, Sparkles } from "lucide-react";
+import { Sliders, Layers, GitFork, Sparkles, HelpCircle, Info, CheckCircle2 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Slider } from "@/components/ui/slider";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { TrainingConfig } from "@/types";
 import { motion, AnimatePresence } from "framer-motion";
+
+
+const tooltips = {
+  train: "Pourcentage de données utilisées pour entraîner le modèle. Plus ce ratio est élevé, plus le modèle aura d'exemples pour apprendre.",
+  validation: "Données utilisées pour ajuster les hyperparamètres pendant l'entraînement. Peut être désactivé (0%) si vous utilisez K-Fold CV.",
+  test: "Données réservées pour l'évaluation finale du modèle. Ces données ne sont jamais vues pendant l'entraînement.",
+  kfold: "Divise les données en K parties égales. Chaque partie sert de test une fois, offrant une évaluation plus robuste et réduisant le biais de sélection.",
+  holdout: "Méthode classique de division des données en ensembles fixes d'entraînement, validation et test.",
+};
+
 
 interface TrainingParametersProps {
   config: TrainingConfig;
@@ -12,8 +23,8 @@ interface TrainingParametersProps {
 }
 
 const presets = [
-  { label: "70/15/15", train: 70, val: 15, test: 15, description: "Standard" },
-  { label: "80/10/10", train: 80, val: 10, test: 10, description: "Plus de données" },
+  { label: '70/15/15', train: 70, val: 15, test: 15, description: 'Équilibré', recommended: true },
+  { label: '80/10/10', train: 80, val: 10, test: 10, description: 'Performance' },
   { label: "80/0/20", train: 80, val: 0, test: 20, description: "Sans validation" },
   { label: "90/0/10", train: 90, val: 0, test: 10, description: "Maximum train" },
 ];
@@ -34,9 +45,9 @@ export function TrainingParameters({ config, onConfigChange }: TrainingParameter
           </div>
           <div>
             <span className="bg-gradient-to-r from-foreground to-foreground/70 bg-clip-text">
-              Paramètres d'entraînement
+              Répartition des données
             </span>
-            <p className="text-xs font-normal text-muted-foreground mt-0.5">Stratégie de validation</p>
+            <p className="text-xs font-normal text-muted-foreground mt-0.5">Comment diviser vos données pour l'entraînement</p>
           </div>
         </CardTitle>
       </CardHeader>
@@ -47,22 +58,38 @@ export function TrainingParameters({ config, onConfigChange }: TrainingParameter
           onValueChange={(v) => onConfigChange({ splitMethod: v as "holdout" | "kfold" })}
           className="w-full"
         >
-          <TabsList className="grid w-full grid-cols-2 mb-6 p-1.5 bg-muted/50 backdrop-blur-sm rounded-xl h-auto">
-            <TabsTrigger
-              value="holdout"
-              className="flex items-center gap-2 py-2.5 rounded-lg data-[state=active]:bg-background data-[state=active]:shadow-md transition-all duration-300"
-            >
-              <Layers className="h-4 w-4" />
-              <span className="font-medium">Train/Val/Test</span>
-            </TabsTrigger>
-            <TabsTrigger
-              value="kfold"
-              className="flex items-center gap-2 py-2.5 rounded-lg data-[state=active]:bg-background data-[state=active]:shadow-md transition-all duration-300"
-            >
-              <GitFork className="h-4 w-4" />
-              <span className="font-medium">K-Fold CV</span>
-            </TabsTrigger>
-          </TabsList>
+<TooltipProvider delayDuration={200}>
+            <TabsList className="grid w-full grid-cols-2 mb-6 p-1.5 bg-muted/50 backdrop-blur-sm rounded-xl h-auto">
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <TabsTrigger 
+                    value="holdout" 
+                    className="flex items-center gap-2 py-2.5 rounded-lg data-[state=active]:bg-background data-[state=active]:shadow-md transition-all duration-300"
+                  >
+                    <Layers className="h-4 w-4" />
+                    <span className="font-medium">Train/Val/Test</span>
+                  </TabsTrigger>
+                </TooltipTrigger>
+                <TooltipContent side="bottom" className="max-w-xs">
+                  <p className="text-xs">{tooltips.holdout}</p>
+                </TooltipContent>
+              </Tooltip>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <TabsTrigger 
+                    value="kfold" 
+                    className="flex items-center gap-2 py-2.5 rounded-lg data-[state=active]:bg-background data-[state=active]:shadow-md transition-all duration-300"
+                  >
+                    <GitFork className="h-4 w-4" />
+                    <span className="font-medium">K-Fold CV</span>
+                  </TabsTrigger>
+                </TooltipTrigger>
+                <TooltipContent side="bottom" className="max-w-xs">
+                  <p className="text-xs">{tooltips.kfold}</p>
+                </TooltipContent>
+              </Tooltip>
+            </TabsList>
+          </TooltipProvider>
 
           {/* ✅ FIX: AnimatePresence ne rend qu’UN enfant à la fois, avec une key stable */}
           <AnimatePresence mode="wait">
@@ -136,6 +163,7 @@ export function TrainingParameters({ config, onConfigChange }: TrainingParameter
                 </div>
 
                 {/* Individual Sliders */}
+                <TooltipProvider delayDuration={200}>
                 <div className="space-y-4 p-4 rounded-xl bg-muted/20 border border-border/50">
                   {/* Train */}
                   <div className="space-y-2.5">
@@ -143,6 +171,14 @@ export function TrainingParameters({ config, onConfigChange }: TrainingParameter
                       <label className="text-sm font-medium flex items-center gap-2">
                         <div className="w-2.5 h-2.5 rounded-full bg-gradient-to-r from-primary to-primary/70 shadow-sm" />
                         Entraînement
+                          <Tooltip>
+                          <TooltipTrigger asChild>
+                            <HelpCircle className="h-3.5 w-3.5 text-muted-foreground hover:text-primary transition-colors cursor-help" />
+                          </TooltipTrigger>
+                          <TooltipContent side="right" className="max-w-xs">
+                            <p className="text-xs">{tooltips.train}</p>
+                          </TooltipContent>
+                        </Tooltip>
                       </label>
                       <span className="text-sm font-bold text-primary tabular-nums">{config.trainRatio}%</span>
                     </div>
@@ -172,6 +208,14 @@ export function TrainingParameters({ config, onConfigChange }: TrainingParameter
                       <label className="text-sm font-medium flex items-center gap-2">
                         <div className="w-2.5 h-2.5 rounded-full bg-gradient-to-r from-secondary to-secondary/70 shadow-sm" />
                         Validation
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <HelpCircle className="h-3.5 w-3.5 text-muted-foreground hover:text-secondary transition-colors cursor-help" />
+                          </TooltipTrigger>
+                          <TooltipContent side="right" className="max-w-xs">
+                            <p className="text-xs">{tooltips.validation}</p>
+                          </TooltipContent>
+                        </Tooltip>
                         {config.valRatio === 0 && (
                           <span className="text-[10px] px-1.5 py-0.5 rounded-md bg-muted text-muted-foreground font-normal">
                             Désactivé
@@ -200,6 +244,14 @@ export function TrainingParameters({ config, onConfigChange }: TrainingParameter
                       <label className="text-sm font-medium flex items-center gap-2">
                         <div className="w-2.5 h-2.5 rounded-full bg-gradient-to-r from-accent to-accent/70 shadow-sm" />
                         Test
+                                                <Tooltip>
+                          <TooltipTrigger asChild>
+                            <HelpCircle className="h-3.5 w-3.5 text-muted-foreground hover:text-accent transition-colors cursor-help" />
+                          </TooltipTrigger>
+                          <TooltipContent side="right" className="max-w-xs">
+                            <p className="text-xs">{tooltips.test}</p>
+                          </TooltipContent>
+                        </Tooltip>
                       </label>
                       <span className="text-sm font-bold text-accent tabular-nums">{config.testRatio}%</span>
                     </div>
@@ -217,6 +269,8 @@ export function TrainingParameters({ config, onConfigChange }: TrainingParameter
                     />
                   </div>
                 </div>
+                </TooltipProvider>
+
 
                 {/* Presets */}
                 <div className="space-y-2.5">

@@ -433,4 +433,33 @@
     0% { background-position: 200% 0; }
     100% { background-position: -200% 0; }
   }
+
+    .scrollbar-modern {
+    scrollbar-width: thin; /* Firefox */
+    scrollbar-color: hsl(var(--muted-foreground) / 0.35) transparent;
+  }
+
+  .scrollbar-modern::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+
+  .scrollbar-modern::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  .scrollbar-modern::-webkit-scrollbar-thumb {
+    background-color: hsl(var(--muted-foreground) / 0.25);
+    border-radius: 9999px;
+    border: 3px solid transparent;   /* makes it look thin + premium */
+    background-clip: content-box;
+  }
+
+  .scrollbar-modern:hover::-webkit-scrollbar-thumb {
+    background-color: hsl(var(--muted-foreground) / 0.38);
+  }
+
+  .scrollbar-modern::-webkit-scrollbar-corner {
+    background: transparent;
+  }
 }

@@ -13,27 +13,90 @@ import type { TrainingConfig } from "@/types";
 
 export type ModelMetrics = Record<string, number>;
 
+export type SplitInfo = {
+  method?: "holdout" | "kfold";
+  train_rows?: number;
+  val_rows?: number;
+  test_rows?: number;
+  folds?: number;
+  rows?: number;
+  [k: string]: any;
+};
+
+export type FeatureImportanceItem = { feature: string; importance: number };
+
+export type ClassDistribution = {
+  all?: Record<string, number>;
+  train?: Record<string, number>;
+  val?: Record<string, number>;
+  test?: Record<string, number>;
+};
+
+export type BaselineMajority = {
+  majority_label?: string;
+  majority_support_train?: number;
+  train_size?: number;
+  eval_size?: number;
+  metrics?: Record<string, number>;
+};
+
+export type ThresholdingInfo = {
+  enabled?: boolean;
+  reason?: string;
+  threshold?: number;
+  val_source?: "user_val" | "inner_val_from_train" | string;
+  score_kind?: "proba" | "score" | "hard" | string;
+  val_precision_pos?: number;
+  val_recall_pos?: number;
+  val_f1_pos?: number;
+  [k: string]: any;
+};
+
 export type ModelResult = {
   id: string;
   modelType: string;
-  status: string; // "completed" | ...
+  status: string;
+
   metrics: ModelMetrics;
+
   trainScore: number;
   testScore: number;
-  featureImportance: any[];
-  confusionMatrix: any[];
+
+  primaryMetric?: string | null;
+  splitInfo?: SplitInfo | null;
+
+  gridSearch?: {
+    enabled?: boolean;
+    cvBestScore?: number | null;
+    cvScoring?: string | null;
+    bestParams?: Record<string, any> | null;
+    cvSplits?: number | null;
+  } | null;
+
+  featureImportance: FeatureImportanceItem[];
+  confusionMatrix: number[][];
+
+  // ✅ Step 1 visibility
+  classDistribution?: ClassDistribution | null;
+  baselineMajority?: BaselineMajority | null;
+
+  // ✅ new: thresholding
+  thresholding?: ThresholdingInfo | null;
+
   trainingTime: number;
 };
 
 export type TrainingSession = {
   id: string;
   projectId: string;
-  datasetVersionId: string;
-  status: string; // "running" | "succeeded" | "failed"
+  datasetVersionId: string | null;
+  status: string;
   progress: number;
   errorMessage: string | null;
   config: any;
+
   results: ModelResult[];
+
   createdAt?: string;
   startedAt?: string;
   completedAt?: string;
@@ -56,14 +119,12 @@ export function triggerBrowserDownload(blob: Blob, filename: string) {
 
 export const trainingService = {
   async startTraining(projectId: string, versionId: string, config: TrainingConfig): Promise<TrainingSession> {
-    return apiClient.post<TrainingSession>(
-      `${trainingBase(projectId)}/versions/${versionId}/sessions`,
-      config
-    );
+    return apiClient.post<TrainingSession>(`${trainingBase(projectId)}/versions/${versionId}/sessions`, config);
   },
 
-  async getSession(projectId: string, sessionId: string): Promise<TrainingSession> {
-    return apiClient.get<TrainingSession>(`${trainingBase(projectId)}/sessions/${sessionId}`);
+  async getSession(projectId: string, sessionId: string): Promise<any> {
+    // keep any because backend may return "future format"
+    return apiClient.get<any>(`${trainingBase(projectId)}/sessions/${sessionId}`);
   },
 
   async getSessions(projectId: string): Promise<TrainingSession[]> {

@@ -1,14 +1,34 @@
 // src/services/dataService.ts
 import apiClient from "@/services/apiClient";
-import { ProcessingOperation, DataVersion } from "@/types";
+import type { ProcessingOperation, DataVersion } from "@/types";
 
+/**
+ * Processing "Prepare" module should be CLEANING ONLY (avoid leakage).
+ * Keep legacy types for older parts of app, but ProcessingPage must use cleaning payload.
+ */
 export type OperationType = "cleaning" | "imputation" | "normalization" | "encoding" | "other";
+export type CleaningOperationType = "cleaning";
+
+export type CleaningAction =
+  | "drop_columns"
+  | "drop_duplicates"
+  | "drop_empty_rows"
+  | "rename_columns"
+  | "strip_whitespace"
+  | "substitute_values";
 
 export type ApplyOperationPayload = {
   type: OperationType;
   description: string;
   columns: string[];
   params?: Record<string, any>;
+};
+
+export type ApplyCleaningPayload = {
+  type: CleaningOperationType; // "cleaning"
+  description: string;
+  columns: string[]; // can be [] for drop_duplicates / drop_empty_rows
+  params: Record<string, any> & { action: CleaningAction };
 };
 
 export type ProcessingPreviewOut = {
@@ -18,6 +38,29 @@ export type ProcessingPreviewOut = {
   rows: Record<string, unknown>[];
   page: number;
   page_size: number;
+  total_rows: number;
+};
+
+export type ColumnKind = "numeric" | "categorical" | "datetime" | "boolean" | "text" | "id" | "other";
+
+export type ColumnMeta = {
+  name: string;
+  dtype: string;
+  kind: ColumnKind | string;
+
+  inferred_kind?: ColumnKind | string;
+  override_kind?: ColumnKind | string | null;
+  confidence?: number;
+
+  missing: number;
+  unique: number;
+  total: number;
+  sample: string[];
+};
+
+export type ColumnsMetaOut = {
+  columns: ColumnMeta[];
+  counts: Record<string, number>;
   total_rows: number;
 };
 
@@ -100,14 +143,40 @@ export type SaveProcessedVersionOut =
       operations?: string[];
     };
 
-export async function getVersionColumns(projectId: string, versionId: string): Promise<string[]> {
-  const res = await apiClient.get<{ columns: string[] }>(
-    `/projects/${projectId}/versions/${versionId}/columns`
-  );
-  return res.columns ?? [];
-};
+function clampPage(page?: number) {
+  const p = Number(page);
+  return Number.isFinite(p) && p > 0 ? Math.floor(p) : 1;
+}
+
+function clampPageSize(pageSize?: number) {
+  const ps = Number(pageSize);
+  const v = Number.isFinite(ps) && ps > 0 ? Math.floor(ps) : 25;
+  return Math.min(Math.max(1, v), 200);
+}
 
 export const dataService = {
+  // -------------------------
+  // Version schema/meta helpers (used in version edit workspace)
+  // -------------------------
+  async getVersionColumnsMeta(
+    projectId: string | number,
+    versionId: number | string,
+    workspaceDatasetId?: number | null
+  ): Promise<ColumnsMetaOut> {
+    const qs = workspaceDatasetId ? `?workspace_dataset_id=${encodeURIComponent(String(workspaceDatasetId))}` : "";
+    return apiClient.get<ColumnsMetaOut>(`/projects/${projectId}/versions/${versionId}/columns-meta${qs}`);
+  },
+
+  async saveVersionColumnKinds(
+    projectId: string | number,
+    versionId: number | string,
+    overrides: Record<string, string | null>
+  ): Promise<{ ok: boolean }> {
+    return apiClient.postJson<{ ok: boolean }>(`/projects/${projectId}/versions/${versionId}/column-kinds`, {
+      overrides,
+    });
+  },
+
   // -------------------------
   // Processing (dataset/workspace)
   // -------------------------
@@ -115,12 +184,34 @@ export const dataService = {
     return apiClient.get<OperationOut[]>(`${processingBase(projectId, datasetId)}/operations`);
   },
 
-  async applyOperation(
+  /**
+   * Legacy method (kept).
+   */
+  async applyOperation(projectId: string | number, datasetId: number, payload: ApplyOperationPayload): Promise<OperationOut> {
+    return apiClient.postJson<OperationOut>(`${processingBase(projectId, datasetId)}/operations`, payload);
+  },
+
+  /**
+   * ✅ Cleaning-only helper (strict contract)
+   */
+  async applyCleaningOperation(
     projectId: string | number,
     datasetId: number,
-    payload: ApplyOperationPayload
+    payload: Omit<ApplyCleaningPayload, "type"> & { type?: "cleaning" }
   ): Promise<OperationOut> {
-    return apiClient.postJson<OperationOut>(`${processingBase(projectId, datasetId)}/operations`, payload);
+    const params = payload.params ?? ({} as any);
+    if (!params.action || typeof params.action !== "string") {
+      throw new Error("applyCleaningOperation: params.action is required");
+    }
+
+    const safe: ApplyCleaningPayload = {
+      type: "cleaning",
+      description: payload.description,
+      columns: payload.columns ?? [],
+      params: params as any,
+    };
+
+    return apiClient.postJson<OperationOut>(`${processingBase(projectId, datasetId)}/operations`, safe);
   },
 
   async undoLastOperation(projectId: string | number, datasetId: number): Promise<{ ok: boolean }> {
@@ -133,69 +224,35 @@ export const dataService = {
     page = 1,
     pageSize = 25
   ): Promise<ProcessingPreviewOut> {
-    const p = encodeURIComponent(String(page));
-    const ps = encodeURIComponent(String(pageSize));
-    return apiClient.get<ProcessingPreviewOut>(
-      `${processingBase(projectId, datasetId)}/preview?page=${p}&page_size=${ps}`
-    );
+    const p = clampPage(page);
+    const ps = clampPageSize(pageSize);
+    return apiClient.get<ProcessingPreviewOut>(`${processingBase(projectId, datasetId)}/preview?page=${p}&page_size=${ps}`);
   },
 
-  async exportProcessed(projectId: string | number, datasetId: number) {
+  async getProcessingColumnsMeta(projectId: string | number, datasetId: number): Promise<ColumnsMetaOut> {
+    return apiClient.get<ColumnsMetaOut>(`${processingBase(projectId, datasetId)}/columns-meta`);
+  },
+  
+
+  async exportCleaned(projectId: string | number, datasetId: number) {
     return apiClient.getBlob(`${processingBase(projectId, datasetId)}/export`);
   },
 
-  async saveProcessedAsVersion(
+  async saveCleanedAsVersion(
     projectId: string | number,
     datasetId: number,
     payload: SaveProcessedVersionPayload = {}
   ): Promise<SaveProcessedVersionOut> {
-    const base = processingBase(projectId, datasetId);
-    return apiClient.postJson<SaveProcessedVersionOut>(`${base}/save`, payload);
+    return apiClient.postJson<SaveProcessedVersionOut>(`${processingBase(projectId, datasetId)}/save`, payload);
   },
 
   // -------------------------
-  // Versions
+  // Versions (list/delete only; no "view/preview/download" mode)
   // -------------------------
   async getVersions(projectId: string | number): Promise<VersionUI[]> {
     const out = await apiClient.get<DatasetVersionOut[]>(`${versionsBase(projectId)}`);
     const list = Array.isArray(out) ? out.map(normalizeVersion) : [];
     return list.filter((v) => v.id > 0);
-  },
-
-async getVersionPreview(
-    projectId: string | number,
-    versionId: number | string,
-    page = 1,
-    pageSize = 25
-  ): Promise<ProcessingPreviewOut> {
-    const vid = toNum(versionId);
-    if (!vid) throw new Error("Invalid version id");
-
-    const p = Math.max(1, Number(page) || 1);
-    const ps = Math.min(Math.max(1, Number(pageSize) || 25), 200);
-
-    // ✅ nécessite backend: GET /versions/{version_id}/preview
-    return apiClient.get<ProcessingPreviewOut>(
-      `${versionsBase(projectId)}/${vid}/preview?page=${p}&page_size=${ps}`
-    );
-  },
-
-  async downloadVersion(projectId: string | number, versionId: number | string) {
-    const vid = toNum(versionId);
-    if (!vid) throw new Error("Invalid version id");
-    return apiClient.getBlob(`${versionsBase(projectId)}/${vid}/download`);
-  },
-
-  async overwriteVersion(
-    projectId: string | number,
-    versionId: number,
-    payload: {
-      content_base64: string;
-      content_type?: string | null;
-      operations?: any[] | null;
-    }
-  ) {
-    return apiClient.postJson(`${versionsBase(projectId)}/${versionId}/overwrite`, payload);
   },
 
   async deleteVersion(projectId: string | number, versionId: number | string): Promise<void> {
@@ -205,25 +262,19 @@ async getVersionPreview(
   },
 
   // -------------------------
-  // ✅ Workspace for version edit
+  // Workspace for version edit
   // -------------------------
   async getOrCreateVersionWorkspace(projectId: string | number, versionId: number) {
-    // POST /api/projects/{project_id}/versions/{version_id}/workspace
-    return apiClient.postJson<{ workspace_dataset_id: number }>(
-      `${versionsBase(projectId)}/${versionId}/workspace`,
-      {}
-    );
+    return apiClient.postJson<{ workspace_dataset_id: number }>(`${versionsBase(projectId)}/${versionId}/workspace`, {});
   },
 
   async commitVersionWorkspace(projectId: string | number, versionId: number, workspaceDatasetId: number) {
-    // POST /api/projects/{project_id}/versions/{version_id}/commit-workspace
     return apiClient.postJson<{ ok: boolean }>(`${versionsBase(projectId)}/${versionId}/commit-workspace`, {
       workspace_dataset_id: workspaceDatasetId,
     });
   },
 
   async closeVersionWorkspace(projectId: string | number, versionId: number) {
-    // DELETE /api/projects/{project_id}/versions/{version_id}/workspace
     return apiClient.delete<{ ok: boolean }>(`${versionsBase(projectId)}/${versionId}/workspace`);
   },
 };
