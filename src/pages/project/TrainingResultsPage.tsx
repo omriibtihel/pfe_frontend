@@ -1,267 +1,416 @@
-import { useEffect, useMemo, useState } from "react";
-import { useParams, useSearchParams } from "react-router-dom";
-import { motion } from "framer-motion";
-import { Trophy, Save, Download, BarChart3, Star, AlertCircle, RefreshCw, SlidersHorizontal } from "lucide-react";
+﻿
+import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useParams, useSearchParams } from 'react-router-dom';
+import { motion } from 'framer-motion';
+import { Trophy, Save, Download, BarChart3, Star, Loader2, AlertTriangle } from 'lucide-react';
+import { Bar, BarChart as RechartsBarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 
-import { AppLayout } from "@/layouts/AppLayout";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
-import { PageSkeleton } from "@/components/ui/loading-skeleton";
-import { useToast } from "@/hooks/use-toast";
-import { staggerContainer, staggerItem } from "@/components/ui/page-transition";
-
-import trainingService, { TrainingSession, ModelResult } from "@/services/trainingService";
+import { AppLayout } from '@/layouts/AppLayout';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Badge } from '@/components/ui/badge';
+import { Progress } from '@/components/ui/progress';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { PageSkeleton } from '@/components/ui/loading-skeleton';
+import { useToast } from '@/hooks/use-toast';
+import { trainingService } from '@/services/trainingService';
+import type { DetailedClassificationMetrics, ModelResult, TrainingSession } from '@/types';
+import { staggerContainer, staggerItem } from '@/components/ui/page-transition';
 
 const modelColors: Record<string, string> = {
-  lightgbm: "from-blue-500 to-blue-600",
-  xgboost: "from-purple-500 to-purple-600",
-  randomforest: "from-green-500 to-green-600",
-  svm: "from-teal-500 to-teal-600",
-  knn: "from-orange-500 to-orange-600",
-  decisiontree: "from-red-500 to-red-600",
+  lightgbm: 'from-blue-500 to-blue-600',
+  xgboost: 'from-purple-500 to-purple-600',
+  randomforest: 'from-green-500 to-green-600',
+  svm: 'from-teal-500 to-teal-600',
+  knn: 'from-orange-500 to-orange-600',
+  decisiontree: 'from-red-500 to-red-600',
+  logisticregression: 'from-cyan-500 to-cyan-600',
+  logreg: 'from-cyan-500 to-cyan-600',
+  naivebayes: 'from-pink-500 to-pink-600',
 };
 
-function pct(v: unknown) {
-  const n = typeof v === "number" ? v : 0;
-  return `${(n * 100).toFixed(1)}%`;
+const metricLabels: Record<string, string> = {
+  accuracy: 'Accuracy',
+  precision: 'Precision',
+  recall: 'Recall',
+  f1: 'F1',
+  roc_auc: 'ROC AUC',
+  pr_auc: 'PR AUC',
+  r2: 'R2',
+  rmse: 'RMSE',
+  mae: 'MAE',
+};
+
+type ClassificationType = 'binary' | 'multiclass' | 'multilabel' | 'unknown';
+
+type FeatureImportanceChartRow = {
+  feature: string;
+  label: string;
+  rawImportance: number;
+  normalizedImportance: number;
+};
+
+type AverageRow = {
+  key: 'macro' | 'weighted' | 'micro';
+  label: string;
+  precision: number | null;
+  recall: number | null;
+  f1: number | null;
+};
+
+type PerClassRow = {
+  label: string;
+  precision: number | null;
+  recall: number | null;
+  f1: number | null;
+  support: number | null;
+};
+
+type ConfusionPayload = {
+  labels: string[];
+  matrix: number[][];
+};
+
+type ClassificationView = {
+  classificationType: ClassificationType;
+  positiveLabel: string | null;
+  accuracy: number | null;
+  rocAuc: number | null;
+  prAuc: number | null;
+  precisionMain: number | null;
+  recallMain: number | null;
+  f1Main: number | null;
+  balancedAccuracy: number | null;
+  specificity: number | null;
+  averages: AverageRow[];
+  perClass: PerClassRow[];
+  confusion: ConfusionPayload;
+  warnings: string[];
+};
+
+function toPercent(value?: number | null): string {
+  if (!Number.isFinite(value)) return '-';
+  return `${(Number(value) * 100).toFixed(1)}%`;
 }
 
-function num(v: unknown) {
-  const n = typeof v === "number" ? v : NaN;
-  return Number.isFinite(n) ? n.toFixed(3) : "—";
+function toNumber(value?: number | null): string {
+  if (!Number.isFinite(value)) return '-';
+  return Number(value).toFixed(3);
 }
 
-function sec(v: unknown) {
-  const n = typeof v === "number" ? v : 0;
-  return `${n.toFixed(1)}s`;
+function toSeconds(value?: number | null): string {
+  if (!Number.isFinite(value)) return '-';
+  return `${Number(value).toFixed(1)}s`;
 }
 
-function safeUpper(s: unknown) {
-  return String(s ?? "").toUpperCase();
+function clampPercent(value?: number | null): number {
+  const v = Number(value);
+  if (!Number.isFinite(v)) return 0;
+  return Math.max(0, Math.min(100, v * 100));
 }
 
-/**
- * If metric is likely a probability/score in [0..1] => pct,
- * else => num.
- */
-function smartValue(v: unknown) {
-  if (typeof v !== "number" || !Number.isFinite(v)) return "—";
-  if (v >= 0 && v <= 1) return pct(v);
-  return num(v);
+function toFiniteNumber(value: unknown): number | null {
+  const n = Number(value);
+  return Number.isFinite(n) ? n : null;
 }
 
-function fmtDist(dist?: Record<string, number> | null) {
-  if (!dist) return "—";
-  const entries = Object.entries(dist);
-  if (!entries.length) return "—";
-  return entries
-    .sort((a, b) => b[1] - a[1])
-    .map(([k, v]) => `${k}:${v}`)
-    .join("  •  ");
+function toUniqueWarnings(values: unknown[]): string[] {
+  const out: string[] = [];
+  for (const value of values) {
+    const text = String(value ?? '').trim();
+    if (!text) continue;
+    if (!out.includes(text)) out.push(text);
+  }
+  return out;
 }
 
-function imbalanceRatio(dist?: Record<string, number> | null) {
-  if (!dist) return null;
-  const vals = Object.values(dist).filter((n) => typeof n === "number" && n > 0);
-  if (vals.length < 2) return null;
-  const max = Math.max(...vals);
-  const min = Math.min(...vals);
-  if (!Number.isFinite(max) || !Number.isFinite(min) || min === 0) return null;
-  return max / min;
+function truncateFeatureLabel(value: string, max = 24): string {
+  if (value.length <= max) return value;
+  return `${value.slice(0, max - 3)}...`;
 }
 
-/**
- * ✅ Cette page supporte 2 formats:
- * 1) Backend actuel:   TrainingSession { results: [...] }
- * 2) Format futur:     { session: TrainingSession, models: [...] }
- */
-function normalizeSession(payload: any): TrainingSession | null {
-  if (!payload) return null;
+function buildFeatureImportanceChartData(result: ModelResult, topN = 8): FeatureImportanceChartRow[] {
+  const source = Array.isArray(result.featureImportance) ? result.featureImportance : [];
+  const cleaned = source
+    .map((item) => ({
+      feature: String(item?.feature ?? '').trim(),
+      rawImportance: Number(item?.importance),
+    }))
+    .filter((item) => item.feature && Number.isFinite(item.rawImportance))
+    .sort((a, b) => b.rawImportance - a.rawImportance)
+    .slice(0, topN);
 
-  if (payload.session && payload.session.id) {
-    const s = payload.session as TrainingSession;
-    if (Array.isArray(payload.models) && !Array.isArray((s as any).results)) {
-      (s as any).results = payload.models;
+  const maxImportance = cleaned.reduce((max, item) => Math.max(max, Math.abs(item.rawImportance)), 0);
+
+  return cleaned.map((item) => ({
+    feature: item.feature,
+    label: truncateFeatureLabel(item.feature),
+    rawImportance: item.rawImportance,
+    normalizedImportance: maxImportance > 0 ? Math.abs(item.rawImportance) / maxImportance : 0,
+  }));
+}
+
+function getPreprocessingSummary(result: ModelResult): string {
+  const p = (result.preprocessing ?? {}) as Record<string, unknown>;
+  const defaults = (p.defaults ?? {}) as Record<string, unknown>;
+  const effectiveByColumn = (p.effectiveByColumn ?? {}) as Record<string, unknown>;
+  const droppedColumns = Array.isArray(p.droppedColumns) ? p.droppedColumns : [];
+
+  if (Object.keys(defaults).length || Object.keys(effectiveByColumn).length || droppedColumns.length) {
+    const parts: string[] = [];
+    if (Object.keys(defaults).length) {
+      parts.push(
+        `Defaults: numImp=${String(defaults.numericImputation ?? '-')}, numScale=${String(defaults.numericScaling ?? '-')}, catImp=${String(defaults.categoricalImputation ?? '-')}, catEnc=${String(defaults.categoricalEncoding ?? '-')}`
+      );
     }
-    return s;
+    if (Object.keys(effectiveByColumn).length) parts.push(`effectiveByColumn: ${Object.keys(effectiveByColumn).length}`);
+    if (droppedColumns.length) parts.push(`dropped: ${droppedColumns.length}`);
+    return parts.join(' | ');
   }
 
-  if (payload.id) return payload as TrainingSession;
-  return null;
+  const selected = (p.selectedMethods ?? {}) as Record<string, unknown>;
+  const legacy = (selected.legacy ?? {}) as Record<string, unknown>;
+  const imputation = ((legacy.imputation ?? selected.imputation) ?? {}) as Record<string, unknown>;
+  const encoding = ((legacy.encoding ?? selected.encoding) ?? {}) as Record<string, unknown>;
+  const scaling = ((legacy.scaling ?? selected.scaling) ?? {}) as Record<string, unknown>;
+
+  const parts: string[] = [];
+
+  const numImp = String(selected.numericImputation ?? imputation.numeric ?? '').trim();
+  const catImp = String(selected.categoricalImputation ?? imputation.categorical ?? '').trim();
+  const catEnc = String(selected.categoricalEncoding ?? encoding.categorical ?? '').trim();
+  const numScaling = String(selected.numericScaling ?? scaling.numeric ?? '').trim();
+
+  if (numImp) parts.push(`Imp(num): ${numImp}`);
+  if (catImp) parts.push(`Imp(cat): ${catImp}`);
+  if (catEnc) parts.push(`Enc(cat): ${catEnc}`);
+  if (numScaling) parts.push(`Norm(num): ${numScaling}`);
+
+  return parts.join(' | ');
 }
 
-function isBinaryLike(result: ModelResult) {
-  const m: any = result.metrics || {};
-  return (
-    typeof m.precision_pos === "number" ||
-    typeof m.recall_pos === "number" ||
-    typeof m.f1_pos === "number" ||
-    typeof m.pr_auc === "number"
-  );
+function getDetailedMetrics(result: ModelResult): DetailedClassificationMetrics {
+  const candidate = result.metricsDetailed;
+  if (!candidate || typeof candidate !== 'object') return {};
+  return candidate;
 }
 
-function scoreHigherIsBetter(metric?: string | null, taskType?: "classification" | "regression") {
-  if (taskType === "regression") {
-    // error metrics lower better
-    if (metric && ["rmse", "mae", "mse"].includes(metric)) return false;
-    return true; // r2
-  }
-  return true;
+function getClassificationType(result: ModelResult): ClassificationType {
+  const detailed = getDetailedMetrics(result);
+  const rawType = String(detailed?.meta?.classification_type ?? '').trim().toLowerCase();
+  if (rawType === 'binary' || rawType === 'multiclass' || rawType === 'multilabel') return rawType;
+
+  const hasPos = Number.isFinite(Number(result.metrics?.precision_pos)) || Number.isFinite(Number(result.metrics?.recall_pos));
+  if (hasPos) return 'binary';
+
+  const cm = Array.isArray(result.confusionMatrix) ? result.confusionMatrix : [];
+  if (cm.length === 2 && Array.isArray(cm[0]) && cm[0].length === 2) return 'binary';
+  if (cm.length > 2) return 'multiclass';
+  return 'unknown';
+}
+function buildConfusionPayload(result: ModelResult, detailed: DetailedClassificationMetrics): ConfusionPayload {
+  const rawPayload = detailed?.confusion_matrix;
+  const rawMatrix = Array.isArray(rawPayload?.matrix) ? rawPayload?.matrix : Array.isArray(result.confusionMatrix) ? result.confusionMatrix : [];
+
+  const matrix = rawMatrix
+    .filter((row) => Array.isArray(row))
+    .map((row) => row.map((v) => {
+      const n = Number(v);
+      return Number.isFinite(n) ? n : 0;
+    }));
+
+  const rawLabels = Array.isArray(rawPayload?.labels) ? rawPayload.labels : [];
+  const labels = (rawLabels.length === matrix.length ? rawLabels : matrix.map((_, idx) => idx)).map((v) => String(v));
+
+  return { labels, matrix };
+}
+
+function buildAveragesRows(result: ModelResult, detailed: DetailedClassificationMetrics): AverageRow[] {
+  const macro = detailed?.averaged?.macro ?? {};
+  const weighted = detailed?.averaged?.weighted ?? {};
+  const micro = detailed?.averaged?.micro ?? {};
+
+  const rows: AverageRow[] = [
+    {
+      key: 'macro',
+      label: 'Macro',
+      precision: toFiniteNumber((macro as any)?.precision ?? result.metrics?.precision_macro),
+      recall: toFiniteNumber((macro as any)?.recall ?? result.metrics?.recall_macro),
+      f1: toFiniteNumber((macro as any)?.f1 ?? result.metrics?.f1_macro),
+    },
+    {
+      key: 'weighted',
+      label: 'Weighted',
+      precision: toFiniteNumber((weighted as any)?.precision ?? result.metrics?.precision_weighted),
+      recall: toFiniteNumber((weighted as any)?.recall ?? result.metrics?.recall_weighted),
+      f1: toFiniteNumber((weighted as any)?.f1 ?? result.metrics?.f1_weighted),
+    },
+    {
+      key: 'micro',
+      label: 'Micro',
+      precision: toFiniteNumber((micro as any)?.precision ?? result.metrics?.precision_micro),
+      recall: toFiniteNumber((micro as any)?.recall ?? result.metrics?.recall_micro),
+      f1: toFiniteNumber((micro as any)?.f1 ?? result.metrics?.f1_micro),
+    },
+  ];
+
+  return rows.filter((row) => row.precision !== null || row.recall !== null || row.f1 !== null);
+}
+
+function buildPerClassRows(detailed: DetailedClassificationMetrics): PerClassRow[] {
+  const source = detailed?.per_class;
+  if (!source || typeof source !== 'object') return [];
+
+  return Object.entries(source)
+    .map(([label, raw]) => {
+      const row = (raw ?? {}) as Record<string, unknown>;
+      return {
+        label,
+        precision: toFiniteNumber(row.precision),
+        recall: toFiniteNumber(row.recall),
+        f1: toFiniteNumber(row.f1),
+        support: toFiniteNumber(row.support),
+      };
+    })
+    .sort((a, b) => a.label.localeCompare(b.label));
+}
+
+function buildClassificationView(result: ModelResult): ClassificationView {
+  const detailed = getDetailedMetrics(result);
+  const global = (detailed?.global ?? {}) as Record<string, unknown>;
+  const binary = (detailed?.binary ?? {}) as Record<string, unknown>;
+  const classificationType = getClassificationType(result);
+
+  const precisionPos = toFiniteNumber(binary.precision_pos ?? result.metrics?.precision_pos);
+  const recallPos = toFiniteNumber(binary.recall_pos ?? result.metrics?.recall_pos);
+  const f1Pos = toFiniteNumber(binary.f1_pos ?? result.metrics?.f1_pos);
+
+  const macroPrecision = toFiniteNumber((detailed?.averaged?.macro as any)?.precision ?? result.metrics?.precision_macro ?? result.metrics?.precision);
+  const macroRecall = toFiniteNumber((detailed?.averaged?.macro as any)?.recall ?? result.metrics?.recall_macro ?? result.metrics?.recall);
+  const macroF1 = toFiniteNumber((detailed?.averaged?.macro as any)?.f1 ?? result.metrics?.f1_macro ?? result.metrics?.f1);
+
+  const isBinary = classificationType === 'binary';
+
+  const warnings = toUniqueWarnings([
+    ...((Array.isArray(result.metricsWarnings) ? result.metricsWarnings : []) as unknown[]),
+    ...((Array.isArray(detailed?.warnings) ? detailed.warnings : []) as unknown[]),
+  ]);
+
+  const positiveRaw = binary.positive_label ?? detailed?.meta?.positive_label;
+
+  return {
+    classificationType,
+    positiveLabel: positiveRaw == null ? null : String(positiveRaw),
+    accuracy: toFiniteNumber(global.accuracy ?? result.metrics?.accuracy),
+    rocAuc: toFiniteNumber(global.roc_auc ?? result.metrics?.roc_auc),
+    prAuc: toFiniteNumber(global.pr_auc ?? result.metrics?.pr_auc),
+    precisionMain: isBinary ? precisionPos : macroPrecision,
+    recallMain: isBinary ? recallPos : macroRecall,
+    f1Main: isBinary ? f1Pos : macroF1,
+    balancedAccuracy: toFiniteNumber(global.balanced_accuracy ?? result.metrics?.balanced_accuracy),
+    specificity: toFiniteNumber(global.specificity ?? result.metrics?.specificity),
+    averages: buildAveragesRows(result, detailed),
+    perClass: buildPerClassRows(detailed),
+    confusion: buildConfusionPayload(result, detailed),
+    warnings,
+  };
 }
 
 export function TrainingResultsPage() {
-  const { projectId, versionId } = useParams<{ projectId: string; versionId: string }>();
+  const params = useParams();
+  const projectId = params.projectId ?? params.id;
   const [searchParams] = useSearchParams();
   const { toast } = useToast();
 
-  const sessionId = useMemo(() => searchParams.get("session"), [searchParams]);
-
   const [session, setSession] = useState<TrainingSession | null>(null);
   const [isLoading, setIsLoading] = useState(true);
-  const [loadError, setLoadError] = useState<string | null>(null);
-  const [isRefreshing, setIsRefreshing] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-  const fetchSession = async (opts?: { silent?: boolean }) => {
-    const silent = !!opts?.silent;
+  const sessionId = useMemo(() => String(searchParams.get('session') || '').trim(), [searchParams]);
 
+  const loadSession = useCallback(async (silent = false) => {
     if (!projectId || !sessionId) {
-      setLoadError("Paramètres manquants (projectId ou session).");
       setSession(null);
+      setError('Parametres invalides: projectId/session manquant.');
       setIsLoading(false);
       return;
     }
 
-    if (!silent) setIsLoading(true);
-    else setIsRefreshing(true);
-
-    setLoadError(null);
-
     try {
-      const raw = await trainingService.getSession(String(projectId), String(sessionId));
-      const s = normalizeSession(raw);
-      setSession(s);
-    } catch (error: any) {
-      const msg = error?.message || "Impossible de charger la session";
-      setLoadError(msg);
-      setSession(null);
-      if (!silent) toast({ title: "Erreur", description: msg, variant: "destructive" });
+      if (!silent) setIsLoading(true);
+      const data = await trainingService.getSession(String(projectId), sessionId);
+      setSession(data);
+      setError(null);
+    } catch (e: any) {
+      const msg = String(e?.message || "Impossible de charger les resultats d'entrainement.");
+      setError(msg);
+      if (!silent) {
+        toast({ title: 'Erreur', description: msg, variant: 'destructive' });
+      }
     } finally {
       if (!silent) setIsLoading(false);
-      setIsRefreshing(false);
     }
-  };
+  }, [projectId, sessionId, toast]);
 
   useEffect(() => {
-    fetchSession();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [projectId, sessionId]);
+    loadSession(false);
+  }, [loadSession]);
 
   useEffect(() => {
     if (!session) return;
-    if (session.status !== "running") return;
+    if (session.status !== 'queued' && session.status !== 'running') return;
 
-    const t = setTimeout(() => fetchSession({ silent: true }), 2000);
-    return () => clearTimeout(t);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [session?.status, session?.progress, session?.id]);
+    const timer = window.setInterval(() => {
+      loadSession(true);
+    }, 1500);
 
-  const results: ModelResult[] = useMemo(() => {
-    return (session?.results ?? []) as ModelResult[];
-  }, [session]);
-
-  const taskType = useMemo(() => {
-    const t = (session as any)?.config?.taskType;
-    return t === "regression" ? "regression" : "classification";
-  }, [session]);
-
-  const anyBinary = useMemo(() => results.some(isBinaryLike), [results]);
-
-  const bestModel = useMemo(() => {
-    if (!results.length) return null;
-
-    // Prefer backend decision: testScore (already reflects primary metric)
-    // If regression error metrics => lower is better (but our backend primary_score sets higher_is_better flag;
-    // we don't have it here reliably, so we fallback to heuristic.)
-    return results.reduce((best, cur) => {
-      const scoreOf = (r: ModelResult) => {
-        const ts = (r as any).testScore;
-        if (typeof ts === "number" && Number.isFinite(ts)) return ts;
-
-        const pm = (r as any).primaryMetric as string | undefined;
-        const m: any = r.metrics || {};
-        if (pm && typeof m[pm] === "number") return m[pm] as number;
-
-        if (taskType === "regression") return (m.r2 ?? 0) as number;
-        return (m.f1 ?? m.accuracy ?? 0) as number;
-      };
-
-      const better = (a: ModelResult, b: ModelResult) => {
-        const sA = scoreOf(a);
-        const sB = scoreOf(b);
-        // if regression and pm is error metric -> lower better
-        const pm = (a as any).primaryMetric as string | null | undefined;
-        const hib = scoreHigherIsBetter(pm ?? null, taskType);
-        return hib ? sA > sB : sA < sB;
-      };
-
-      return better(cur, best) ? cur : best;
-    });
-  }, [results, taskType]);
+    return () => window.clearInterval(timer);
+  }, [session, loadSession]);
 
   const handleSaveModel = async (modelId: string) => {
-    if (!projectId || !session) return;
-
+    if (!session || !projectId) return;
     try {
-      await trainingService.saveModel(String(projectId), String(session.id), String(modelId));
-      toast({ title: "Modèle enregistré", description: "Le modèle a été sauvegardé avec succès" });
-      fetchSession({ silent: true });
+      await trainingService.saveModel(String(projectId), session.id, modelId);
+      toast({ title: 'Modele enregistre', description: 'Le modele a ete sauvegarde avec succes' });
     } catch (e: any) {
       toast({
-        title: "Erreur",
-        description: e?.message || "Impossible d'enregistrer le modèle",
-        variant: "destructive",
+        title: 'Erreur',
+        description: String(e?.message || "Echec de l'enregistrement du modele"),
+        variant: 'destructive',
       });
     }
   };
 
-  const handleDownload = async () => {
-    if (!projectId || !sessionId) return;
-
+  const handleDownloadReport = async () => {
+    if (!session || !projectId) return;
     try {
-      await trainingService.downloadResultsAndSaveToDisk(String(projectId), String(sessionId));
+      await trainingService.downloadResultsAndSaveToDisk(String(projectId), session.id);
     } catch (e: any) {
       toast({
-        title: "Erreur",
-        description: e?.message || "Téléchargement impossible",
-        variant: "destructive",
+        title: 'Erreur',
+        description: String(e?.message || 'Impossible de telecharger le rapport'),
+        variant: 'destructive',
       });
     }
   };
 
-  if (isLoading) {
-    return (
-      <AppLayout>
-        <PageSkeleton />
-      </AppLayout>
-    );
-  }
+  const bestModel = useMemo<ModelResult | null>(() => {
+    if (!session?.results?.length) return null;
+    return session.results.reduce((best, current) => (current.testScore > best.testScore ? current : best));
+  }, [session]);
 
-  if (loadError) {
+  if (isLoading) return <AppLayout><PageSkeleton /></AppLayout>;
+
+  if (!session) {
     return (
       <AppLayout>
-        <div className="p-6">
-          <Card className="border-destructive/30 bg-destructive/5">
-            <CardContent className="py-5 flex items-start gap-3">
-              <AlertCircle className="h-5 w-5 text-destructive mt-0.5" />
+        <div className="max-w-3xl mx-auto py-8">
+          <Card className="border-destructive/30">
+            <CardContent className="py-6 flex items-start gap-3">
+              <AlertTriangle className="h-5 w-5 text-destructive mt-0.5" />
               <div>
-                <p className="font-semibold text-destructive">Impossible de charger les résultats</p>
-                <p className="text-sm text-muted-foreground mt-1">{loadError}</p>
-                <p className="text-xs text-muted-foreground mt-3">
-                  URL attendue : /projects/&lt;projectId&gt;/versions/&lt;versionId&gt;/training/results?session=&lt;id&gt;
-                  <br />
-                  Actuel : projectId={String(projectId)} | versionId={String(versionId)} | session={String(sessionId)}
-                </p>
+                <p className="font-medium">Aucune session chargee</p>
+                <p className="text-sm text-muted-foreground mt-1">{error ?? 'Session introuvable.'}</p>
               </div>
             </CardContent>
           </Card>
@@ -270,51 +419,58 @@ export function TrainingResultsPage() {
     );
   }
 
-  if (!session) {
-    return (
-      <AppLayout>
-        <div className="p-6">Aucune session</div>
-      </AppLayout>
-    );
-  }
-
+  const isRegression = session.config?.taskType === 'regression';
+  const hasBinaryResult = !isRegression && session.results.some((result) => buildClassificationView(result).classificationType === 'binary');
+  const progressValue = Number(session.progress ?? 0);
   return (
     <AppLayout>
-      <motion.div className="space-y-6" initial="initial" animate="animate" variants={staggerContainer}>
+      <motion.div
+        className="space-y-6"
+        initial="initial"
+        animate="animate"
+        variants={staggerContainer}
+      >
         <motion.div variants={staggerItem} className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
           <div>
-            <h1 className="text-3xl font-bold text-foreground">Résultats d'entraînement</h1>
-            <p className="text-muted-foreground mt-1">
-              Projet #{projectId} • Version #{versionId} • Session #{session.id} • Status:{" "}
-              <span className="font-medium">{session.status}</span>
-              {session.status === "running" && (
-                <span className="ml-2 text-xs text-muted-foreground">(progress {session.progress}%)</span>
-              )}
+            <h1 className="text-3xl font-bold text-foreground">Resultats d'entrainement</h1>
+            <p className="text-muted-foreground mt-1">Analysez les performances de vos modeles</p>
+            <p className="text-xs text-muted-foreground mt-1">
+              Session #{session.id} | Statut: <span className="font-medium">{session.status ?? 'unknown'}</span>
             </p>
-
-            <div className="mt-2 flex flex-wrap gap-2 items-center">
-              <Badge variant="outline">Task: {taskType}</Badge>
-              {anyBinary && <Badge className="bg-accent text-accent-foreground">Binaire (metrics pos)</Badge>}
-            </div>
-
-            {session.status === "failed" && session.errorMessage && (
-              <p className="text-sm text-destructive mt-2 whitespace-pre-line">{session.errorMessage}</p>
-            )}
           </div>
-
-          <div className="flex gap-2">
-            <Button variant="outline" onClick={() => fetchSession()} disabled={isRefreshing}>
-              <RefreshCw className={`h-4 w-4 mr-2 ${isRefreshing ? "animate-spin" : ""}`} />
-              Rafraîchir
-            </Button>
-            <Button variant="outline" onClick={handleDownload}>
-              <Download className="h-4 w-4 mr-2" />
-              Télécharger le rapport
-            </Button>
-          </div>
+          <Button variant="outline" onClick={handleDownloadReport}>
+            <Download className="h-4 w-4 mr-2" />
+            Telecharger le rapport
+          </Button>
         </motion.div>
 
-        {/* Best Model */}
+        {(session.status === 'queued' || session.status === 'running') && (
+          <motion.div variants={staggerItem}>
+            <Card className="border-primary/20">
+              <CardContent className="py-5 space-y-3">
+                <div className="flex items-center gap-3">
+                  <Loader2 className="h-5 w-5 text-primary animate-spin" />
+                  <p className="font-medium">Entrainement en cours...</p>
+                  <Badge variant="secondary" className="ml-auto">{session.status}</Badge>
+                </div>
+                <Progress value={Math.max(0, Math.min(100, progressValue))} className="h-2" />
+                <p className="text-xs text-muted-foreground text-right">{Math.round(Math.max(0, Math.min(100, progressValue)))}%</p>
+              </CardContent>
+            </Card>
+          </motion.div>
+        )}
+
+        {session.status === 'failed' && (
+          <motion.div variants={staggerItem}>
+            <Card className="border-destructive/30">
+              <CardContent className="py-5">
+                <p className="font-medium text-destructive">Echec de l'entrainement</p>
+                <p className="text-sm text-muted-foreground mt-1">{session.errorMessage || 'Consultez les logs backend.'}</p>
+              </CardContent>
+            </Card>
+          </motion.div>
+        )}
+
         {bestModel && (
           <motion.div variants={staggerItem}>
             <Card className="bg-gradient-to-r from-warning/10 via-warning/5 to-transparent border-warning/30">
@@ -323,259 +479,330 @@ export function TrainingResultsPage() {
                   <Trophy className="h-6 w-6 text-warning" />
                 </div>
                 <div className="flex-1">
-                  <p className="font-semibold">Meilleur modèle: {safeUpper(bestModel.modelType)}</p>
+                  <p className="font-semibold">Meilleur modele: {bestModel.modelType.toUpperCase()}</p>
                   <p className="text-sm text-muted-foreground">
-                    {bestModel.primaryMetric ? (
-                      <>
-                        Primary: <span className="font-medium">{bestModel.primaryMetric}</span> ={" "}
-                        <span className="font-medium">
-                          {smartValue((bestModel.metrics as any)?.[bestModel.primaryMetric] ?? bestModel.testScore ?? 0)}
-                        </span>
-                      </>
-                    ) : taskType === "regression" ? (
-                      <>R2: {num((bestModel.metrics as any)?.r2 ?? 0)}</>
-                    ) : (
-                      <>
-                        F1: {pct((bestModel.metrics as any)?.f1 ?? 0)} • Accuracy: {pct((bestModel.metrics as any)?.accuracy ?? 0)}
-                      </>
-                    )}
+                    Score test: {toPercent(bestModel.testScore)}
+                    {bestModel.primaryMetric ? ` (${bestModel.primaryMetric})` : ''}
                   </p>
                 </div>
-                <Button
-                  onClick={() => handleSaveModel(bestModel.id)}
-                  className="bg-warning text-warning-foreground hover:bg-warning/90"
-                >
+                <Button onClick={() => handleSaveModel(bestModel.id)} className="bg-warning text-warning-foreground hover:bg-warning/90">
                   <Star className="h-4 w-4 mr-2" />
-                  Sélectionner
+                  Selectionner
                 </Button>
               </CardContent>
             </Card>
           </motion.div>
         )}
 
-        {/* Empty results message */}
-        {results.length === 0 && (
+        {!!session.results.length && (
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            {session.results.map((result, index) => {
+              const color = modelColors[result.modelType] ?? 'from-slate-500 to-slate-600';
+              const featureChartData = buildFeatureImportanceChartData(result);
+              const classView = isRegression ? null : buildClassificationView(result);
+              const isBinary = classView?.classificationType === 'binary';
+              const aucMissing = !isRegression && classView?.rocAuc == null;
+
+              const metricCards = isRegression
+                ? [
+                    { key: 'r2', label: metricLabels.r2, value: toNumber(result.metrics?.r2) },
+                    { key: 'rmse', label: metricLabels.rmse, value: toNumber(result.metrics?.rmse) },
+                    { key: 'mae', label: metricLabels.mae, value: toNumber(result.metrics?.mae) },
+                  ]
+                : [
+                    { key: 'accuracy', label: metricLabels.accuracy, value: toPercent(classView?.accuracy) },
+                    { key: 'roc_auc', label: metricLabels.roc_auc, value: toPercent(classView?.rocAuc) },
+                    { key: 'pr_auc', label: metricLabels.pr_auc, value: toPercent(classView?.prAuc) },
+                    {
+                      key: 'precision_main',
+                      label: isBinary ? `Precision (+${classView?.positiveLabel ?? ''})` : 'Precision (macro)',
+                      value: toPercent(classView?.precisionMain),
+                    },
+                    {
+                      key: 'recall_main',
+                      label: isBinary ? `Recall (+${classView?.positiveLabel ?? ''})` : 'Recall (macro)',
+                      value: toPercent(classView?.recallMain),
+                    },
+                    {
+                      key: 'f1_main',
+                      label: isBinary ? `F1 (+${classView?.positiveLabel ?? ''})` : 'F1 (macro)',
+                      value: toPercent(classView?.f1Main),
+                    },
+                  ];
+
+              return (
+                <motion.div
+                  key={result.id}
+                  initial={{ opacity: 0, y: 30, scale: 0.95 }}
+                  animate={{ opacity: 1, y: 0, scale: 1 }}
+                  transition={{ delay: index * 0.15, type: 'spring', stiffness: 200, damping: 20 }}
+                >
+                  <Card className="overflow-hidden h-full">
+                    <div className={`h-2 bg-gradient-to-r ${color}`} />
+                    <CardHeader>
+                      <div className="flex items-center justify-between gap-2">
+                        <CardTitle className="flex items-center gap-2 flex-wrap">
+                          {result.modelType.toUpperCase()}
+                          {result === bestModel && <Badge className="bg-warning text-warning-foreground">Meilleur</Badge>}
+                          {!isRegression && classView?.classificationType && classView.classificationType !== 'unknown' && (
+                            <Badge variant="outline">{classView.classificationType}</Badge>
+                          )}
+                          {aucMissing && (
+                            <Badge variant="destructive" className="gap-1">
+                              <AlertTriangle className="h-3 w-3" />
+                              AUC indisponible
+                            </Badge>
+                          )}
+                        </CardTitle>
+                        <Badge variant="outline">{toSeconds(result.trainingTime)}</Badge>
+                      </div>
+                    </CardHeader>
+                    <CardContent className="space-y-6">
+                      <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+                        {metricCards.map((metric) => (
+                          <div key={metric.key} className="text-center p-3 rounded-lg bg-muted/50">
+                            <p className="text-2xl font-bold text-primary">{metric.value}</p>
+                            <p className="text-xs text-muted-foreground">{metric.label}</p>
+                          </div>
+                        ))}
+                      </div>
+
+                      <div>
+                        <div className="flex justify-between text-sm mb-2">
+                          <span>Train: {toPercent(result.trainScore)}</span>
+                          <span>Test: {toPercent(result.testScore)}</span>
+                        </div>
+                        <div className="h-3 rounded-full bg-muted overflow-hidden flex">
+                          <div className="bg-primary h-full" style={{ width: `${clampPercent(result.trainScore)}%` }} />
+                        </div>
+                        <div className="h-3 rounded-full bg-muted overflow-hidden flex mt-1">
+                          <div className="bg-secondary h-full" style={{ width: `${clampPercent(result.testScore)}%` }} />
+                        </div>
+                      </div>
+                      {!isRegression && classView && (
+                        <Tabs defaultValue="summary" className="space-y-4">
+                          <TabsList className="grid w-full grid-cols-3">
+                            <TabsTrigger value="summary">Summary</TabsTrigger>
+                            <TabsTrigger value="averages">Averages</TabsTrigger>
+                            <TabsTrigger value="per_class">Per-class</TabsTrigger>
+                          </TabsList>
+
+                          <TabsContent value="summary" className="space-y-4">
+                            {!!classView.warnings.length && (
+                              <div className="rounded-lg border border-amber-300/60 bg-amber-50/80 p-3 text-xs text-amber-900">
+                                <p className="font-medium mb-1">Warnings</p>
+                                <ul className="space-y-1">
+                                  {classView.warnings.map((warning, idx) => (
+                                    <li key={`${result.id}-w-${idx}`}>- {warning}</li>
+                                  ))}
+                                </ul>
+                              </div>
+                            )}
+
+                            {(classView.balancedAccuracy != null || classView.specificity != null) && (
+                              <div className="grid grid-cols-2 gap-3">
+                                <div className="rounded-lg border border-border/60 p-3">
+                                  <p className="text-xs text-muted-foreground">Balanced Accuracy</p>
+                                  <p className="text-sm font-semibold">{toPercent(classView.balancedAccuracy)}</p>
+                                </div>
+                                <div className="rounded-lg border border-border/60 p-3">
+                                  <p className="text-xs text-muted-foreground">Specificity (TNR)</p>
+                                  <p className="text-sm font-semibold">{toPercent(classView.specificity)}</p>
+                                </div>
+                              </div>
+                            )}
+
+                            {!!classView.confusion.matrix.length && (
+                              <div>
+                                <p className="text-sm font-medium mb-2">Matrice de confusion</p>
+                                <div className="overflow-x-auto rounded-lg border border-border/60">
+                                  <table className="w-full text-xs">
+                                    <thead className="bg-muted/60">
+                                      <tr>
+                                        <th className="px-3 py-2 text-left font-medium">True \\ Pred</th>
+                                        {classView.confusion.labels.map((label) => (
+                                          <th key={`${result.id}-cm-h-${label}`} className="px-3 py-2 text-left font-medium">{label}</th>
+                                        ))}
+                                      </tr>
+                                    </thead>
+                                    <tbody>
+                                      {classView.confusion.matrix.map((row, rowIndex) => (
+                                        <tr key={`${result.id}-cm-r-${rowIndex}`} className="border-t border-border/60">
+                                          <td className="px-3 py-2 font-medium">{classView.confusion.labels[rowIndex] ?? rowIndex}</td>
+                                          {row.map((value, colIndex) => (
+                                            <td key={`${result.id}-cm-c-${rowIndex}-${colIndex}`} className="px-3 py-2">
+                                              {value}
+                                            </td>
+                                          ))}
+                                        </tr>
+                                      ))}
+                                    </tbody>
+                                  </table>
+                                </div>
+                              </div>
+                            )}
+                          </TabsContent>
+
+                          <TabsContent value="averages">
+                            {!!classView.averages.length ? (
+                              <div className="overflow-x-auto rounded-lg border border-border/60">
+                                <table className="w-full text-sm">
+                                  <thead className="bg-muted/60">
+                                    <tr>
+                                      <th className="px-3 py-2 text-left font-medium">Average</th>
+                                      <th className="px-3 py-2 text-left font-medium">Precision</th>
+                                      <th className="px-3 py-2 text-left font-medium">Recall</th>
+                                      <th className="px-3 py-2 text-left font-medium">F1</th>
+                                    </tr>
+                                  </thead>
+                                  <tbody>
+                                    {classView.averages.map((row) => (
+                                      <tr key={`${result.id}-avg-${row.key}`} className="border-t border-border/60">
+                                        <td className="px-3 py-2 font-medium">{row.label}</td>
+                                        <td className="px-3 py-2">{toPercent(row.precision)}</td>
+                                        <td className="px-3 py-2">{toPercent(row.recall)}</td>
+                                        <td className="px-3 py-2">{toPercent(row.f1)}</td>
+                                      </tr>
+                                    ))}
+                                  </tbody>
+                                </table>
+                              </div>
+                            ) : (
+                              <p className="text-sm text-muted-foreground">Aucune metrique average disponible.</p>
+                            )}
+                          </TabsContent>
+
+                          <TabsContent value="per_class">
+                            {!!classView.perClass.length ? (
+                              <div className="overflow-x-auto rounded-lg border border-border/60">
+                                <table className="w-full text-sm">
+                                  <thead className="bg-muted/60">
+                                    <tr>
+                                      <th className="px-3 py-2 text-left font-medium">Classe</th>
+                                      <th className="px-3 py-2 text-left font-medium">Precision</th>
+                                      <th className="px-3 py-2 text-left font-medium">Recall</th>
+                                      <th className="px-3 py-2 text-left font-medium">F1</th>
+                                      <th className="px-3 py-2 text-left font-medium">Support</th>
+                                    </tr>
+                                  </thead>
+                                  <tbody>
+                                    {classView.perClass.map((row) => (
+                                      <tr key={`${result.id}-pc-${row.label}`} className="border-t border-border/60">
+                                        <td className="px-3 py-2 font-medium">{row.label}</td>
+                                        <td className="px-3 py-2">{toPercent(row.precision)}</td>
+                                        <td className="px-3 py-2">{toPercent(row.recall)}</td>
+                                        <td className="px-3 py-2">{toPercent(row.f1)}</td>
+                                        <td className="px-3 py-2">{row.support != null ? Math.round(row.support) : '-'}</td>
+                                      </tr>
+                                    ))}
+                                  </tbody>
+                                </table>
+                              </div>
+                            ) : (
+                              <p className="text-sm text-muted-foreground">Aucune metrique par classe disponible.</p>
+                            )}
+                          </TabsContent>
+                        </Tabs>
+                      )}
+
+                      {!!featureChartData.length && (
+                        <div>
+                          <div className="mb-2 flex items-center justify-between">
+                            <p className="text-sm font-medium">Importance des features</p>
+                            <span className="text-xs text-muted-foreground">Top {featureChartData.length}</span>
+                          </div>
+                          <div className="h-56 rounded-lg border border-border/50 bg-muted/20 p-2">
+                            <ResponsiveContainer width="100%" height="100%">
+                              <RechartsBarChart
+                                data={featureChartData}
+                                layout="vertical"
+                                margin={{ top: 6, right: 8, left: 8, bottom: 6 }}
+                              >
+                                <CartesianGrid strokeDasharray="3 3" horizontal={false} />
+                                <XAxis
+                                  type="number"
+                                  domain={[0, 1]}
+                                  tick={{ fontSize: 11 }}
+                                  tickFormatter={(value) => `${Math.round(Number(value) * 100)}%`}
+                                />
+                                <YAxis
+                                  type="category"
+                                  dataKey="label"
+                                  width={120}
+                                  tick={{ fontSize: 11 }}
+                                />
+                                <Tooltip
+                                  formatter={(value, _name, item) => [
+                                    Number(
+                                      (item as { payload?: { rawImportance?: number } } | undefined)?.payload
+                                        ?.rawImportance ?? value
+                                    ).toFixed(4),
+                                    'Importance',
+                                  ]}
+                                  labelFormatter={(_label, payload) =>
+                                    String(
+                                      (
+                                        Array.isArray(payload)
+                                          ? (payload[0] as { payload?: { feature?: string } } | undefined)
+                                          : undefined
+                                      )?.payload?.feature ?? ''
+                                    )
+                                  }
+                                />
+                                <Bar dataKey="normalizedImportance" fill="hsl(var(--primary))" radius={[0, 4, 4, 0]} />
+                              </RechartsBarChart>
+                            </ResponsiveContainer>
+                          </div>
+                        </div>
+                      )}
+
+                      <div className="space-y-1 text-xs text-muted-foreground">
+                        {result.splitInfo && (
+                          <p>
+                            Split: {result.splitInfo.method || 'holdout'} | train {result.splitInfo.train_rows ?? 0} |
+                            val {result.splitInfo.val_rows ?? 0} | test {result.splitInfo.test_rows ?? 0}
+                          </p>
+                        )}
+                        {!!result.preprocessing && <p>Preprocessing: {getPreprocessingSummary(result)}</p>}
+                        {Array.isArray((result.preprocessing as any)?.droppedColumns) &&
+                          (result.preprocessing as any).droppedColumns.length > 0 && (
+                            <p>Dropped columns: {(result.preprocessing as any).droppedColumns.join(', ')}</p>
+                          )}
+                        {!!result.smote && <p>SMOTE: {JSON.stringify(result.smote)}</p>}
+                        {!!(result.preprocessing as any)?.effectiveByColumn && (
+                          <details>
+                            <summary className="cursor-pointer">effectiveByColumn</summary>
+                            <pre className="mt-1 max-h-40 overflow-auto rounded bg-muted/40 p-2 text-[11px]">
+                              {JSON.stringify((result.preprocessing as any).effectiveByColumn, null, 2)}
+                            </pre>
+                          </details>
+                        )}
+                      </div>
+
+                      <Button className="w-full" onClick={() => handleSaveModel(result.id)}>
+                        <Save className="h-4 w-4 mr-2" />
+                        Enregistrer ce modele
+                      </Button>
+                    </CardContent>
+                  </Card>
+                </motion.div>
+              );
+            })}
+          </div>
+        )}
+        {!session.results.length && session.status !== 'failed' && (
           <motion.div variants={staggerItem}>
-            <Card className="border-muted">
-              <CardContent className="py-5">
-                <p className="font-medium">
-                  {session.status === "running" ? "Entraînement en cours..." : "Aucun résultat disponible"}
-                </p>
-                <p className="text-sm text-muted-foreground mt-1">
-                  Ce backend renvoie les modèles dans <code>session.results</code>.
-                  <br />
-                  Si c'est vide alors que la session est <code>succeeded</code>, vérifie que ton backend écrit bien les résultats.
+            <Card>
+              <CardContent className="py-6">
+                <p className="text-sm text-muted-foreground">
+                  Aucun resultat disponible pour l'instant. Cette page se met a jour automatiquement.
                 </p>
               </CardContent>
             </Card>
           </motion.div>
         )}
 
-        {/* Results grid */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          {results.map((result, index) => {
-            const m: any = result.metrics || {};
-            const showPos = taskType === "classification" && isBinaryLike(result);
-            const thr = (result as any).thresholding;
-
-            return (
-              <motion.div
-                key={result.id}
-                initial={{ opacity: 0, y: 30, scale: 0.95 }}
-                animate={{ opacity: 1, y: 0, scale: 1 }}
-                transition={{ delay: index * 0.12, type: "spring", stiffness: 200, damping: 20 }}
-              >
-                <Card className="overflow-hidden h-full">
-                  <div className={`h-2 bg-gradient-to-r ${modelColors[result.modelType] ?? "from-primary to-primary"}`} />
-                  <CardHeader>
-                    <div className="flex items-center justify-between">
-                      <CardTitle className="flex items-center gap-2">
-                        {safeUpper(result.modelType)}
-                        {bestModel && result.id === bestModel.id && (
-                          <Badge className="bg-warning text-warning-foreground">Meilleur</Badge>
-                        )}
-                      </CardTitle>
-                      <Badge variant="outline">{sec(result.trainingTime ?? 0)}</Badge>
-                    </div>
-                    <p className="text-xs text-muted-foreground">
-                      Status: {result.status}
-                      {result.primaryMetric ? (
-                        <span className="ml-2">
-                          • Primary: <span className="font-medium">{result.primaryMetric}</span>
-                        </span>
-                      ) : null}
-                    </p>
-
-                    {result.splitInfo?.method && (
-                      <p className="text-xs text-muted-foreground mt-1">
-                        Split: <span className="font-medium">{result.splitInfo.method}</span>{" "}
-                        {result.splitInfo.method === "holdout" && (
-                          <>
-                            • train {result.splitInfo.train_rows ?? "—"} • val {result.splitInfo.val_rows ?? "—"} • test{" "}
-                            {result.splitInfo.test_rows ?? "—"}
-                          </>
-                        )}
-                        {result.splitInfo.method === "kfold" && (
-                          <>
-                            • folds {result.splitInfo.folds ?? "—"} • rows {result.splitInfo.rows ?? "—"}
-                          </>
-                        )}
-                      </p>
-                    )}
-                  </CardHeader>
-
-                  <CardContent className="space-y-6">
-                    {/* ✅ Step 1 visibility: distributions + baseline */}
-                    {taskType === "classification" && (
-                      <div className="rounded-xl border border-border bg-muted/20 p-4 space-y-2">
-                        <div className="flex flex-wrap items-center justify-between gap-2">
-                          <p className="font-semibold">Données (classes)</p>
-                          {(() => {
-                            const r = imbalanceRatio(result.classDistribution?.train ?? null);
-                            if (!r) return null;
-                            return <Badge variant="outline">Imbalance ~{r.toFixed(1)}x (train)</Badge>;
-                          })()}
-                        </div>
-
-                        <div className="text-xs text-muted-foreground space-y-1">
-                          <p>
-                            <span className="font-medium">All</span>: {fmtDist(result.classDistribution?.all)}
-                          </p>
-                          <p>
-                            <span className="font-medium">Train</span>: {fmtDist(result.classDistribution?.train)}
-                          </p>
-                          {result.classDistribution?.val && Object.keys(result.classDistribution.val).length > 0 && (
-                            <p>
-                              <span className="font-medium">Val</span>: {fmtDist(result.classDistribution?.val)}
-                            </p>
-                          )}
-                          <p>
-                            <span className="font-medium">Test</span>: {fmtDist(result.classDistribution?.test)}
-                          </p>
-                        </div>
-
-                        {result.baselineMajority?.metrics && (
-                          <div className="mt-2 rounded-lg bg-background/60 p-3">
-                            <p className="text-xs font-medium">
-                              Baseline majority (predict "{result.baselineMajority.majority_label ?? "?"}")
-                            </p>
-                            <p className="text-xs text-muted-foreground mt-1">
-                              Acc: {pct((result.baselineMajority.metrics as any)?.accuracy ?? 0)}
-                              {typeof (result.baselineMajority.metrics as any)?.recall_pos === "number" && (
-                                <> • Recall_pos: {pct((result.baselineMajority.metrics as any)?.recall_pos ?? 0)}</>
-                              )}
-                              {typeof (result.baselineMajority.metrics as any)?.f1_pos === "number" && (
-                                <> • F1_pos: {pct((result.baselineMajority.metrics as any)?.f1_pos ?? 0)}</>
-                              )}
-                            </p>
-                          </div>
-                        )}
-                      </div>
-                    )}
-
-                    {/* ✅ NEW: Thresholding info */}
-                    {showPos && thr && thr.enabled && (
-                      <div className="rounded-xl border border-primary/20 bg-primary/5 p-4 space-y-2">
-                        <div className="flex items-center justify-between">
-                          <p className="font-semibold flex items-center gap-2">
-                            <SlidersHorizontal className="h-4 w-4 text-primary" />
-                            Seuil auto (threshold tuning)
-                          </p>
-                          <Badge variant="outline">
-                            {thr.val_source === "user_val" ? "Val" : thr.val_source === "inner_val_from_train" ? "Inner-Val" : "Val"}
-                          </Badge>
-                        </div>
-
-                        <div className="text-xs text-muted-foreground space-y-1">
-                          <p>
-                            Threshold: <span className="font-medium">{num(thr.threshold)}</span>{" "}
-                            {thr.score_kind ? <span className="ml-2">(score: {String(thr.score_kind)})</span> : null}
-                          </p>
-                          <p>
-                            Val precision_pos: <span className="font-medium">{pct(thr.val_precision_pos ?? 0)}</span> • Val recall_pos:{" "}
-                            <span className="font-medium">{pct(thr.val_recall_pos ?? 0)}</span> • Val f1_pos:{" "}
-                            <span className="font-medium">{pct(thr.val_f1_pos ?? 0)}</span>
-                          </p>
-                          <p className="text-[11px]">
-                            Ce seuil est optimisé sur la validation pour améliorer F1_pos (utile en classe rare), sans toucher au test split.
-                          </p>
-                        </div>
-                      </div>
-                    )}
-
-                    {/* MAIN METRICS */}
-                    {taskType === "classification" ? (
-                      <div className="grid grid-cols-4 gap-3">
-                        {(["accuracy", "precision", "recall", "f1"] as const).map((metric) => (
-                          <div key={metric} className="text-center p-3 rounded-lg bg-muted/50">
-                            <p className="text-xl font-bold text-primary">{pct(m?.[metric] ?? 0)}</p>
-                            <p className="text-xs text-muted-foreground capitalize">{metric}</p>
-                          </div>
-                        ))}
-                      </div>
-                    ) : (
-                      <div className="grid grid-cols-4 gap-3">
-                        {(["r2", "rmse", "mae", "mse"] as const).map((metric) => (
-                          <div key={metric} className="text-center p-3 rounded-lg bg-muted/50">
-                            <p className="text-xl font-bold text-primary">{smartValue(m?.[metric])}</p>
-                            <p className="text-xs text-muted-foreground capitalize">{metric}</p>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-
-                    {/* ✅ BINARY POSITIVE METRICS */}
-                    {showPos && (
-                      <div className="rounded-xl border border-accent/30 bg-accent/5 p-4 space-y-3">
-                        <div className="flex items-center justify-between">
-                          <p className="font-semibold">Positive class metrics</p>
-                          <Badge className="bg-accent text-accent-foreground">Binaire</Badge>
-                        </div>
-
-                        <div className="grid grid-cols-4 gap-3">
-                          {(["recall_pos", "precision_pos", "f1_pos", "pr_auc"] as const).map((metric) => (
-                            <div key={metric} className="text-center p-3 rounded-lg bg-muted/40">
-                              <p className="text-xl font-bold text-primary">{pct(m?.[metric] ?? 0)}</p>
-                              <p className="text-xs text-muted-foreground">{metric}</p>
-                            </div>
-                          ))}
-                        </div>
-
-                        <p className="text-xs text-muted-foreground">
-                          Astuce médical: surveille surtout <span className="font-medium">recall_pos</span> et{" "}
-                          <span className="font-medium">pr_auc</span> si la classe positive est rare.
-                        </p>
-                      </div>
-                    )}
-
-                    {/* ROC-AUC info */}
-                    {taskType === "classification" && (
-                      <div className="text-sm text-muted-foreground flex justify-between">
-                        <span>ROC AUC: {pct(m?.roc_auc ?? 0)}</span>
-                        {typeof m?.pr_auc === "number" && <span>PR AUC: {pct(m?.pr_auc ?? 0)}</span>}
-                      </div>
-                    )}
-
-                    <div className="text-sm text-muted-foreground">
-                      <div className="flex justify-between">
-                        <span>Train score: {smartValue(result.trainScore ?? 0)}</span>
-                        <span>Test score: {smartValue(result.testScore ?? 0)}</span>
-                      </div>
-                    </div>
-
-                    <Button className="w-full" onClick={() => handleSaveModel(result.id)}>
-                      <Save className="h-4 w-4 mr-2" />
-                      Enregistrer ce modèle
-                    </Button>
-                  </CardContent>
-                </Card>
-              </motion.div>
-            );
-          })}
-        </div>
-
-        {/* Comparison table */}
-        {results.length > 0 && (
+        {!!session.results.length && (
           <motion.div variants={staggerItem}>
             <Card>
               <CardHeader>
@@ -589,73 +816,33 @@ export function TrainingResultsPage() {
                   <table className="w-full text-sm">
                     <thead className="bg-muted">
                       <tr>
-                        <th className="px-4 py-3 text-left font-medium">Modèle</th>
-
-                        {taskType === "classification" ? (
-                          <>
-                            <th className="px-4 py-3 text-left font-medium">Accuracy</th>
-                            <th className="px-4 py-3 text-left font-medium">Precision</th>
-                            <th className="px-4 py-3 text-left font-medium">Recall</th>
-                            <th className="px-4 py-3 text-left font-medium">F1</th>
-                            <th className="px-4 py-3 text-left font-medium">ROC AUC</th>
-                            {anyBinary && <th className="px-4 py-3 text-left font-medium">PR AUC</th>}
-                            <th className="px-4 py-3 text-left font-medium">TestScore</th>
-                          </>
-                        ) : (
-                          <>
-                            <th className="px-4 py-3 text-left font-medium">R2</th>
-                            <th className="px-4 py-3 text-left font-medium">RMSE</th>
-                            <th className="px-4 py-3 text-left font-medium">MAE</th>
-                            <th className="px-4 py-3 text-left font-medium">MSE</th>
-                            <th className="px-4 py-3 text-left font-medium">TestScore</th>
-                          </>
-                        )}
-
+                        <th className="px-4 py-3 text-left font-medium">Modele</th>
+                        <th className="px-4 py-3 text-left font-medium">{isRegression ? 'R2' : 'Accuracy'}</th>
+                        <th className="px-4 py-3 text-left font-medium">{isRegression ? 'RMSE' : hasBinaryResult ? 'Precision (+)' : 'Precision (macro)'}</th>
+                        <th className="px-4 py-3 text-left font-medium">{isRegression ? 'MAE' : hasBinaryResult ? 'Recall (+)' : 'Recall (macro)'}</th>
+                        <th className="px-4 py-3 text-left font-medium">{hasBinaryResult ? 'F1 (+)' : 'F1 (macro)'}</th>
+                        <th className="px-4 py-3 text-left font-medium">ROC AUC</th>
                         <th className="px-4 py-3 text-left font-medium">Temps</th>
                       </tr>
                     </thead>
-
                     <tbody>
-                      {results.map((r) => {
-                        const m: any = r.metrics || {};
+                      {session.results.map((result) => {
+                        const classView = isRegression ? null : buildClassificationView(result);
                         return (
-                          <tr key={r.id} className="border-t border-border">
-                            <td className="px-4 py-3 font-medium">{safeUpper(r.modelType)}</td>
-
-                            {taskType === "classification" ? (
-                              <>
-                                <td className="px-4 py-3">{pct(m?.accuracy ?? 0)}</td>
-                                <td className="px-4 py-3">{pct(m?.precision ?? 0)}</td>
-                                <td className="px-4 py-3">{pct(m?.recall ?? 0)}</td>
-                                <td className="px-4 py-3">{pct(m?.f1 ?? 0)}</td>
-                                <td className="px-4 py-3">{pct(m?.roc_auc ?? 0)}</td>
-                                {anyBinary && <td className="px-4 py-3">{pct(m?.pr_auc ?? 0)}</td>}
-                                <td className="px-4 py-3">{smartValue(r.testScore ?? 0)}</td>
-                              </>
-                            ) : (
-                              <>
-                                <td className="px-4 py-3">{smartValue(m?.r2)}</td>
-                                <td className="px-4 py-3">{smartValue(m?.rmse)}</td>
-                                <td className="px-4 py-3">{smartValue(m?.mae)}</td>
-                                <td className="px-4 py-3">{smartValue(m?.mse)}</td>
-                                <td className="px-4 py-3">{smartValue(r.testScore ?? 0)}</td>
-                              </>
-                            )}
-
-                            <td className="px-4 py-3">{sec(r.trainingTime ?? 0)}</td>
+                          <tr key={result.id} className="border-t border-border">
+                            <td className="px-4 py-3 font-medium">{result.modelType.toUpperCase()}</td>
+                            <td className="px-4 py-3">{isRegression ? toNumber(result.metrics.r2) : toPercent(classView?.accuracy)}</td>
+                            <td className="px-4 py-3">{isRegression ? toNumber(result.metrics.rmse) : toPercent(classView?.precisionMain)}</td>
+                            <td className="px-4 py-3">{isRegression ? toNumber(result.metrics.mae) : toPercent(classView?.recallMain)}</td>
+                            <td className="px-4 py-3">{isRegression ? '-' : toPercent(classView?.f1Main)}</td>
+                            <td className="px-4 py-3">{isRegression ? '-' : toPercent(classView?.rocAuc)}</td>
+                            <td className="px-4 py-3">{toSeconds(result.trainingTime)}</td>
                           </tr>
                         );
                       })}
                     </tbody>
                   </table>
                 </div>
-
-                {taskType === "classification" && anyBinary && (
-                  <p className="text-xs text-muted-foreground mt-3">
-                    Note: pour une classe rare, <span className="font-medium">PR-AUC</span> et{" "}
-                    <span className="font-medium">Recall_pos</span> sont souvent plus pertinents que l’Accuracy.
-                  </p>
-                )}
               </CardContent>
             </Card>
           </motion.div>

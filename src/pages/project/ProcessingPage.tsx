@@ -675,41 +675,68 @@ export function ProcessingPage() {
     }
   };
 
-  const handleSave = async () => {
-    if (!effectiveDatasetId) return;
+const handleSave = async () => {
+  if (!effectiveDatasetId) return;
 
-    setIsSavingProcessed(true);
-    try {
-      if (isEditingVersion && versionId) {
-        if (!workspaceDatasetId) {
-          toast({ title: "Workspace introuvable", description: "Impossible d’enregistrer sans workspace.", variant: "destructive" });
-          return;
-        }
-
-        await dataService.commitVersionWorkspace(projectId, versionId, workspaceDatasetId);
-        await loadVersionMeta(versionId);
-        await refreshProcessing(workspaceDatasetId, 1);
-
+  setIsSavingProcessed(true);
+  try {
+    if (isEditingVersion && versionId) {
+      if (!workspaceDatasetId) {
         toast({
-          title: "Version mise à jour",
-          description: `La version #${versionId} a été mise à jour avec les nouvelles données.`,
+          title: "Workspace introuvable",
+          description: "Impossible d’enregistrer sans workspace.",
+          variant: "destructive",
         });
         return;
       }
 
-      const out = await dataService.saveCleanedAsVersion(projectId, effectiveDatasetId, {});
-      const newVersionId = (out as any)?.version_id ?? (out as any)?.id;
+      // 1) Commit (⚠️ supprime le workspace côté backend)
+      await dataService.commitVersionWorkspace(projectId, versionId, workspaceDatasetId);
+
+      // 2) Reload meta version (optionnel mais ok)
+      await loadVersionMeta(versionId);
+
+      // 3) Recréer / récupérer un nouveau workspace pour continuer à éditer
+      const ws = await dataService.getOrCreateVersionWorkspace(projectId, versionId);
+
+      // selon comment dataService renvoie (direct JSON vs axios response)
+      const newWsId =
+        (ws as any)?.workspace_dataset_id ??
+        (ws as any)?.data?.workspace_dataset_id;
+
+      if (!newWsId) {
+        throw new Error("Impossible de récupérer un nouveau workspace après l’enregistrement.");
+      }
+
+      setWorkspaceDatasetId(newWsId);
+
+      // 4) Refresh UI sur le NOUVEAU workspace
+      await refreshProcessing(newWsId, 1);
 
       toast({
-        title: "Version enregistrée",
-        description: newVersionId ? `Version #${newVersionId} ajoutée à l'historique.` : "Version ajoutée à l'historique.",
+        title: "Version mise à jour",
+        description: `La version #${versionId} a été mise à jour avec les nouvelles données.`,
       });
-    } catch (e) {
-      toast({ title: "Erreur", description: (e as Error).message, variant: "destructive" });
-    } finally {
-      setIsSavingProcessed(false);
+      return;
     }
-  };
+
+    // mode normal
+    const out = await dataService.saveCleanedAsVersion(projectId, effectiveDatasetId, {});
+    const newVersionId = (out as any)?.version_id ?? (out as any)?.id;
+
+    toast({
+      title: "Version enregistrée",
+      description: newVersionId
+        ? `Version #${newVersionId} ajoutée à l'historique.`
+        : "Version ajoutée à l'historique.",
+    });
+  } catch (e) {
+    toast({ title: "Erreur", description: (e as Error).message, variant: "destructive" });
+  } finally {
+    setIsSavingProcessed(false);
+  }
+};
+
 
   const parseRenameMapping = (): Record<string, string> | null => {
     try {
@@ -767,46 +794,71 @@ export function ProcessingPage() {
     }
   };
 
-  const setOverride = async (col: string, kind: ColumnKind) => {
-    if (!effectiveDatasetId) return;
+const setOverride = async (col: string, kind: ColumnKind) => {
+  if (!effectiveDatasetId) return;
 
-    const next = { ...kindOverrides, [col]: kind };
-    setKindOverrides(next);
-    setColumnMetaMap((prev) => {
-      const out = { ...prev };
-      if (out[col]) out[col] = { ...out[col], kind: kind as any };
-      return out;
-    });
-    writeFallbackSchema(effectiveDatasetId, next, verifiedCategorical, dismissedAlertKeys);
+  // UI optimistic
+  const next = { ...kindOverrides, [col]: kind };
+  setKindOverrides(next);
+  setColumnMetaMap((prev) => {
+    const out = { ...prev };
+    if (out[col]) out[col] = { ...out[col], kind: kind as any };
+    return out;
+  });
 
-    try {
-      await postSchemaAction(projectId, effectiveDatasetId, { schema_action: "set_kind", column: col, kind });
+  try {
+    // ✅ IMPORTANT: if editing a version, persist to VERSION
+    if (isEditingVersion && versionId) {
+      await dataService.saveVersionColumnKinds(projectId, versionId, { [col]: kind });
+      // refresh reads from /versions/{versionId}/columns-meta, so Step1 training will match
       await refreshProcessing(effectiveDatasetId, page);
-    } catch (e) {
-      toast({ title: "Erreur", description: (e as Error).message ?? "Schema non persisté", variant: "destructive" });
+      return;
     }
-  };
 
-  const clearOverride = async (col: string) => {
-    if (!effectiveDatasetId) return;
-
-    const next = { ...kindOverrides };
-    delete next[col];
-    setKindOverrides(next);
-    setColumnMetaMap((prev) => {
-      const out = { ...prev };
-      if (out[col]) out[col] = { ...out[col], kind: inferKindFallback(col, out[col]?.dtype) as any };
-      return out;
+    // normal dataset mode (keep your existing behavior)
+    await postSchemaAction(projectId, effectiveDatasetId, { schema_action: "set_kind", column: col, kind });
+    await refreshProcessing(effectiveDatasetId, page);
+  } catch (e) {
+    toast({
+      title: "Erreur",
+      description: (e as Error).message ?? "Type non persisté",
+      variant: "destructive",
     });
-    writeFallbackSchema(effectiveDatasetId, next, verifiedCategorical, dismissedAlertKeys);
+  }
+};
 
-    try {
-      await postSchemaAction(projectId, effectiveDatasetId, { schema_action: "clear_kind", column: col });
+
+const clearOverride = async (col: string) => {
+  if (!effectiveDatasetId) return;
+
+  // UI optimistic
+  const next = { ...kindOverrides };
+  delete next[col];
+  setKindOverrides(next);
+  setColumnMetaMap((prev) => {
+    const out = { ...prev };
+    if (out[col]) out[col] = { ...out[col], kind: inferKindFallback(col, out[col]?.dtype) as any };
+    return out;
+  });
+
+  try {
+    if (isEditingVersion && versionId) {
+      await dataService.saveVersionColumnKinds(projectId, versionId, { [col]: null });
       await refreshProcessing(effectiveDatasetId, page);
-    } catch (e) {
-      toast({ title: "Erreur", description: (e as Error).message ?? "Schema non persisté", variant: "destructive" });
+      return;
     }
-  };
+
+    await postSchemaAction(projectId, effectiveDatasetId, { schema_action: "clear_kind", column: col });
+    await refreshProcessing(effectiveDatasetId, page);
+  } catch (e) {
+    toast({
+      title: "Erreur",
+      description: (e as Error).message ?? "Schema non persisté",
+      variant: "destructive",
+    });
+  }
+};
+
 
   /* -------------------------
      UI helpers

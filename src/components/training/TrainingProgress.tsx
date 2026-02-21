@@ -15,6 +15,7 @@ const modelLabels: Record<ModelType, string> = {
   svm: 'SVM',
   knn: 'KNN',
   decisiontree: 'Decision Tree',
+  logreg: 'Logistic Regression',
 };
 
 export function TrainingProgress({ isTraining, selectedModels }: TrainingProgressProps) {

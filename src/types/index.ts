@@ -122,44 +122,258 @@ export type ProcessingOperation = {
 
 // Training Types
 export type TaskType = 'classification' | 'regression';
-export type ModelType = 'lightgbm' | 'xgboost' | 'randomforest' | 'svm' | 'knn' | 'decisiontree';
-export type MetricType = 'accuracy' | 'precision' | 'recall' | 'f1' | 'roc_auc' | 'mse' | 'rmse' | 'mae' | 'r2';
+export type ModelType =
+  | 'lightgbm'
+  | 'xgboost'
+  | 'randomforest'
+  | 'svm'
+  | 'knn'
+  | 'decisiontree'
+  | 'logreg'
+  | 'logisticregression'
+  | 'naivebayes';
+export type MetricType =
+  | 'accuracy'
+  | 'precision'
+  | 'recall'
+  | 'f1'
+  | 'precision_macro'
+  | 'recall_macro'
+  | 'f1_macro'
+  | 'precision_weighted'
+  | 'recall_weighted'
+  | 'f1_weighted'
+  | 'precision_micro'
+  | 'recall_micro'
+  | 'f1_micro'
+  | 'roc_auc'
+  | 'pr_auc'
+  | 'f1_pos'
+  | 'confusion_matrix'
+  | 'mse'
+  | 'rmse'
+  | 'mae'
+  | 'r2';
+export type SplitMethod = 'holdout' | 'kfold';
+export type NumericImputationStrategy = 'none' | 'mean' | 'median' | 'most_frequent' | 'constant' | 'knn';
+export type CategoricalImputationStrategy = 'none' | 'most_frequent' | 'constant';
+export type CategoricalEncodingStrategy = 'none' | 'onehot' | 'ordinal' | 'label';
+export type NumericScalingStrategy = 'none' | 'standard' | 'minmax' | 'robust' | 'maxabs';
+export type TrainingColumnType = 'numeric' | 'categorical' | 'ordinal';
+export type TrainingColumnTypeSelection = 'auto' | TrainingColumnType;
+
+export interface TrainingPreprocessingDefaults {
+  numericImputation: NumericImputationStrategy;
+  numericScaling: NumericScalingStrategy;
+  categoricalImputation: CategoricalImputationStrategy;
+  categoricalEncoding: CategoricalEncodingStrategy;
+}
+
+export interface TrainingPreprocessingColumnConfig {
+  use?: boolean;
+  type?: TrainingColumnType;
+  numericImputation?: NumericImputationStrategy;
+  numericScaling?: NumericScalingStrategy;
+  categoricalImputation?: CategoricalImputationStrategy;
+  categoricalEncoding?: CategoricalEncodingStrategy;
+  ordinalOrder?: string[];
+}
+
+export interface TrainingPreprocessingConfig {
+  defaults: TrainingPreprocessingDefaults;
+  columns: Record<string, TrainingPreprocessingColumnConfig>;
+}
+
+export type ModelHyperparamScalar = string | number | boolean | null;
+export type ModelHyperparamValue = ModelHyperparamScalar | ModelHyperparamScalar[];
+export type ModelHyperparams = Record<string, Record<string, ModelHyperparamValue>>;
+
+export interface TrainingHyperparamFieldSchema {
+  type: 'int' | 'int_or_none' | 'float' | 'float_or_enum' | 'enum' | 'str';
+  default: ModelHyperparamValue;
+  min?: number;
+  max?: number;
+  gt?: number;
+  ge?: number;
+  lt?: number;
+  le?: number;
+  enum?: string[];
+  help?: string;
+}
+
+export const DEFAULT_TRAINING_PREPROCESSING_DEFAULTS: TrainingPreprocessingDefaults = {
+  numericImputation: 'none',
+  numericScaling: 'none',
+  categoricalImputation: 'none',
+  categoricalEncoding: 'none',
+};
+
+export const DEFAULT_TRAINING_PREPROCESSING: TrainingPreprocessingConfig = {
+  defaults: { ...DEFAULT_TRAINING_PREPROCESSING_DEFAULTS },
+  columns: {},
+};
 
 export interface TrainingConfig {
+  datasetVersionId: string;
   targetColumn: string;
   taskType: TaskType;
   models: ModelType[];
   useGridSearch: boolean;
   useClassWeight?: boolean;
+  gridCvFolds: number;
+  gridScoring: string;
   useSmote: boolean;
-  splitMethod: 'holdout' | 'kfold';
+  splitMethod: SplitMethod;
   trainRatio: number;
   valRatio: number;
   testRatio: number;
-  kFolds?: number;
+  kFolds: number;
   metrics: MetricType[];
+  positiveLabel?: string | number | null;
+  trainingDebug?: boolean;
+  preprocessing: TrainingPreprocessingConfig;
+  modelHyperparams?: ModelHyperparams;
   customCode?: string;
+}
+
+export interface DetailedAverageMetrics {
+  precision?: number | null;
+  recall?: number | null;
+  f1?: number | null;
+  support?: number | null;
+}
+
+export interface DetailedPerClassMetrics {
+  precision?: number | null;
+  recall?: number | null;
+  f1?: number | null;
+  support?: number | null;
+}
+
+export interface DetailedClassificationMetrics {
+  global?: {
+    accuracy?: number | null;
+    balanced_accuracy?: number | null;
+    roc_auc?: number | null;
+    pr_auc?: number | null;
+    specificity?: number | null;
+  };
+  binary?: {
+    positive_label?: string | number | null;
+    precision_pos?: number | null;
+    recall_pos?: number | null;
+    f1_pos?: number | null;
+  };
+  averaged?: {
+    macro?: DetailedAverageMetrics;
+    weighted?: DetailedAverageMetrics;
+    micro?: DetailedAverageMetrics;
+  };
+  per_class?: Record<string, DetailedPerClassMetrics>;
+  confusion_matrix?: {
+    labels?: Array<string | number>;
+    matrix?: number[][];
+  };
+  warnings?: string[];
+  meta?: {
+    classification_type?: string;
+    labels?: Array<string | number>;
+    positive_label?: string | number | null;
+    averaging_defaults?: Record<string, unknown>;
+    score_shapes?: Record<string, unknown>;
+  };
+  legacy_flat?: Record<string, number | null | undefined>;
+}
+
+export interface ModelSplitInfo {
+  method?: 'holdout' | 'kfold' | string;
+  train_rows?: number;
+  val_rows?: number;
+  test_rows?: number;
+  folds?: number;
+  rows?: number;
+}
+
+export interface TrainingClassDistribution {
+  all?: Record<string, number>;
+  train?: Record<string, number>;
+  val?: Record<string, number>;
+  test?: Record<string, number>;
+}
+
+export interface TrainingThresholdingInfo {
+  enabled?: boolean;
+  val_source?: string;
+  threshold?: number;
+  score_kind?: string;
+  val_precision_pos?: number;
+  val_recall_pos?: number;
+  val_f1_pos?: number;
+  applied_on_test?: boolean;
+  [key: string]: unknown;
 }
 
 export interface ModelResult {
   id: string;
   modelType: ModelType;
-  status: 'training' | 'completed' | 'failed';
-  metrics: Record<MetricType, number>;
+  status: 'training' | 'completed' | 'failed' | string;
+  metrics: Partial<
+    Record<
+      | MetricType
+      | 'precision_pos'
+      | 'recall_pos'
+      | 'f1_pos'
+      | 'balanced_accuracy'
+      | 'specificity',
+      number
+    >
+  >;
   trainScore: number;
   testScore: number;
+  primaryMetric?: string | null;
+  splitInfo?: ModelSplitInfo | null;
+  gridSearch?: {
+    enabled?: boolean;
+    cvBestScore?: number | null;
+    cvScoring?: string | null;
+    bestParams?: Record<string, unknown> | null;
+    cvSplits?: number | null;
+  } | null;
   featureImportance: { feature: string; importance: number }[];
   confusionMatrix?: number[][];
+  metricsDetailed?: DetailedClassificationMetrics | null;
+  metricsWarnings?: string[] | null;
+  classDistribution?: TrainingClassDistribution | null;
+  baselineMajority?: {
+    majority_label?: string | number | null;
+    metrics?: Record<string, number>;
+  } | null;
+  splitDebug?: Record<string, unknown> | null;
+  preprocessing?: Record<string, unknown> | null;
+  balancing?: Record<string, unknown> | null;
+  thresholding?: TrainingThresholdingInfo | null;
+  smote?: Record<string, unknown> | null;
+  hyperparams?: {
+    requested?: Record<string, unknown>;
+    effective?: Record<string, unknown>;
+    param_grid?: Record<string, unknown>;
+    best?: Record<string, unknown>;
+  } | null;
   trainingTime: number;
 }
 
 export interface TrainingSession {
   id: string;
   projectId: string;
+  datasetVersionId?: string | null;
+  status?: 'queued' | 'running' | 'succeeded' | 'failed' | string;
+  progress?: number;
+  errorMessage?: string | null;
   config: TrainingConfig;
   results: ModelResult[];
   createdAt: string;
-  completedAt?: string;
+  startedAt?: string | null;
+  completedAt?: string | null;
 }
 
 // Prediction Types

@@ -1,6 +1,6 @@
 // src/services/dataService.ts
 import apiClient from "@/services/apiClient";
-import type { ProcessingOperation, DataVersion } from "@/types";
+import type { ProcessingOperation, DataVersion, DatasetColumn } from "@/types";
 
 /**
  * Processing "Prepare" module should be CLEANING ONLY (avoid leakage).
@@ -41,7 +41,7 @@ export type ProcessingPreviewOut = {
   total_rows: number;
 };
 
-export type ColumnKind = "numeric" | "categorical" | "datetime" | "boolean" | "text" | "id" | "other";
+export type ColumnKind = "numeric" | "categorical" | "datetime" | "binary" | "text" | "id" | "other";
 
 export type ColumnMeta = {
   name: string;
@@ -77,9 +77,16 @@ export type DatasetVersionOut = {
   name?: string | null;
   file_path?: string | null;
 
-  operations?: string[] | null;
+  stored_name?: string | null;
+  content_type?: string | null;
+  size_bytes?: number | null;
 
+  operations?: string[] | null;
   created_at?: string | null;
+
+  // IMPORTANT: versions.py returns target_column
+  target_column?: string | null;
+  targetColumn?: string | null;
 
   can_predict?: boolean | null;
   canPredict?: boolean | null;
@@ -94,6 +101,9 @@ export type VersionUI = {
   operations: string[];
   createdAt: string | null;
   canPredict?: boolean;
+
+  // training convenience
+  targetColumn?: string | null;
 };
 
 function toNum(x: any): number | null {
@@ -103,6 +113,7 @@ function toNum(x: any): number | null {
 
 function normalizeVersion(v: DatasetVersionOut): VersionUI {
   const id = toNum(v?.id) ?? 0;
+  const targetColumn = (v as any)?.targetColumn ?? (v as any)?.target_column ?? null;
 
   return {
     id,
@@ -113,6 +124,7 @@ function normalizeVersion(v: DatasetVersionOut): VersionUI {
     operations: Array.isArray(v?.operations) ? (v.operations as string[]) : [],
     createdAt: (v as any)?.created_at ?? null,
     canPredict: Boolean((v as any)?.canPredict ?? (v as any)?.can_predict),
+    targetColumn: targetColumn ? String(targetColumn) : null,
   };
 }
 
@@ -154,9 +166,25 @@ function clampPageSize(pageSize?: number) {
   return Math.min(Math.max(1, v), 200);
 }
 
+// Helper: map ColumnMeta -> DatasetColumn (complete shape)
+// ✅ This fixes your Step1 type mismatch (nullCount/uniqueCount/sampleValues)
+function toDatasetColumn(c: ColumnMeta): DatasetColumn {
+  const t = String((c as any)?.override_kind ?? (c as any)?.inferred_kind ?? (c as any)?.kind ?? (c as any)?.dtype ?? "other");
+
+  return {
+    name: c.name,
+    type: t,
+
+    // defaults/derived (depends on your DatasetColumn definition)
+    nullCount: Number((c as any)?.missing ?? 0),
+    uniqueCount: Number((c as any)?.unique ?? 0),
+    sampleValues: Array.isArray((c as any)?.sample) ? (c as any)?.sample : [],
+  } as DatasetColumn;
+}
+
 export const dataService = {
   // -------------------------
-  // Version schema/meta helpers (used in version edit workspace)
+  // Version schema/meta helpers (used in version edit workspace + training)
   // -------------------------
   async getVersionColumnsMeta(
     projectId: string | number,
@@ -172,9 +200,7 @@ export const dataService = {
     versionId: number | string,
     overrides: Record<string, string | null>
   ): Promise<{ ok: boolean }> {
-    return apiClient.postJson<{ ok: boolean }>(`/projects/${projectId}/versions/${versionId}/column-kinds`, {
-      overrides,
-    });
+    return apiClient.postJson<{ ok: boolean }>(`/projects/${projectId}/versions/${versionId}/column-kinds`, { overrides });
   },
 
   // -------------------------
@@ -218,12 +244,7 @@ export const dataService = {
     return apiClient.postJson<{ ok: boolean }>(`${processingBase(projectId, datasetId)}/undo`, {});
   },
 
-  async getProcessingPreview(
-    projectId: string | number,
-    datasetId: number,
-    page = 1,
-    pageSize = 25
-  ): Promise<ProcessingPreviewOut> {
+  async getProcessingPreview(projectId: string | number, datasetId: number, page = 1, pageSize = 25): Promise<ProcessingPreviewOut> {
     const p = clampPage(page);
     const ps = clampPageSize(pageSize);
     return apiClient.get<ProcessingPreviewOut>(`${processingBase(projectId, datasetId)}/preview?page=${p}&page_size=${ps}`);
@@ -232,22 +253,17 @@ export const dataService = {
   async getProcessingColumnsMeta(projectId: string | number, datasetId: number): Promise<ColumnsMetaOut> {
     return apiClient.get<ColumnsMetaOut>(`${processingBase(projectId, datasetId)}/columns-meta`);
   },
-  
 
   async exportCleaned(projectId: string | number, datasetId: number) {
     return apiClient.getBlob(`${processingBase(projectId, datasetId)}/export`);
   },
 
-  async saveCleanedAsVersion(
-    projectId: string | number,
-    datasetId: number,
-    payload: SaveProcessedVersionPayload = {}
-  ): Promise<SaveProcessedVersionOut> {
+  async saveCleanedAsVersion(projectId: string | number, datasetId: number, payload: SaveProcessedVersionPayload = {}): Promise<SaveProcessedVersionOut> {
     return apiClient.postJson<SaveProcessedVersionOut>(`${processingBase(projectId, datasetId)}/save`, payload);
   },
 
   // -------------------------
-  // Versions (list/delete only; no "view/preview/download" mode)
+  // Versions (list/delete only; download exists in backend too)
   // -------------------------
   async getVersions(projectId: string | number): Promise<VersionUI[]> {
     const out = await apiClient.get<DatasetVersionOut[]>(`${versionsBase(projectId)}`);
@@ -276,6 +292,26 @@ export const dataService = {
 
   async closeVersionWorkspace(projectId: string | number, versionId: number) {
     return apiClient.delete<{ ok: boolean }>(`${versionsBase(projectId)}/${versionId}/workspace`);
+  },
+
+  // -------------------------
+  // ✅ Training helpers (NO NEW BACKEND ROUTE)
+  // We reuse: GET /versions/{id}/columns-meta
+  // -------------------------
+  async getVersionTrainingSummary(
+    projectId: string | number,
+    versionId: number | string
+  ): Promise<{ rowCount: number; columnCount: number }> {
+    const meta = await this.getVersionColumnsMeta(projectId, versionId);
+    const rowCount = Number(meta?.total_rows ?? 0);
+    const columnCount = Array.isArray(meta?.columns) ? meta.columns.length : 0;
+    return { rowCount, columnCount };
+  },
+
+  async getVersionTrainingColumns(projectId: string | number, versionId: number | string): Promise<DatasetColumn[]> {
+    const meta = await this.getVersionColumnsMeta(projectId, versionId);
+    const cols = Array.isArray(meta?.columns) ? meta.columns : [];
+    return cols.map(toDatasetColumn);
   },
 };
 

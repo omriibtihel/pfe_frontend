@@ -1,355 +1,296 @@
-import { useEffect, useMemo, useState } from "react";
+import { useState, useCallback, useMemo, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import { motion } from "framer-motion";
-import { Play, Loader2, Rocket, ChevronRight, AlertCircle } from "lucide-react";
+import { motion, AnimatePresence } from "framer-motion";
+import {
+  ChevronLeft,
+  ChevronRight,
+  Database,
+  Scissors,
+  Columns,
+  Brain,
+  BarChart3,
+  Rocket,
+} from "lucide-react";
 
 import { AppLayout } from "@/layouts/AppLayout";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
+import { trainingService } from "@/services/trainingService";
 
-import trainingService from "@/services/trainingService";
-import apiClient from "@/services/apiClient";
+import type { TrainingConfig } from "@/types";
+import { DEFAULT_TRAINING_PREPROCESSING } from "@/types";
 
-import type { ModelType, MetricType, TrainingConfig } from "@/types";
-import { staggerContainer, staggerItem } from "@/components/ui/page-transition";
-import { ModelSelector } from "@/components/training/ModelSelector";
-import { TrainingParameters } from "@/components/training/TrainingParameters";
-import { ConfigurationPanel } from "@/components/training/ConfigurationPanel";
-import { MetricsSelector } from "@/components/training/MetricsSelector";
-import { TrainingProgress } from "@/components/training/TrainingProgress";
+import { WizardStepper } from "@/components/training/wizard/WizardStepper";
+import { Step1DatasetTarget } from "@/components/training/wizard/Step1DatasetTarget";
+import { Step2SplitStrategy } from "@/components/training/wizard/Step2SplitStrategy";
+import {
+  Step3ColumnPreprocessing,
+  type Step3ValidationState,
+} from "@/components/training/wizard/Step3ColumnPreprocessing";
+import { Step4Models } from "@/components/training/wizard/Step4Models";
+import { Step5Metrics } from "@/components/training/wizard/Step5Metrics";
+import { Step6Summary } from "@/components/training/wizard/Step6Summary";
+
+const steps = [
+  { label: "Dataset & Cible", icon: <Database className="h-5 w-5" /> },
+  { label: "Split", icon: <Scissors className="h-5 w-5" /> },
+  { label: "Colonnes", icon: <Columns className="h-5 w-5" /> },
+  { label: "Modèles", icon: <Brain className="h-5 w-5" /> },
+  { label: "Métriques", icon: <BarChart3 className="h-5 w-5" /> },
+  { label: "Lancer", icon: <Rocket className="h-5 w-5" /> },
+];
 
 export function TrainingPage() {
-  const { projectId, versionId } = useParams<{ projectId: string; versionId: string }>();
+  const params = useParams<{ projectId?: string; id?: string; versionId?: string }>();
+  // ✅ évite /projects/undefined/...
+  const projectId = params.projectId ?? params.id;
+  const routeVersionId = params.versionId;
+
   const navigate = useNavigate();
   const { toast } = useToast();
 
-  const [isTraining, setIsTraining] = useState(false);
-
-  // ✅ colonnes de la version
-  const [columns, setColumns] = useState<string[]>([]);
-  const [columnsLoading, setColumnsLoading] = useState(false);
+  const [currentStep, setCurrentStep] = useState(0);
+  const [completedSteps, setCompletedSteps] = useState<Set<number>>(new Set());
+  const [step3Validation, setStep3Validation] = useState<Step3ValidationState>({
+    hasErrors: false,
+    errorCount: 0,
+    warningCount: 0,
+    isValidating: false,
+  });
 
   const [config, setConfig] = useState<TrainingConfig>({
+    datasetVersionId: routeVersionId ? String(routeVersionId) : "",
     targetColumn: "",
     taskType: "classification",
-    models: ["randomforest"],
+    models: [],
     useGridSearch: false,
+    gridCvFolds: 3,
+    gridScoring: "auto",
     useSmote: false,
-    useClassWeight: false,
     splitMethod: "holdout",
     trainRatio: 70,
     valRatio: 15,
     testRatio: 15,
     kFolds: 5,
     metrics: ["accuracy", "f1"],
-    customCode: "",
+    positiveLabel: null,
+    trainingDebug: false,
+    preprocessing: { ...DEFAULT_TRAINING_PREPROCESSING },
+    modelHyperparams: {},
   });
 
-  const updateConfig = (updates: Partial<TrainingConfig>) => {
-    setConfig((prev) => ({ ...prev, ...updates }));
-  };
-
-  const toggleModel = (model: ModelType) => {
-    setConfig((prev) => ({
-      ...prev,
-      models: prev.models.includes(model)
-        ? prev.models.filter((m) => m !== model)
-        : [...prev.models, model],
-    }));
-  };
-
-  const toggleMetric = (metric: MetricType) => {
-    setConfig((prev) => ({
-      ...prev,
-      metrics: prev.metrics.includes(metric)
-        ? prev.metrics.filter((m) => m !== metric)
-        : [...prev.metrics, metric],
-    }));
-  };
-
-  // ✅ validations
-  const ratiosSum = useMemo(
-    () => Number(config.trainRatio) + Number(config.valRatio) + Number(config.testRatio),
-    [config.trainRatio, config.valRatio, config.testRatio]
-  );
-
-  const isHoldoutOk = config.splitMethod !== "holdout" || ratiosSum === 100;
-  const isKFoldOk = config.splitMethod !== "kfold" || Number(config.kFolds) >= 2;
-
-  const isConfigValid =
-    Boolean(projectId) &&
-    Boolean(versionId) &&
-    Boolean(config.targetColumn) &&
-    config.models.length > 0 &&
-    config.metrics.length > 0 &&
-    isHoldoutOk &&
-    isKFoldOk;
-
-  // ✅ load columns depuis /versions/{versionId}/columns
   useEffect(() => {
-    const loadColumns = async () => {
-      if (!projectId || !versionId) return;
-      setColumnsLoading(true);
-      try {
-        const res = await apiClient.get<{ columns: string[] }>(
-          `/projects/${projectId}/versions/${versionId}/columns`
-        );
-        const cols = (res?.columns ?? []).map((c) => String(c).trim()).filter(Boolean);
-        setColumns(cols);
+    if (!routeVersionId) return;
+    setConfig((prev) => {
+      const nextVersionId = String(routeVersionId);
+      if (String(prev.datasetVersionId) === nextVersionId) return prev;
+      return {
+        ...prev,
+        datasetVersionId: nextVersionId,
+        targetColumn: "",
+      };
+    });
+  }, [routeVersionId]);
 
-        // ✅ auto-select targetColumn si vide ou invalide
-        setConfig((prev) => {
-          if (prev.targetColumn && cols.includes(prev.targetColumn)) return prev;
-          return { ...prev, targetColumn: cols[cols.length - 1] ?? "" };
-        });
-      } catch (e: any) {
-        setColumns([]);
-        toast({
-          title: "Erreur",
-          description: e?.message || "Impossible de charger les colonnes",
-          variant: "destructive",
-        });
-      } finally {
-        setColumnsLoading(false);
-      }
-    };
+  const updateConfig = useCallback((updates: Partial<TrainingConfig>) => {
+    setConfig((prev) => ({ ...prev, ...updates }));
+  }, []);
 
-    loadColumns();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [projectId, versionId]);
-
-  // ✅ polling session
-  const pollSessionUntilReady = async (sessionId: string, timeoutMs = 120_000) => {
-    if (!projectId) return null;
-
-    const startedAt = Date.now();
-    const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
-
-    while (Date.now() - startedAt < timeoutMs) {
-      const s = await trainingService.getSession(projectId, sessionId);
-      const results = (s as any).results as any[] | undefined;
-      const completedAt = (s as any).completedAt as string | undefined;
-      const status = (s as any).status as string | undefined;
-
-      if ((results && results.length > 0) || completedAt || status === "failed" || status === "succeeded") {
-        return s;
-      }
-      await sleep(1500);
-    }
-
-    return await trainingService.getSession(projectId, sessionId);
+  const goNext = () => {
+    setCompletedSteps((prev) => new Set(prev).add(currentStep));
+    setCurrentStep((prev) => Math.min(prev + 1, steps.length - 1));
   };
 
-  const handleTrain = async () => {
-    if (!projectId || !versionId) {
+  const goPrev = () => {
+    setCurrentStep((prev) => Math.max(prev - 1, 0));
+  };
+
+  const canGoNext = useMemo((): boolean => {
+    switch (currentStep) {
+      case 0:
+        return !!config.datasetVersionId && !!config.targetColumn;
+      case 1:
+        return true;
+      case 2:
+        return !step3Validation.hasErrors;
+      case 3:
+        return (config.models || []).length > 0;
+      case 4:
+        return (config.metrics || []).length > 0;
+      default:
+        return false;
+    }
+  }, [currentStep, config, step3Validation.hasErrors]);
+
+  const handleStartTraining = async (): Promise<string | null> => {
+    if (!projectId) {
       toast({
-        title: "Contexte introuvable",
-        description: "ID projet/version manquant dans l'URL.",
+        title: "Erreur",
+        description: "Project ID introuvable (route).",
         variant: "destructive",
       });
-      return;
+      return null;
     }
 
-    if (!config.targetColumn) {
-      toast({
-        title: "Colonne cible manquante",
-        description: "Sélectionne une colonne cible.",
-        variant: "destructive",
-      });
-      return;
-    }
-
-    if (config.splitMethod === "holdout" && ratiosSum !== 100) {
-      toast({
-        title: "Ratios invalides",
-        description: "Pour Holdout, train + val + test doit être = 100.",
-        variant: "destructive",
-      });
-      return;
-    }
-
-    if (config.splitMethod === "kfold" && Number(config.kFolds) < 2) {
-      toast({
-        title: "K-Folds invalide",
-        description: "Le nombre de folds doit être ≥ 2.",
-        variant: "destructive",
-      });
-      return;
-    }
-
-    setIsTraining(true);
     try {
-      // ✅ startTraining est maintenant typé => session.id OK
-      const session = await trainingService.startTraining(projectId, versionId, config);
-
-      const finalSession = await pollSessionUntilReady(String(session.id));
-      const status = (finalSession as any)?.status as string | undefined;
-      const errorMessage = (finalSession as any)?.errorMessage as string | undefined;
-
-      if (status === "failed") {
-        toast({
-          title: "Erreur lors de l'entraînement",
-          description: errorMessage || "Le backend a échoué.",
-          variant: "destructive",
-        });
-        return;
-      }
+      const session = await trainingService.startTraining(projectId, config);
 
       toast({
         title: "Entraînement lancé",
-        description: "Session créée. Redirection vers les résultats…",
+        description: `${(config.models || []).length} modèle(s) en cours...`,
       });
 
-      navigate(`/projects/${projectId}/versions/${versionId}/training/results?session=${session.id}`);
-    } catch (error: any) {
+      const sessionOut = session as { id?: string | number; session_id?: string | number };
+      return String(sessionOut.id ?? sessionOut.session_id ?? "");
+    } catch (e: unknown) {
+      const message = e instanceof Error ? e.message : "Une erreur est survenue lors de l'entrainement.";
       toast({
-        title: "Erreur lors de l'entraînement",
-        description: error?.message || "Not Found",
+        title: "Erreur",
+        description: message,
         variant: "destructive",
       });
-    } finally {
-      setIsTraining(false);
+      return null;
     }
   };
 
-  // auto-correction kfold
-  useEffect(() => {
-    if (config.splitMethod === "kfold" && Number(config.kFolds) < 2) {
-      setConfig((prev) => ({ ...prev, kFolds: 5 }));
+  const handleGoToResults = (sessionId: string) => {
+    if (!projectId) return;
+    const versionId = String(config.datasetVersionId || routeVersionId || "").trim();
+    if (!versionId) {
+      toast({
+        title: "Erreur",
+        description: "Version du dataset introuvable pour ouvrir les resultats.",
+        variant: "destructive",
+      });
+      return;
     }
-  }, [config.splitMethod]);
+    navigate(
+      `/projects/${projectId}/versions/${versionId}/training/results?session=${encodeURIComponent(sessionId)}`
+    );
+  };
+
+  const slideVariants = {
+    enter: (direction: number) => ({ x: direction > 0 ? 60 : -60, opacity: 0 }),
+    center: { x: 0, opacity: 1 },
+    exit: (direction: number) => ({ x: direction > 0 ? -60 : 60, opacity: 0 }),
+  };
+
+  // Render guard (évite l’appel API avec undefined)
+  if (!projectId) {
+    return (
+      <AppLayout>
+        <div className="w-full py-8">
+          <div className="rounded-2xl border border-border p-6">
+            <h1 className="text-xl font-semibold">Training</h1>
+            <p className="text-sm text-muted-foreground mt-2">
+              Impossible de récupérer l’ID du projet depuis la route. Vérifie ton router (paramètre
+              <code className="mx-1">:id</code> ou <code className="mx-1">:projectId</code>).
+            </p>
+          </div>
+        </div>
+      </AppLayout>
+    );
+  }
 
   return (
     <AppLayout>
-      <TrainingProgress isTraining={isTraining} selectedModels={config.models} />
-
-      <motion.div className="space-y-8 pb-8" initial="initial" animate="animate" variants={staggerContainer}>
+      <div className="w-full min-w-0 space-y-5 sm:space-y-6 lg:space-y-8 pb-8">
         {/* Header */}
-        <motion.div variants={staggerItem} className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-          <div>
-            <div className="flex items-center gap-3 mb-2">
-              <div className="p-3 rounded-2xl bg-gradient-to-r from-primary via-secondary to-accent">
-                <Rocket className="h-6 w-6 text-white" />
-              </div>
-              <h1 className="text-3xl font-bold text-foreground">Studio d'entraînement</h1>
+        <motion.div
+          initial={{ opacity: 0, y: -10 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="space-y-2 text-center lg:text-left"
+        >
+          <h1 className="text-3xl font-bold text-gradient">Studio d'entraînement</h1>
+          <p className="text-muted-foreground">Configurez et lancez vos modèles en {steps.length} étapes</p>
+        </motion.div>
+
+        {/* Stepper */}
+        <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }}>
+          <div className="overflow-x-auto pb-2">
+            <div className="min-w-[680px] md:min-w-0">
+              <WizardStepper
+                steps={steps}
+                currentStep={currentStep}
+                onStepClick={setCurrentStep}
+                completedSteps={completedSteps}
+              />
             </div>
-            <p className="text-muted-foreground">
-              Configurez et lancez vos modèles d'intelligence artificielle pour analyser vos données.
-            </p>
           </div>
         </motion.div>
 
-        {/* Summary */}
-        <motion.div variants={staggerItem}>
-          <Card className="bg-gradient-to-r from-primary/5 via-secondary/5 to-accent/5 border-primary/20">
-            <CardContent className="py-4">
-              <div className="flex flex-wrap items-center gap-6">
-                <div className="flex items-center gap-2">
-                  <span className="text-sm text-muted-foreground">Modèles:</span>
-                  <span className="font-bold text-primary">{config.models.length}</span>
-                </div>
+        {/* Step Content */}
+        <AnimatePresence mode="wait" custom={1}>
+          <motion.div
+            key={currentStep}
+            custom={1}
+            variants={slideVariants}
+            initial="enter"
+            animate="center"
+            exit="exit"
+            transition={{ duration: 0.25, ease: "easeInOut" }}
+            className="w-full min-w-0"
+          >
+            {currentStep === 0 && (
+              <Step1DatasetTarget projectId={String(projectId)} config={config} onConfigChange={updateConfig} />
+            )}
+            {currentStep === 1 && (
+              <Step2SplitStrategy projectId={String(projectId)} config={config} onConfigChange={updateConfig} />
+            )}
+            {currentStep === 2 && (
+              <Step3ColumnPreprocessing
+                projectId={String(projectId)}
+                config={config}
+                onConfigChange={updateConfig}
+                onValidationStateChange={setStep3Validation}
+              />
+            )}
+            {currentStep === 3 && (
+              <Step4Models projectId={String(projectId)} config={config} onConfigChange={updateConfig} />
+            )}
+            {currentStep === 4 && <Step5Metrics config={config} onConfigChange={updateConfig} />}
+            {currentStep === 5 && (
+              <Step6Summary
+                projectId={String(projectId)}
+                config={config}
+                onStartTraining={handleStartTraining}
+                onGoToResults={handleGoToResults}
+              />
+            )}
+          </motion.div>
+        </AnimatePresence>
 
-                <ChevronRight className="h-4 w-4 text-muted-foreground hidden sm:block" />
+        {/* Navigation */}
+        {currentStep < steps.length - 1 && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            className="flex items-center justify-between pt-4 border-t border-border/50"
+          >
+            <Button variant="ghost" onClick={goPrev} disabled={currentStep === 0} className="gap-2">
+              <ChevronLeft className="h-4 w-4" />
+              Précédent
+            </Button>
 
-                <div className="flex items-center gap-2">
-                  <span className="text-sm text-muted-foreground">Métriques:</span>
-                  <span className="font-bold text-secondary">{config.metrics.length}</span>
-                </div>
+            <span className="text-sm text-muted-foreground">
+              Étape {currentStep + 1} / {steps.length}
+            </span>
 
-                <ChevronRight className="h-4 w-4 text-muted-foreground hidden sm:block" />
-
-                <div className="flex items-center gap-2">
-                  <span className="text-sm text-muted-foreground">Validation:</span>
-                  <span className="font-bold text-accent">
-                    {config.splitMethod === "kfold"
-                      ? `${config.kFolds}-Fold CV`
-                      : `${config.trainRatio}/${config.valRatio}/${config.testRatio}`}
-                  </span>
-                </div>
-
-                {config.splitMethod === "holdout" && (
-                  <>
-                    <ChevronRight className="h-4 w-4 text-muted-foreground hidden sm:block" />
-                    <span
-                      className={`text-xs px-2 py-1 rounded-full font-medium ${
-                        ratiosSum === 100 ? "bg-accent/10 text-accent" : "bg-destructive/10 text-destructive"
-                      }`}
-                      title="train + val + test"
-                    >
-                      Total: {ratiosSum}%
-                    </span>
-                  </>
-                )}
-              </div>
-            </CardContent>
-          </Card>
-        </motion.div>
-
-        {/* Config grid */}
-        <motion.div variants={staggerItem} className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          <ConfigurationPanel
-            config={config}
-            onConfigChange={updateConfig}
-            columns={columns}
-            columnsLoading={columnsLoading}
-          />
-          <TrainingParameters config={config} onConfigChange={updateConfig} />
-        </motion.div>
-
-        <motion.div variants={staggerItem}>
-          <ModelSelector
-            selectedModels={config.models}
-            onToggleModel={toggleModel}
-            useGridSearch={config.useGridSearch}
-            onGridSearchChange={(v) => updateConfig({ useGridSearch: v })}
-            useSmote={config.useSmote}
-            onSmoteChange={(v) => updateConfig({ useSmote: v })}
-          />
-        </motion.div>
-
-        <motion.div variants={staggerItem}>
-          <MetricsSelector selectedMetrics={config.metrics} onToggleMetric={toggleMetric} />
-        </motion.div>
-
-        {!isConfigValid && (
-          <motion.div variants={staggerItem} className="flex items-center gap-3 p-4 rounded-xl bg-destructive/10 border border-destructive/20">
-            <AlertCircle className="h-5 w-5 text-destructive" />
-            <p className="text-sm text-destructive">
-              {!projectId && "Projet introuvable. "}
-              {!versionId && "Version introuvable. "}
-              {!config.targetColumn && "Sélectionne une colonne cible. "}
-              {config.models.length === 0 && "Sélectionne au moins un modèle. "}
-              {config.metrics.length === 0 && "Sélectionne au moins une métrique. "}
-              {config.splitMethod === "holdout" && ratiosSum !== 100 && "Ratios Holdout: total doit être 100. "}
-              {config.splitMethod === "kfold" && Number(config.kFolds) < 2 && "K-Folds doit être ≥ 2. "}
-            </p>
+            <Button onClick={goNext} disabled={!canGoNext} className="gap-2 gradient-premium text-primary-foreground">
+              Suivant
+              <ChevronRight className="h-4 w-4" />
+            </Button>
           </motion.div>
         )}
-
-        <motion.div variants={staggerItem}>
-          <Button
-            size="lg"
-            className="w-full h-16 text-lg bg-gradient-to-r from-primary via-secondary to-accent shadow-lg hover:shadow-xl transition-all duration-300 hover:-translate-y-1 disabled:opacity-50 disabled:hover:translate-y-0"
-            onClick={handleTrain}
-            disabled={isTraining || !isConfigValid}
-          >
-            {isTraining ? (
-              <>
-                <Loader2 className="h-6 w-6 mr-3 animate-spin" />
-                Entraînement en cours...
-              </>
-            ) : (
-              <>
-                <Play className="h-6 w-6 mr-3" />
-                Lancer l'entraînement
-              </>
-            )}
-          </Button>
-        </motion.div>
-      </motion.div>
+        {currentStep === 2 && step3Validation.hasErrors && (
+          <div className="rounded-lg border border-destructive/30 bg-destructive/5 p-3 text-xs text-destructive">
+            Corrigez les erreurs Step 3 pour continuer ({step3Validation.errorCount} erreur(s)).
+          </div>
+        )}
+      </div>
     </AppLayout>
   );
 }
 
 export default TrainingPage;
+
