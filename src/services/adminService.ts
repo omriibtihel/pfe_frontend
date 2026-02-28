@@ -1,9 +1,12 @@
 import apiClient from "./apiClient";
-import { User } from "@/types";
+import { AccountStatus, User, UserRole } from "@/types";
 
 export type AdminStats = {
-  by_status: Record<string, number>; // ex: { PENDING: 2, APPROVED: 10, REJECTED: 1 }
-  total_users: number;
+  pending_users: number;
+  approved_users: number;
+  rejected_users: number;
+  doctors: number;
+  admins: number;
 };
 
 type BackendUser = {
@@ -14,16 +17,27 @@ type BackendUser = {
   status: string;
 };
 
+function toUserRole(role: string): UserRole {
+  return role.toLowerCase() === "admin" ? "admin" : "doctor";
+}
+
+function toAccountStatus(status: string): AccountStatus {
+  const value = status.toLowerCase();
+  if (value === "approved") return "approved";
+  if (value === "rejected") return "rejected";
+  return "pending";
+}
+
 function mapBackendUser(u: BackendUser): User {
   return {
     id: String(u.id),
     fullName: u.full_name,
     email: u.email,
-    role: u.role.toLowerCase(),
-    status: u.status.toLowerCase(),
+    role: toUserRole(u.role),
+    status: toAccountStatus(u.status),
     createdAt: "",
     updatedAt: "",
-  } as User;
+  };
 }
 
 export const adminService = {

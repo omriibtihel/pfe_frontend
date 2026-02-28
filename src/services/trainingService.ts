@@ -1,19 +1,30 @@
 import apiClient, { type RequestOptions } from "@/services/apiClient";
 import type {
+  TrainingBalanceAnalysis,
+  TrainingBalancingConfig,
+  TrainingBalancingStrategy,
   CategoricalEncodingStrategy,
   CategoricalImputationStrategy,
   ModelHyperparams,
   ModelResult,
   NumericImputationStrategy,
   NumericScalingStrategy,
+  TrainingThresholdStrategy,
   TrainingHyperparamFieldSchema,
   TrainingColumnType,
   TrainingConfig,
   TrainingPreprocessingConfig,
   TrainingPreprocessingDefaults,
   TrainingSession,
+  TrainingValidationPreviewSubset,
+  TrainingValidationPreviewMode,
 } from "@/types";
-import { DEFAULT_TRAINING_PREPROCESSING, DEFAULT_TRAINING_PREPROCESSING_DEFAULTS } from "@/types";
+export type { TrainingValidationPreviewSubset, TrainingValidationPreviewMode };
+import {
+  DEFAULT_TRAINING_BALANCING,
+  DEFAULT_TRAINING_PREPROCESSING,
+  DEFAULT_TRAINING_PREPROCESSING_DEFAULTS,
+} from "@/types";
 
 export type { TrainingSession, ModelResult };
 
@@ -53,6 +64,11 @@ export type TrainingCapabilities = {
     classification?: string[];
     regression?: string[];
   };
+  balancingCapabilities?: {
+    strategies?: TrainingBalancingStrategy[];
+    thresholdStrategies?: TrainingThresholdStrategy[];
+    requiresExplicitConfirmation?: boolean;
+  };
 };
 
 export type TrainingValidationResponse = {
@@ -64,9 +80,6 @@ export type TrainingValidationResponse = {
   previewTransformed?: TrainingValidationPreviewTable;
   previewMeta?: TrainingValidationPreviewMeta;
 };
-
-export type TrainingValidationPreviewSubset = "train" | "val" | "test";
-export type TrainingValidationPreviewMode = "head" | "random";
 
 export type TrainingValidationPreviewRequest = {
   subset?: TrainingValidationPreviewSubset;
@@ -116,6 +129,12 @@ export type TrainingStartPayload = {
   gridCvFolds: number;
   gridScoring: string;
   useSmote: boolean;
+  balancing: {
+    strategy: TrainingBalancingStrategy;
+    apply_threshold: boolean;
+    threshold_strategy: TrainingThresholdStrategy;
+    min_recall_constraint?: number | null;
+  };
   splitMethod: TrainingConfig["splitMethod"];
   trainRatio: number;
   valRatio: number;
@@ -128,6 +147,11 @@ export type TrainingStartPayload = {
   preprocessing: TrainingPreprocessingConfig;
   modelHyperparams: ModelHyperparams;
   customCode: string;
+};
+
+export type AnalyzeBalancePayload = {
+  version_id: number;
+  target_column: string;
 };
 
 export const FALLBACK_PREPROCESSING_CAPABILITIES: TrainingPreprocessingCapabilities = {
@@ -303,10 +327,52 @@ function cloneModelHyperparams(modelHyperparams: ModelHyperparams | null | undef
   return out;
 }
 
+const BALANCING_STRATEGIES: TrainingBalancingStrategy[] = [
+  "none",
+  "class_weight",
+  "smote",
+  "smote_tomek",
+  "random_undersampling",
+  "threshold_optimization",
+];
+const THRESHOLD_STRATEGIES: TrainingThresholdStrategy[] = [
+  "maximize_f1",
+  "maximize_f2",
+  "min_recall",
+  "precision_recall_balance",
+];
+
+function normalizeBalancingConfig(config: TrainingConfig): TrainingBalancingConfig {
+  const source: Partial<TrainingBalancingConfig> = config.balancing ?? {};
+  const strategyFallback: TrainingBalancingStrategy = config.useSmote ? "smote" : "none";
+
+  const strategy = BALANCING_STRATEGIES.includes(source.strategy as TrainingBalancingStrategy)
+    ? (source.strategy as TrainingBalancingStrategy)
+    : strategyFallback;
+  const thresholdStrategy = THRESHOLD_STRATEGIES.includes(source.thresholdStrategy as TrainingThresholdStrategy)
+    ? (source.thresholdStrategy as TrainingThresholdStrategy)
+    : DEFAULT_TRAINING_BALANCING.thresholdStrategy;
+  const minRecallRaw = source.minRecallConstraint;
+  const minRecallConstraint =
+    typeof minRecallRaw === "number" && Number.isFinite(minRecallRaw) && minRecallRaw > 0 && minRecallRaw < 1
+      ? minRecallRaw
+      : null;
+  const applyThreshold = Boolean(source.applyThreshold) || strategy === "threshold_optimization";
+
+  return {
+    strategy,
+    applyThreshold,
+    thresholdStrategy,
+    minRecallConstraint,
+  };
+}
+
 export function toTrainingStartPayload(config: TrainingConfig): TrainingStartPayload {
   const versionId = Number(String(config.datasetVersionId ?? "").trim());
   const preprocessing = clonePreprocessing(config.preprocessing);
   const modelHyperparams = cloneModelHyperparams(config.modelHyperparams);
+  const balancing = normalizeBalancingConfig(config);
+  const useSmote = balancing.strategy === "smote" || balancing.strategy === "smote_tomek";
   return {
     datasetVersionId: versionId,
     targetColumn: String(config.targetColumn ?? "").trim(),
@@ -315,7 +381,13 @@ export function toTrainingStartPayload(config: TrainingConfig): TrainingStartPay
     useGridSearch: Boolean(config.useGridSearch),
     gridCvFolds: Number(config.gridCvFolds),
     gridScoring: String(config.gridScoring ?? "auto"),
-    useSmote: Boolean(config.useSmote),
+    useSmote,
+    balancing: {
+      strategy: balancing.strategy,
+      apply_threshold: balancing.applyThreshold,
+      threshold_strategy: balancing.thresholdStrategy,
+      min_recall_constraint: balancing.minRecallConstraint ?? null,
+    },
     splitMethod: config.splitMethod,
     trainRatio: Number(config.trainRatio),
     valRatio: Number(config.valRatio),
@@ -371,6 +443,23 @@ export const trainingService = {
       `/projects/${projectId}/training/validate`,
       payload,
       requestOptions
+    );
+  },
+
+  async analyzeBalance(
+    projectId: string,
+    versionId: string | number,
+    targetColumn: string,
+    opts?: RequestOptions
+  ): Promise<TrainingBalanceAnalysis> {
+    const payload: AnalyzeBalancePayload = {
+      version_id: Number(versionId),
+      target_column: String(targetColumn ?? "").trim(),
+    };
+    return await apiClient.post<TrainingBalanceAnalysis>(
+      `/projects/${projectId}/training/analyze-balance`,
+      payload,
+      opts
     );
   },
 

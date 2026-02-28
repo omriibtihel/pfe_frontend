@@ -1,21 +1,35 @@
-import { useState } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
-import { Activity, Mail, Lock, User, Phone, Calendar, MapPin, Upload, Loader2 } from 'lucide-react';
-import { useAuth } from '@/contexts/AuthContext';
-import { AuthLayout } from '@/layouts/AuthLayout';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { useToast } from '@/hooks/use-toast';
+import { useState } from "react";
+import { useNavigate, Link } from "react-router-dom";
+import {
+  Activity,
+  Mail,
+  Lock,
+  User,
+  Phone,
+  Calendar,
+  MapPin,
+  Upload,
+  Loader2,
+  ArrowRight,
+  Sparkles,
+} from "lucide-react";
+
+import { useAuth } from "@/contexts/AuthContext";
+import { AuthLayout } from "@/layouts/AuthLayout";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { useToast } from "@/hooks/use-toast";
+import type { SignupData } from "@/types";
 
 export function SignupPage() {
   const [formData, setFormData] = useState({
-    fullName: '',
-    email: '',
-    password: '',
-    dateOfBirth: '',
-    phone: '',
-    address: '',
+    fullName: "",
+    email: "",
+    password: "",
+    dateOfBirth: "",
+    phone: "",
+    address: "",
   });
 
   const [isLoading, setIsLoading] = useState(false);
@@ -24,7 +38,7 @@ export function SignupPage() {
   const { toast } = useToast();
 
   const updateField = (field: keyof typeof formData, value: string) => {
-    setFormData(prev => ({ ...prev, [field]: value }));
+    setFormData((prev) => ({ ...prev, [field]: value }));
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -32,20 +46,28 @@ export function SignupPage() {
     setIsLoading(true);
 
     try {
-      // ⚠️ on envoie seulement ce que le backend attend
-      const result = await signup({
+      const signupPayload: SignupData = {
         fullName: formData.fullName,
         email: formData.email,
         password: formData.password,
-      } as any);
+        specialty: "",
+        qualification: "",
+        experience: 0,
+        phone: formData.phone,
+        address: formData.address,
+        hospital: "",
+        dateOfBirth: formData.dateOfBirth,
+      };
 
-      toast({ title: 'Inscription réussie', description: result.message });
-      navigate('/login');
+      const result = await signup(signupPayload);
+
+      toast({ title: "Inscription reussie", description: result.message });
+      navigate("/login");
     } catch (error) {
       toast({
-        title: 'Erreur',
+        title: "Erreur",
         description: (error as Error).message,
-        variant: 'destructive',
+        variant: "destructive",
       });
     } finally {
       setIsLoading(false);
@@ -54,30 +76,37 @@ export function SignupPage() {
 
   return (
     <AuthLayout>
-      <div className="space-y-6 max-w-2xl mx-auto">
-        <div className="lg:hidden flex items-center gap-2 justify-center mb-8">
-          <Activity className="h-8 w-8 text-primary" />
-          <span className="text-2xl font-bold">MedicalVision</span>
+      <div className="space-y-5">
+        <div className="flex items-center justify-center gap-2.5 lg:hidden">
+          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-primary via-secondary to-accent">
+            <Activity className="h-5 w-5 text-white" />
+          </div>
+          <span className="text-xl font-bold">MedicalVision</span>
         </div>
 
-        <div className="text-center lg:text-left">
-          <h1 className="text-2xl font-bold text-foreground">Créer un compte</h1>
-          <p className="text-muted-foreground mt-2">Rejoignez la communauté MedicalVision</p>
-        </div>
+        <div className="ai-surface-strong p-6 sm:p-8">
+          <div className="mb-6 space-y-2">
+            <span className="ai-chip">
+              <Sparkles className="h-3.5 w-3.5" />
+              Create account
+            </span>
+            <h1 className="text-2xl font-bold tracking-tight">Creer votre espace professionnel</h1>
+            <p className="text-sm text-muted-foreground">
+              Renseignez vos informations pour acceder a la plateforme IA medicale.
+            </p>
+          </div>
 
-        <form onSubmit={handleSubmit} className="space-y-6">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {/* Column 1 */}
-            <div className="space-y-4">
+          <form onSubmit={handleSubmit} className="space-y-5">
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
               <div className="space-y-2">
                 <Label htmlFor="fullName">Nom complet</Label>
                 <div className="relative">
-                  <User className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                  <User className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
                   <Input
                     id="fullName"
                     value={formData.fullName}
-                    onChange={(e) => updateField('fullName', e.target.value)}
-                    className="pl-10"
+                    onChange={(e) => updateField("fullName", e.target.value)}
+                    className="h-11 border-border/70 bg-card/70 pl-10"
                     placeholder="Dr. Jean Dupont"
                     required
                   />
@@ -85,15 +114,15 @@ export function SignupPage() {
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="email">Email</Label>
+                <Label htmlFor="email">Adresse email</Label>
                 <div className="relative">
-                  <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                  <Mail className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
                   <Input
                     id="email"
                     type="email"
                     value={formData.email}
-                    onChange={(e) => updateField('email', e.target.value)}
-                    className="pl-10"
+                    onChange={(e) => updateField("email", e.target.value)}
+                    className="h-11 border-border/70 bg-card/70 pl-10"
                     placeholder="votre@email.com"
                     required
                   />
@@ -103,14 +132,14 @@ export function SignupPage() {
               <div className="space-y-2">
                 <Label htmlFor="password">Mot de passe</Label>
                 <div className="relative">
-                  <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                  <Lock className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
                   <Input
                     id="password"
                     type="password"
                     value={formData.password}
-                    onChange={(e) => updateField('password', e.target.value)}
-                    className="pl-10"
-                    placeholder="••••••••"
+                    onChange={(e) => updateField("password", e.target.value)}
+                    className="h-11 border-border/70 bg-card/70 pl-10"
+                    placeholder="********"
                     required
                   />
                 </div>
@@ -119,29 +148,26 @@ export function SignupPage() {
               <div className="space-y-2">
                 <Label htmlFor="dateOfBirth">Date de naissance</Label>
                 <div className="relative">
-                  <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                  <Calendar className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
                   <Input
                     id="dateOfBirth"
                     type="date"
                     value={formData.dateOfBirth}
-                    onChange={(e) => updateField('dateOfBirth', e.target.value)}
-                    className="pl-10"
+                    onChange={(e) => updateField("dateOfBirth", e.target.value)}
+                    className="h-11 border-border/70 bg-card/70 pl-10"
                   />
                 </div>
               </div>
-            </div>
 
-            {/* Column 2 */}
-            <div className="space-y-4">
               <div className="space-y-2">
-                <Label htmlFor="phone">Téléphone</Label>
+                <Label htmlFor="phone">Telephone</Label>
                 <div className="relative">
-                  <Phone className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                  <Phone className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
                   <Input
                     id="phone"
                     value={formData.phone}
-                    onChange={(e) => updateField('phone', e.target.value)}
-                    className="pl-10"
+                    onChange={(e) => updateField("phone", e.target.value)}
+                    className="h-11 border-border/70 bg-card/70 pl-10"
                     placeholder="+216 ..."
                   />
                 </div>
@@ -150,36 +176,45 @@ export function SignupPage() {
               <div className="space-y-2">
                 <Label htmlFor="address">Adresse</Label>
                 <div className="relative">
-                  <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                  <MapPin className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
                   <Input
                     id="address"
                     value={formData.address}
-                    onChange={(e) => updateField('address', e.target.value)}
-                    className="pl-10"
-                    placeholder="..."
+                    onChange={(e) => updateField("address", e.target.value)}
+                    className="h-11 border-border/70 bg-card/70 pl-10"
+                    placeholder="Hopital / Clinique"
                   />
                 </div>
               </div>
+            </div>
 
-              <div className="space-y-2">
-                <Label>Photo de profil</Label>
-                <div className="border-2 border-dashed border-border rounded-lg p-6 text-center hover:border-primary/50 cursor-pointer transition-colors">
-                  <Upload className="h-8 w-8 mx-auto text-muted-foreground mb-2" />
-                  <p className="text-sm text-muted-foreground">Cliquez pour ajouter</p>
-                </div>
+            <div className="space-y-2">
+              <Label>Photo de profil</Label>
+              <div className="flex h-24 items-center justify-center gap-2 rounded-xl border border-dashed border-border/70 bg-muted/20 text-sm text-muted-foreground transition-colors hover:border-primary/35">
+                <Upload className="h-4 w-4" />
+                Cliquez pour ajouter
               </div>
             </div>
-          </div>
 
-          <Button type="submit" className="w-full" size="lg" disabled={isLoading}>
-            {isLoading ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
-            S'inscrire
-          </Button>
-        </form>
+            <Button type="submit" className="h-12 w-full gap-2 text-base font-semibold" disabled={isLoading}>
+              {isLoading ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  Inscription...
+                </>
+              ) : (
+                <>
+                  S'inscrire
+                  <ArrowRight className="h-4 w-4" />
+                </>
+              )}
+            </Button>
+          </form>
+        </div>
 
         <p className="text-center text-sm text-muted-foreground">
-          Déjà inscrit ?{' '}
-          <Link to="/login" className="text-primary hover:underline font-medium">
+          Deja inscrit ?{" "}
+          <Link to="/login" className="font-semibold text-primary transition-colors hover:text-primary/80">
             Se connecter
           </Link>
         </p>

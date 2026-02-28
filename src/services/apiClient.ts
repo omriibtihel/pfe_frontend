@@ -19,6 +19,10 @@ function extractErrorMessage(err: unknown): string {
     if (data && typeof data === "object" && "detail" in data) {
       const detail = (data as any).detail;
       if (typeof detail === "string" && detail.trim()) return detail;
+      if (detail && typeof detail === "object") {
+        const message = (detail as any).message;
+        if (typeof message === "string" && message.trim()) return message;
+      }
       if (Array.isArray(detail)) {
         const msg = detail.map((x: any) => x?.msg).filter(Boolean).join(", ");
         if (msg) return msg;
@@ -207,6 +211,25 @@ class ApiClient {
       const cd = (res.headers?.["content-disposition"] as string | undefined) ?? undefined;
       const filename = parseFilenameFromContentDisposition(cd);
 
+      return { blob: res.data as Blob, filename };
+    } catch (err) {
+      throw new Error(extractErrorMessage(err));
+    }
+  }
+
+  async postFormDataBlob(
+    url: string,
+    body: FormData,
+    opts?: RequestOptions,
+  ): Promise<{ blob: Blob; filename?: string }> {
+    try {
+      const res = await this.axios.post(url, body, {
+        headers: { "Content-Type": "multipart/form-data" },
+        responseType: "blob",
+        ...this.cfg(opts),
+      });
+      const cd = (res.headers?.["content-disposition"] as string | undefined) ?? undefined;
+      const filename = parseFilenameFromContentDisposition(cd);
       return { blob: res.data as Blob, filename };
     } catch (err) {
       throw new Error(extractErrorMessage(err));

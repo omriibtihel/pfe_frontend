@@ -129,6 +129,30 @@ export function Step6Summary({ projectId, config, onStartTraining, onGoToResults
       return;
     }
 
+    if (config.taskType === "classification") {
+      const versionId = String(config.datasetVersionId ?? "").trim();
+      const targetColumn = String(config.targetColumn ?? "").trim();
+      if (versionId && targetColumn) {
+        try {
+          const analysis = await trainingService.analyzeBalance(projectId, versionId, targetColumn);
+          const selectedStrategy =
+            config.balancing?.strategy ?? (config.useSmote ? "smote" : "none");
+          const selected = analysis.available_strategies.find((item) => item.id === selectedStrategy);
+
+          if (selected && !selected.feasible) {
+            setStatus("idle");
+            setProgress(0);
+            setError(
+              `Stratégie non faisable (${selectedStrategy}). Suggestion: ${analysis.default_recommendation}.`
+            );
+            return;
+          }
+        } catch {
+          // If diagnostic endpoint is unavailable, backend validation remains source of truth.
+        }
+      }
+    }
+
     const sid = await onStartTraining();
     if (!sid) {
       setStatus("failed");
@@ -191,7 +215,14 @@ export function Step6Summary({ projectId, config, onStartTraining, onGoToResults
     },
     { label: "Modeles", value: `${config.models.length} selectionne(s)` },
     { label: "Metriques", value: `${config.metrics.length} selectionnee(s)` },
-    { label: "SMOTE", value: config.useSmote ? "Active" : "Desactive" },
+    {
+      label: "Balancing",
+      value: config.balancing?.strategy ?? (config.useSmote ? "smote" : "none"),
+    },
+    {
+      label: "Seuil optimise",
+      value: config.balancing?.applyThreshold ? "Oui" : "Non",
+    },
     { label: "Classe positive", value: config.positiveLabel == null || String(config.positiveLabel).trim() === "" ? "-" : String(config.positiveLabel) },
     { label: "Debug training", value: config.trainingDebug ? "Active" : "Desactive" },
     { label: "GridSearch", value: config.useGridSearch ? `Active (${config.gridCvFolds} folds)` : "Desactive" },

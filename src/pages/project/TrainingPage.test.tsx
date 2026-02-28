@@ -93,6 +93,6 @@ describe("TrainingPage", () => {
     await waitFor(() => expect(screen.getByText("Mock Step3")).toBeInTheDocument());
     await waitFor(() => expect(getNextButton()).toBeDisabled());
 
-    expect(screen.getByText(/corrigez les erreurs step 3/i)).toBeInTheDocument();
+    expect(screen.getByText(/corrigez les erreurs.*(step|etape)\s*3/i)).toBeInTheDocument();
   });
 });

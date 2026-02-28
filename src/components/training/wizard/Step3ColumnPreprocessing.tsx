@@ -1,32 +1,29 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { motion } from "framer-motion";
-import { AlertTriangle, CheckCircle2, Columns3, Info, Search, SlidersHorizontal, XCircle } from "lucide-react";
+import { AlertTriangle, CheckCircle2, Columns3, Info, SlidersHorizontal, XCircle } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Table, TableBody, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 
 import { dataService } from "@/services/dataService";
 import {
   FALLBACK_PREPROCESSING_CAPABILITIES,
   trainingService,
   type TrainingPreprocessingCapabilities,
-  type TrainingValidationPreviewMode,
-  type TrainingValidationPreviewSubset,
 } from "@/services/trainingService";
 import { useColumnIssues } from "@/hooks/useColumnIssues";
 import { useDebouncedValidation } from "@/hooks/useDebouncedValidation";
 import type {
   DatasetColumn,
-  TrainingColumnType,
   TrainingColumnTypeSelection,
   TrainingConfig,
   TrainingPreprocessingColumnConfig,
   TrainingPreprocessingConfig,
   TrainingPreprocessingDefaults,
+  TrainingValidationPreviewMode,
+  TrainingValidationPreviewSubset,
 } from "@/types";
 import { DEFAULT_TRAINING_PREPROCESSING } from "@/types";
 import {
@@ -35,24 +32,26 @@ import {
   validateLocal,
   type Step3ColumnValidationState,
 } from "@/utils/step3Validation";
-import { BulkActionsBar } from "@/components/training/wizard/step3/BulkActionsBar";
-import { ColumnRow } from "@/components/training/wizard/step3/ColumnRow";
+import { BulkActionsBar } from "./step3/BulkActionsBar";
+import { ColumnFilterBar } from "./step3/ColumnFilterBar";
+import { ColumnRow } from "./step3/ColumnRow";
+import { DefaultsPanel } from "./step3/DefaultsPanel";
+import { IssuesPanel } from "./step3/IssuesPanel";
+import { PreviewPanel } from "./step3/PreviewPanel";
 import {
   cleanColumnConfig,
   clonePreprocessingConfig,
   inferTypeFromDataset,
-  labelForMethod,
   normalizePreprocessing,
   parseOrdinalOrder,
   withNoneFirst,
-} from "@/components/training/wizard/step3/helpers";
-import { IssuesPanel } from "@/components/training/wizard/step3/IssuesPanel";
+} from "./step3/helpers";
 import type {
   Step3ColumnRowData,
   Step3Options,
   Step3StatusFilter,
   Step3TypeFilter,
-} from "@/components/training/wizard/step3/types";
+} from "./step3/types";
 
 interface Step3Props {
   projectId: string;
@@ -72,14 +71,6 @@ const AUTO_TYPE = "auto" as const;
 const PAGE_SIZE = 80;
 const SERVER_VALIDATION_DEBOUNCE_MS = 500;
 const PREVIEW_RANDOM_SEED = 42;
-const PREVIEW_SAMPLE_SIZE_OPTIONS: number[] = [50, 100, 200];
-const STATUS_FILTERS: Array<{ value: Step3StatusFilter; label: string }> = [
-  { value: "all", label: "All" },
-  { value: "active", label: "Active" },
-  { value: "dropped", label: "Dropped" },
-  { value: "errors", label: "With errors" },
-  { value: "warnings", label: "With warnings" },
-];
 
 type BaseRow = Omit<Step3ColumnRowData, "issues" | "errorCount" | "warningCount" | "status">;
 
@@ -97,18 +88,6 @@ function toValidationRows(rows: BaseRow[]): Step3ColumnValidationState[] {
     ordinalOrder: row.ordinalOrder,
     hasExplicitCategoricalConfig: row.hasExplicitCategoricalConfig,
   }));
-}
-
-function formatPreviewCell(value: unknown): string {
-  if (value === null || value === undefined) return "null";
-  if (typeof value === "string") return value;
-  if (typeof value === "number") return Number.isFinite(value) ? String(value) : "null";
-  if (typeof value === "boolean") return value ? "true" : "false";
-  try {
-    return JSON.stringify(value);
-  } catch {
-    return String(value);
-  }
 }
 
 export function Step3ColumnPreprocessing({
@@ -160,17 +139,13 @@ export function Step3ColumnPreprocessing({
     const loadCapabilities = async () => {
       try {
         const caps = await trainingService.getCapabilities(String(projectId));
-        if (mounted) {
-          setCapabilities(caps.preprocessingCapabilities ?? FALLBACK_PREPROCESSING_CAPABILITIES);
-        }
+        if (mounted) setCapabilities(caps.preprocessingCapabilities ?? FALLBACK_PREPROCESSING_CAPABILITIES);
       } catch {
         if (mounted) setCapabilities(FALLBACK_PREPROCESSING_CAPABILITIES);
       }
     };
     loadCapabilities();
-    return () => {
-      mounted = false;
-    };
+    return () => { mounted = false; };
   }, [projectId]);
 
   useEffect(() => {
@@ -194,14 +169,12 @@ export function Step3ColumnPreprocessing({
       }
     };
     loadColumns();
-    return () => {
-      mounted = false;
-    };
+    return () => { mounted = false; };
   }, [projectId, config.datasetVersionId]);
 
   useEffect(() => {
     const valid = new Set(featureColumns.map((col) => col.name));
-    setSelectedColumns((prev) => new Set([...prev].filter((columnName) => valid.has(columnName))));
+    setSelectedColumns((prev) => new Set([...prev].filter((name) => valid.has(name))));
   }, [featureColumns]);
 
   const options: Step3Options = useMemo(
@@ -246,24 +219,14 @@ export function Step3ColumnPreprocessing({
   const testSubsetAvailable = Number(config.testRatio ?? 0) > 0;
 
   useEffect(() => {
-    if (previewSubset === "val" && !valSubsetAvailable) {
-      setPreviewSubset("train");
-      return;
-    }
-    if (previewSubset === "test" && !testSubsetAvailable) {
-      setPreviewSubset("train");
-    }
+    if (previewSubset === "val" && !valSubsetAvailable) { setPreviewSubset("train"); return; }
+    if (previewSubset === "test" && !testSubsetAvailable) setPreviewSubset("train");
   }, [previewSubset, testSubsetAvailable, valSubsetAvailable]);
 
   const validateOptions = useMemo(
     () => ({
       include: { preview: true },
-      preview: {
-        subset: previewSubset,
-        mode: previewMode,
-        n: previewN,
-        seed: PREVIEW_RANDOM_SEED,
-      },
+      preview: { subset: previewSubset, mode: previewMode, n: previewN, seed: PREVIEW_RANDOM_SEED },
     }),
     [previewMode, previewN, previewSubset]
   );
@@ -281,10 +244,7 @@ export function Step3ColumnPreprocessing({
   });
 
   const serverIssues = useMemo(() => {
-    const base = toServerIssueBuckets(
-      serverResult,
-      baseRows.map((row) => row.columnName)
-    );
+    const base = toServerIssueBuckets(serverResult, baseRows.map((r) => r.columnName));
     if (!validationError) return base;
     const out = createEmptyIssueBuckets();
     out.columnIssues = { ...base.columnIssues };
@@ -304,7 +264,7 @@ export function Step3ColumnPreprocessing({
   const previewColumns = useMemo(() => {
     const columnsRaw = serverResult?.previewTransformed?.columns;
     if (!Array.isArray(columnsRaw)) return [];
-    return columnsRaw.map((value) => String(value ?? ""));
+    return columnsRaw.map((v) => String(v ?? ""));
   }, [serverResult]);
 
   const previewRows = useMemo(() => {
@@ -318,12 +278,6 @@ export function Step3ColumnPreprocessing({
         )
       );
   }, [previewColumns.length, serverResult]);
-
-  const previewMeta = serverResult?.previewMeta;
-  const hasPreviewTable = previewColumns.length > 0;
-  const previewSubsetLabel = String(previewMeta?.subset ?? previewSubset).toUpperCase();
-  const previewSplitSeed = Number(previewMeta?.splitSeed ?? PREVIEW_RANDOM_SEED);
-  const previewFromCache = Boolean(previewMeta?.fromCache);
 
   const { mergedIssues, counts, columnCounts, issuesList } = useColumnIssues(localIssues, serverIssues);
 
@@ -357,7 +311,7 @@ export function Step3ColumnPreprocessing({
   );
 
   const selectedColumnNames = useMemo(
-    () => [...selectedColumns].filter((columnName) => rowsByName[columnName]),
+    () => [...selectedColumns].filter((name) => rowsByName[name]),
     [rowsByName, selectedColumns]
   );
 
@@ -366,12 +320,10 @@ export function Step3ColumnPreprocessing({
       rows.filter((row) => {
         const query = searchQuery.trim().toLowerCase();
         if (query && !row.columnName.toLowerCase().includes(query)) return false;
-
         if (statusFilter === "active" && !row.use) return false;
         if (statusFilter === "dropped" && row.use) return false;
         if (statusFilter === "errors" && row.errorCount === 0) return false;
         if (statusFilter === "warnings" && row.warningCount === 0) return false;
-
         if (typeFilter === "auto") return row.selectedType === "auto";
         if (typeFilter !== "all") return row.effectiveType === typeFilter;
         return true;
@@ -379,9 +331,7 @@ export function Step3ColumnPreprocessing({
     [rows, searchQuery, statusFilter, typeFilter]
   );
 
-  useEffect(() => {
-    setCurrentPage(1);
-  }, [searchQuery, statusFilter, typeFilter]);
+  useEffect(() => { setCurrentPage(1); }, [searchQuery, statusFilter, typeFilter]);
 
   const shouldPaginate = filteredRows.length > 200;
   const totalPages = shouldPaginate ? Math.max(1, Math.ceil(filteredRows.length / PAGE_SIZE)) : 1;
@@ -421,8 +371,8 @@ export function Step3ColumnPreprocessing({
   const applyDefaultsToSelected = () => {
     if (!selectedColumnNames.length) return;
     const nextColumns = { ...preprocessing.columns };
-    for (const columnName of selectedColumnNames) {
-      const current = nextColumns[columnName] ?? {};
+    for (const name of selectedColumnNames) {
+      const current = nextColumns[name] ?? {};
       const updated = cleanColumnConfig({
         ...current,
         use: current.use ?? true,
@@ -431,8 +381,8 @@ export function Step3ColumnPreprocessing({
         categoricalImputation: preprocessing.defaults.categoricalImputation,
         categoricalEncoding: preprocessing.defaults.categoricalEncoding,
       });
-      if (updated) nextColumns[columnName] = updated;
-      else delete nextColumns[columnName];
+      if (updated) nextColumns[name] = updated;
+      else delete nextColumns[name];
     }
     withBulkSnapshot(nextColumns);
   };
@@ -440,17 +390,17 @@ export function Step3ColumnPreprocessing({
   const resetSelectedColumns = () => {
     if (!selectedColumnNames.length) return;
     const nextColumns = { ...preprocessing.columns };
-    for (const columnName of selectedColumnNames) delete nextColumns[columnName];
+    for (const name of selectedColumnNames) delete nextColumns[name];
     withBulkSnapshot(nextColumns);
   };
 
   const setUseForSelected = (use: boolean) => {
     if (!selectedColumnNames.length) return;
     const nextColumns = { ...preprocessing.columns };
-    for (const columnName of selectedColumnNames) {
-      const updated = cleanColumnConfig({ ...(nextColumns[columnName] ?? {}), use });
-      if (updated) nextColumns[columnName] = updated;
-      else delete nextColumns[columnName];
+    for (const name of selectedColumnNames) {
+      const updated = cleanColumnConfig({ ...(nextColumns[name] ?? {}), use });
+      if (updated) nextColumns[name] = updated;
+      else delete nextColumns[name];
     }
     withBulkSnapshot(nextColumns);
   };
@@ -458,15 +408,15 @@ export function Step3ColumnPreprocessing({
   const setTypeForSelected = (type: TrainingColumnTypeSelection) => {
     if (!selectedColumnNames.length) return;
     const nextColumns = { ...preprocessing.columns };
-    for (const columnName of selectedColumnNames) {
-      const row = rowsByName[columnName];
-      const next = { ...(nextColumns[columnName] ?? {}) };
+    for (const name of selectedColumnNames) {
+      const row = rowsByName[name];
+      const next = { ...(nextColumns[name] ?? {}) };
       if (type === "auto") delete next.type;
       else next.type = type;
       if ((type === "auto" ? row?.inferredType : type) !== "ordinal") delete next.ordinalOrder;
       const updated = cleanColumnConfig(next);
-      if (updated) nextColumns[columnName] = updated;
-      else delete nextColumns[columnName];
+      if (updated) nextColumns[name] = updated;
+      else delete nextColumns[name];
     }
     withBulkSnapshot(nextColumns);
   };
@@ -474,13 +424,13 @@ export function Step3ColumnPreprocessing({
   const setEncodingForSelected = (encoding: TrainingPreprocessingDefaults["categoricalEncoding"]) => {
     if (!selectedColumnNames.length) return;
     const nextColumns = { ...preprocessing.columns };
-    for (const columnName of selectedColumnNames) {
-      if (rowsByName[columnName]?.effectiveType === "numeric") continue;
-      const next = { ...(nextColumns[columnName] ?? {}), categoricalEncoding: encoding };
+    for (const name of selectedColumnNames) {
+      if (rowsByName[name]?.effectiveType === "numeric") continue;
+      const next = { ...(nextColumns[name] ?? {}), categoricalEncoding: encoding };
       if (encoding !== "ordinal") delete next.ordinalOrder;
       const updated = cleanColumnConfig(next);
-      if (updated) nextColumns[columnName] = updated;
-      else delete nextColumns[columnName];
+      if (updated) nextColumns[name] = updated;
+      else delete nextColumns[name];
     }
     withBulkSnapshot(nextColumns);
   };
@@ -523,145 +473,31 @@ export function Step3ColumnPreprocessing({
             </div>
 
             <div className="grid grid-cols-2 md:grid-cols-5 gap-2">
-              <div className="rounded-lg border border-border/60 bg-background/70 p-2">
-                <p className="text-[11px] text-muted-foreground">Features</p>
-                <p className="text-sm font-semibold">{rows.length}</p>
-              </div>
-              <div className="rounded-lg border border-border/60 bg-background/70 p-2">
-                <p className="text-[11px] text-muted-foreground">Actives</p>
-                <p className="text-sm font-semibold text-emerald-700">{activeRowsCount}</p>
-              </div>
-              <div className="rounded-lg border border-border/60 bg-background/70 p-2">
-                <p className="text-[11px] text-muted-foreground">Droppees</p>
-                <p className="text-sm font-semibold text-amber-700">{droppedRowsCount}</p>
-              </div>
-              <div className="rounded-lg border border-border/60 bg-background/70 p-2">
-                <p className="text-[11px] text-muted-foreground">Types auto</p>
-                <p className="text-sm font-semibold">{autoTypeRowsCount}</p>
-              </div>
-              <div className="rounded-lg border border-border/60 bg-background/70 p-2">
-                <p className="text-[11px] text-muted-foreground">Types forces</p>
-                <p className="text-sm font-semibold">{manualTypeRowsCount}</p>
-              </div>
+              {[
+                { label: "Features", value: rows.length, className: "" },
+                { label: "Actives", value: activeRowsCount, className: "text-emerald-700" },
+                { label: "Droppees", value: droppedRowsCount, className: "text-amber-700" },
+                { label: "Types auto", value: autoTypeRowsCount, className: "" },
+                { label: "Types forces", value: manualTypeRowsCount, className: "" },
+              ].map(({ label, value, className }) => (
+                <div key={label} className="rounded-lg border border-border/60 bg-background/70 p-2">
+                  <p className="text-[11px] text-muted-foreground">{label}</p>
+                  <p className={`text-sm font-semibold ${className}`}>{value}</p>
+                </div>
+              ))}
             </div>
           </CardContent>
         </Card>
       </motion.div>
 
-      <Card className="glass-premium shadow-card">
-        <CardHeader className="pb-3">
-          <CardTitle className="flex items-center gap-2 text-base">
-            <div className="p-2 rounded-xl bg-primary/10">
-              <SlidersHorizontal className="h-4 w-4 text-primary" />
-            </div>
-            Defaults (templates)
-            <Badge variant="secondary" className="ml-auto text-xs">
-              Aucune activation auto
-            </Badge>
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
-            <div className="rounded-xl border border-border/60 bg-background/60 p-3 space-y-3">
-              <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Numerique</p>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div className="space-y-1">
-                  <p className="text-xs text-muted-foreground">Imputation numerique</p>
-                  <Select
-                    value={preprocessing.defaults.numericImputation}
-                    onValueChange={(v) =>
-                      setDefaultValue("numericImputation", v as TrainingPreprocessingDefaults["numericImputation"])
-                    }
-                  >
-                    <SelectTrigger className="h-10">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {options.numericImputation.map((m) => (
-                        <SelectItem key={m} value={m}>
-                          {labelForMethod(m)}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="space-y-1">
-                  <p className="text-xs text-muted-foreground">Scaling numerique</p>
-                  <Select
-                    value={preprocessing.defaults.numericScaling}
-                    onValueChange={(v) =>
-                      setDefaultValue("numericScaling", v as TrainingPreprocessingDefaults["numericScaling"])
-                    }
-                  >
-                    <SelectTrigger className="h-10">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {options.numericScaling.map((m) => (
-                        <SelectItem key={m} value={m}>
-                          {labelForMethod(m)}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
-            </div>
-
-            <div className="rounded-xl border border-border/60 bg-background/60 p-3 space-y-3">
-              <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Categoriel</p>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div className="space-y-1">
-                  <p className="text-xs text-muted-foreground">Imputation categorielle</p>
-                  <Select
-                    value={preprocessing.defaults.categoricalImputation}
-                    onValueChange={(v) =>
-                      setDefaultValue(
-                        "categoricalImputation",
-                        v as TrainingPreprocessingDefaults["categoricalImputation"]
-                      )
-                    }
-                  >
-                    <SelectTrigger className="h-10">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {options.categoricalImputation.map((m) => (
-                        <SelectItem key={m} value={m}>
-                          {labelForMethod(m)}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="space-y-1">
-                  <p className="text-xs text-muted-foreground">Encodage categoriel</p>
-                  <Select
-                    value={preprocessing.defaults.categoricalEncoding}
-                    onValueChange={(v) =>
-                      setDefaultValue("categoricalEncoding", v as TrainingPreprocessingDefaults["categoricalEncoding"])
-                    }
-                  >
-                    <SelectTrigger className="h-10">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {options.categoricalEncoding.map((m) => (
-                        <SelectItem key={m} value={m}>
-                          {labelForMethod(m)}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
+      <DefaultsPanel
+        preprocessing={preprocessing}
+        options={options}
+        onSetDefault={setDefaultValue}
+      />
 
       <div className="grid grid-cols-1 xl:grid-cols-12 gap-4 items-start">
-        <div className="xl:col-span-4 space-y-4">
+        <div className="xl:col-span-8">
           <IssuesPanel
             counts={counts}
             issues={issuesList}
@@ -669,12 +505,12 @@ export function Step3ColumnPreprocessing({
             lastValidatedAt={lastValidatedAt}
             validationError={validationError}
             onIssueClick={(columnName) => {
-              if (!filteredRows.some((row) => row.columnName === columnName)) {
+              if (!filteredRows.some((r) => r.columnName === columnName)) {
                 setSearchQuery("");
                 setStatusFilter("all");
                 setTypeFilter("all");
               }
-              const rowIndex = rows.findIndex((row) => row.columnName === columnName);
+              const rowIndex = rows.findIndex((r) => r.columnName === columnName);
               if (rowIndex >= 0 && rows.length > 200) setCurrentPage(Math.floor(rowIndex / PAGE_SIZE) + 1);
               setExpandedIssueRows((prev) => new Set(prev).add(columnName));
               window.setTimeout(
@@ -683,7 +519,9 @@ export function Step3ColumnPreprocessing({
               );
             }}
           />
+        </div>
 
+        <div className="xl:col-span-4">
           <motion.div initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }}>
             <Card className="border-dashed border-border/70">
               <CardContent className="py-4 text-xs text-muted-foreground">
@@ -701,149 +539,6 @@ export function Step3ColumnPreprocessing({
             </Card>
           </motion.div>
         </div>
-
-        <div className="xl:col-span-8">
-          <Card className="border-border/70">
-            <CardHeader className="pb-2">
-              <CardTitle className="flex items-center gap-2 text-base">
-                <div className="p-2 rounded-xl bg-primary/10">
-                  <Columns3 className="h-4 w-4 text-primary" />
-                </div>
-                Preview (transformed)
-                <Badge variant="secondary" className="ml-auto text-xs">
-                  fit sur TRAIN uniquement
-                </Badge>
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                <label className="space-y-1 text-xs text-muted-foreground">
-                  <span>Subset</span>
-                  <select
-                    aria-label="preview-subset"
-                    data-testid="preview-subset"
-                    className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
-                    value={previewSubset}
-                    onChange={(event) => setPreviewSubset(event.target.value as TrainingValidationPreviewSubset)}
-                  >
-                    <option value="train">Train</option>
-                    <option value="val" disabled={!valSubsetAvailable}>
-                      Val
-                    </option>
-                    <option value="test" disabled={!testSubsetAvailable}>
-                      Test
-                    </option>
-                  </select>
-                </label>
-                <label className="space-y-1 text-xs text-muted-foreground">
-                  <span>Mode</span>
-                  <select
-                    aria-label="preview-mode"
-                    data-testid="preview-mode"
-                    className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
-                    value={previewMode}
-                    onChange={(event) => setPreviewMode(event.target.value as TrainingValidationPreviewMode)}
-                  >
-                    <option value="head">Head</option>
-                    <option value="random">Random</option>
-                  </select>
-                </label>
-                <label className="space-y-1 text-xs text-muted-foreground">
-                  <span>Rows</span>
-                  <select
-                    aria-label="preview-n"
-                    data-testid="preview-n"
-                    className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
-                    value={String(previewN)}
-                    onChange={(event) => setPreviewN(Number(event.target.value))}
-                  >
-                    {PREVIEW_SAMPLE_SIZE_OPTIONS.map((value) => (
-                      <option key={value} value={value}>
-                        {value}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-              </div>
-
-              <Badge variant="outline" className="text-xs" data-testid="preview-meta-badge">
-                Preview fitted on TRAIN (seed={previewSplitSeed}) - subset: {previewSubsetLabel} - fromCache:{" "}
-                {previewFromCache ? "true" : "false"}
-              </Badge>
-
-              {hasPreviewTable ? (
-                <div className="space-y-2">
-                  {isValidating && (
-                    <p className="text-xs text-muted-foreground" data-testid="preview-updating">
-                      Updating preview...
-                    </p>
-                  )}
-                  {validationError && (
-                    <div className="rounded-lg border border-amber-300 bg-amber-50 p-2 text-xs text-amber-700">
-                      Latest preview update failed. Showing previous preview.
-                    </div>
-                  )}
-                  <div
-                    className="rounded-lg border border-border/60 overflow-auto"
-                    data-testid="preview-transformed-table"
-                  >
-                    <Table>
-                      <TableHeader>
-                        <TableRow>
-                          {previewColumns.map((column) => (
-                            <TableHead key={column}>{column}</TableHead>
-                          ))}
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {previewRows.length ? (
-                          previewRows.map((row, rowIndex) => (
-                            <TableRow key={`preview-row-${rowIndex}`}>
-                              {previewColumns.map((column, colIndex) => (
-                                <TableCell key={`${column}-${rowIndex}-${colIndex}`} className="font-mono text-xs">
-                                  {formatPreviewCell(row[colIndex])}
-                                </TableCell>
-                              ))}
-                            </TableRow>
-                          ))
-                        ) : (
-                          <TableRow>
-                            <TableCell
-                              colSpan={Math.max(1, previewColumns.length)}
-                              className="text-xs text-muted-foreground"
-                            >
-                              Preview returned no rows.
-                            </TableCell>
-                          </TableRow>
-                        )}
-                      </TableBody>
-                    </Table>
-                  </div>
-                </div>
-              ) : isValidating ? (
-                <div className="rounded-lg border border-border/60 p-3 space-y-2" data-testid="preview-loading">
-                  <div className="h-3 w-1/3 rounded bg-muted animate-pulse" />
-                  <div className="h-3 w-full rounded bg-muted animate-pulse" />
-                  <div className="h-3 w-5/6 rounded bg-muted animate-pulse" />
-                </div>
-              ) : validationError ? (
-                <div
-                  className="rounded-lg border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive"
-                  data-testid="preview-error"
-                >
-                  {validationError}
-                </div>
-              ) : (
-                <div
-                  className="rounded-lg border border-border/60 p-3 text-sm text-muted-foreground"
-                  data-testid="preview-empty"
-                >
-                  No preview data yet.
-                </div>
-              )}
-            </CardContent>
-          </Card>
-        </div>
       </div>
 
       <Card className="glass-premium shadow-card">
@@ -853,9 +548,7 @@ export function Step3ColumnPreprocessing({
               <Columns3 className="h-4 w-4 text-secondary" />
             </div>
             Preprocessing par colonne
-            <Badge variant="outline" className="ml-auto text-xs">
-              use=false (drop)
-            </Badge>
+            <Badge variant="outline" className="ml-auto text-xs">use=false (drop)</Badge>
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -866,84 +559,21 @@ export function Step3ColumnPreprocessing({
             </div>
           )}
 
-          <div className="rounded-xl border border-border/70 bg-muted/20 p-3 space-y-3">
-            <div className="flex flex-wrap items-center gap-2">
-              <div className="relative w-full lg:flex-1 lg:min-w-[280px]">
-                <Search className="h-4 w-4 absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
-                <Input
-                  value={searchQuery}
-                  onChange={(event) => setSearchQuery(event.target.value)}
-                  placeholder="Search columns..."
-                  className="pl-8"
-                />
-              </div>
-
-              <Select value={typeFilter} onValueChange={(value) => setTypeFilter(value as Step3TypeFilter)}>
-                <SelectTrigger className="h-9 w-full sm:w-[180px]">
-                  <SelectValue placeholder="Filter by type" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">Type: all</SelectItem>
-                  <SelectItem value="numeric">Type: numeric</SelectItem>
-                  <SelectItem value="categorical">Type: categorical</SelectItem>
-                  <SelectItem value="ordinal">Type: ordinal</SelectItem>
-                  <SelectItem value="auto">Type: auto</SelectItem>
-                </SelectContent>
-              </Select>
-
-              <Button
-                type="button"
-                size="sm"
-                variant="outline"
-                disabled={!hasActiveFilters}
-                onClick={() => {
-                  setSearchQuery("");
-                  setStatusFilter("all");
-                  setTypeFilter("all");
-                }}
-              >
-                Reset filters
-              </Button>
-            </div>
-
-            <div className="flex flex-wrap items-center gap-1">
-              {STATUS_FILTERS.map((item) => (
-                <Button
-                  key={item.value}
-                  type="button"
-                  size="sm"
-                  variant={statusFilter === item.value ? "secondary" : "ghost"}
-                  onClick={() => setStatusFilter(item.value)}
-                  className="gap-1.5"
-                >
-                  {item.label}
-                  <Badge variant="outline" className="text-[10px] px-1 py-0 leading-4">
-                    {statusFilterCounts[item.value]}
-                  </Badge>
-                </Button>
-              ))}
-            </div>
-
-            <div className="flex flex-wrap items-center gap-2 text-xs">
-              <Badge variant="outline" className="font-normal">
-                {filteredRows.length} / {rows.length} colonne(s) affichee(s)
-              </Badge>
-              <Badge variant="outline" className="font-normal">
-                {filteredSelectedCount} selectionnee(s) dans le filtre courant
-              </Badge>
-              {counts.errors > 0 ? (
-                <Badge variant="destructive" className="font-normal">
-                  <AlertTriangle className="h-3 w-3 mr-1" />
-                  {counts.errors} erreur(s)
-                </Badge>
-              ) : (
-                <Badge variant="secondary" className="font-normal">
-                  <CheckCircle2 className="h-3 w-3 mr-1" />
-                  Aucune erreur bloquante
-                </Badge>
-              )}
-            </div>
-          </div>
+          <ColumnFilterBar
+            searchQuery={searchQuery}
+            statusFilter={statusFilter}
+            typeFilter={typeFilter}
+            statusFilterCounts={statusFilterCounts}
+            filteredCount={filteredRows.length}
+            totalCount={rows.length}
+            filteredSelectedCount={filteredSelectedCount}
+            counts={counts}
+            hasActiveFilters={hasActiveFilters}
+            onSearchChange={setSearchQuery}
+            onStatusFilterChange={setStatusFilter}
+            onTypeFilterChange={setTypeFilter}
+            onResetFilters={() => { setSearchQuery(""); setStatusFilter("all"); setTypeFilter("all"); }}
+          />
 
           <BulkActionsBar
             selectedCount={selectedColumnNames.length}
@@ -989,18 +619,16 @@ export function Step3ColumnPreprocessing({
                   <Table>
                     <TableHeader>
                       <TableRow>
-                        <TableHead className="w-20 sticky top-0 z-20 bg-background/95 backdrop-blur">Status</TableHead>
-                        <TableHead className="w-12 sticky top-0 z-20 bg-background/95 backdrop-blur">Sel.</TableHead>
-                        <TableHead className="sticky top-0 z-20 bg-background/95 backdrop-blur">Colonne</TableHead>
-                        <TableHead className="w-24 sticky top-0 z-20 bg-background/95 backdrop-blur">Use</TableHead>
-                        <TableHead className="w-44 sticky top-0 z-20 bg-background/95 backdrop-blur">Type</TableHead>
-                        <TableHead className="w-48 sticky top-0 z-20 bg-background/95 backdrop-blur">Imputation</TableHead>
-                        <TableHead className="w-48 sticky top-0 z-20 bg-background/95 backdrop-blur">
-                          Scaling / Encoding
-                        </TableHead>
-                        <TableHead className="w-56 sticky top-0 z-20 bg-background/95 backdrop-blur">
-                          Ordinal order
-                        </TableHead>
+                        {["Status", "Sel.", "Colonne", "Use", "Type", "Imputation", "Scaling / Encoding", "Ordinal order"].map((header, i) => (
+                          <TableHead
+                            key={header}
+                            className={`sticky top-0 z-20 bg-background/95 backdrop-blur ${
+                              i === 0 ? "w-20" : i === 1 ? "w-12" : i === 3 ? "w-24" : i === 4 ? "w-44" : i === 5 ? "w-48" : i === 6 ? "w-48" : i === 7 ? "w-56" : ""
+                            }`}
+                          >
+                            {header}
+                          </TableHead>
+                        ))}
                       </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -1012,10 +640,8 @@ export function Step3ColumnPreprocessing({
                           autoTypeValue={AUTO_TYPE}
                           isSelected={selectedColumns.has(row.columnName)}
                           isExpanded={expandedIssueRows.has(row.columnName)}
-                          labelForMethod={labelForMethod}
-                          onRegisterRowRef={(node) => {
-                            rowRefs.current[row.columnName] = node;
-                          }}
+                          labelForMethod={(m) => m}
+                          onRegisterRowRef={(node) => { rowRefs.current[row.columnName] = node; }}
                           onToggleSelected={(checked) =>
                             setSelectedColumns((prev) => {
                               const next = new Set(prev);
@@ -1025,11 +651,11 @@ export function Step3ColumnPreprocessing({
                             })
                           }
                           onToggleUse={(checked) =>
-                            updateColumnConfig(row.columnName, (current) => ({ ...current, use: checked }))
+                            updateColumnConfig(row.columnName, (c) => ({ ...c, use: checked }))
                           }
                           onTypeChange={(value) =>
-                            updateColumnConfig(row.columnName, (current) => {
-                              const next = { ...current };
+                            updateColumnConfig(row.columnName, (c) => {
+                              const next = { ...c };
                               if (value === AUTO_TYPE) delete next.type;
                               else next.type = value;
                               if ((next.type ?? row.inferredType) !== "ordinal") delete next.ordinalOrder;
@@ -1037,28 +663,25 @@ export function Step3ColumnPreprocessing({
                             })
                           }
                           onNumericImputationChange={(value) =>
-                            updateColumnConfig(row.columnName, (current) => ({ ...current, numericImputation: value }))
+                            updateColumnConfig(row.columnName, (c) => ({ ...c, numericImputation: value }))
                           }
                           onCategoricalImputationChange={(value) =>
-                            updateColumnConfig(row.columnName, (current) => ({
-                              ...current,
-                              categoricalImputation: value,
-                            }))
+                            updateColumnConfig(row.columnName, (c) => ({ ...c, categoricalImputation: value }))
                           }
                           onNumericScalingChange={(value) =>
-                            updateColumnConfig(row.columnName, (current) => ({ ...current, numericScaling: value }))
+                            updateColumnConfig(row.columnName, (c) => ({ ...c, numericScaling: value }))
                           }
                           onCategoricalEncodingChange={(value) =>
-                            updateColumnConfig(row.columnName, (current) => {
-                              const next = { ...current, categoricalEncoding: value };
+                            updateColumnConfig(row.columnName, (c) => {
+                              const next = { ...c, categoricalEncoding: value };
                               if (value !== "ordinal") delete next.ordinalOrder;
                               return next;
                             })
                           }
                           onOrdinalOrderChange={(rawInput) =>
-                            updateColumnConfig(row.columnName, (current) => {
+                            updateColumnConfig(row.columnName, (c) => {
                               const parsed = parseOrdinalOrder(rawInput);
-                              return { ...current, ordinalOrder: parsed.length ? parsed : undefined };
+                              return { ...c, ordinalOrder: parsed.length ? parsed : undefined };
                             })
                           }
                           onToggleExpanded={() =>
@@ -1078,21 +701,15 @@ export function Step3ColumnPreprocessing({
               {shouldPaginate && (
                 <div className="flex flex-wrap items-center justify-end gap-2">
                   <Button
-                    type="button"
-                    size="sm"
-                    variant="outline"
+                    type="button" size="sm" variant="outline"
                     disabled={currentPage <= 1}
                     onClick={() => setCurrentPage((prev) => Math.max(1, prev - 1))}
                   >
                     Previous
                   </Button>
-                  <span className="text-xs text-muted-foreground">
-                    Page {currentPage} / {totalPages}
-                  </span>
+                  <span className="text-xs text-muted-foreground">Page {currentPage} / {totalPages}</span>
                   <Button
-                    type="button"
-                    size="sm"
-                    variant="outline"
+                    type="button" size="sm" variant="outline"
                     disabled={currentPage >= totalPages}
                     onClick={() => setCurrentPage((prev) => Math.min(totalPages, prev + 1))}
                   >
@@ -1104,6 +721,22 @@ export function Step3ColumnPreprocessing({
           )}
         </CardContent>
       </Card>
+
+      <PreviewPanel
+        previewColumns={previewColumns}
+        previewRows={previewRows}
+        previewMeta={serverResult?.previewMeta as Record<string, unknown> | null | undefined}
+        isValidating={isValidating}
+        validationError={validationError}
+        previewSubset={previewSubset}
+        previewMode={previewMode}
+        previewN={previewN}
+        valSubsetAvailable={valSubsetAvailable}
+        testSubsetAvailable={testSubsetAvailable}
+        onPreviewSubsetChange={setPreviewSubset}
+        onPreviewModeChange={setPreviewMode}
+        onPreviewNChange={setPreviewN}
+      />
     </div>
   );
 }

@@ -10,6 +10,8 @@ import {
   Brain,
   BarChart3,
   Rocket,
+  Sparkles,
+  CheckCircle2,
 } from "lucide-react";
 
 import { AppLayout } from "@/layouts/AppLayout";
@@ -18,7 +20,7 @@ import { useToast } from "@/hooks/use-toast";
 import { trainingService } from "@/services/trainingService";
 
 import type { TrainingConfig } from "@/types";
-import { DEFAULT_TRAINING_PREPROCESSING } from "@/types";
+import { DEFAULT_TRAINING_BALANCING, DEFAULT_TRAINING_PREPROCESSING } from "@/types";
 
 import { WizardStepper } from "@/components/training/wizard/WizardStepper";
 import { Step1DatasetTarget } from "@/components/training/wizard/Step1DatasetTarget";
@@ -35,14 +37,13 @@ const steps = [
   { label: "Dataset & Cible", icon: <Database className="h-5 w-5" /> },
   { label: "Split", icon: <Scissors className="h-5 w-5" /> },
   { label: "Colonnes", icon: <Columns className="h-5 w-5" /> },
-  { label: "Modèles", icon: <Brain className="h-5 w-5" /> },
-  { label: "Métriques", icon: <BarChart3 className="h-5 w-5" /> },
+  { label: "Modeles", icon: <Brain className="h-5 w-5" /> },
+  { label: "Metriques", icon: <BarChart3 className="h-5 w-5" /> },
   { label: "Lancer", icon: <Rocket className="h-5 w-5" /> },
 ];
 
 export function TrainingPage() {
   const params = useParams<{ projectId?: string; id?: string; versionId?: string }>();
-  // ✅ évite /projects/undefined/...
   const projectId = params.projectId ?? params.id;
   const routeVersionId = params.versionId;
 
@@ -67,6 +68,7 @@ export function TrainingPage() {
     gridCvFolds: 3,
     gridScoring: "auto",
     useSmote: false,
+    balancing: { ...DEFAULT_TRAINING_BALANCING },
     splitMethod: "holdout",
     trainRatio: 70,
     valRatio: 15,
@@ -122,6 +124,8 @@ export function TrainingPage() {
     }
   }, [currentStep, config, step3Validation.hasErrors]);
 
+  const progressValue = Math.round(((currentStep + 1) / steps.length) * 100);
+
   const handleStartTraining = async (): Promise<string | null> => {
     if (!projectId) {
       toast({
@@ -136,14 +140,15 @@ export function TrainingPage() {
       const session = await trainingService.startTraining(projectId, config);
 
       toast({
-        title: "Entraînement lancé",
-        description: `${(config.models || []).length} modèle(s) en cours...`,
+        title: "Entrainement lance",
+        description: `${(config.models || []).length} modele(s) en cours...`,
       });
 
       const sessionOut = session as { id?: string | number; session_id?: string | number };
       return String(sessionOut.id ?? sessionOut.session_id ?? "");
-    } catch (e: unknown) {
-      const message = e instanceof Error ? e.message : "Une erreur est survenue lors de l'entrainement.";
+    } catch (error: unknown) {
+      const message =
+        error instanceof Error ? error.message : "Une erreur est survenue lors de l'entrainement.";
       toast({
         title: "Erreur",
         description: message,
@@ -164,9 +169,8 @@ export function TrainingPage() {
       });
       return;
     }
-    navigate(
-      `/projects/${projectId}/versions/${versionId}/training/results?session=${encodeURIComponent(sessionId)}`
-    );
+
+    navigate(`/projects/${projectId}/versions/${versionId}/training/results?session=${encodeURIComponent(sessionId)}`);
   };
 
   const slideVariants = {
@@ -175,16 +179,15 @@ export function TrainingPage() {
     exit: (direction: number) => ({ x: direction > 0 ? -60 : 60, opacity: 0 }),
   };
 
-  // Render guard (évite l’appel API avec undefined)
   if (!projectId) {
     return (
       <AppLayout>
         <div className="w-full py-8">
-          <div className="rounded-2xl border border-border p-6">
+          <div className="ai-surface rounded-2xl p-6">
             <h1 className="text-xl font-semibold">Training</h1>
-            <p className="text-sm text-muted-foreground mt-2">
-              Impossible de récupérer l’ID du projet depuis la route. Vérifie ton router (paramètre
-              <code className="mx-1">:id</code> ou <code className="mx-1">:projectId</code>).
+            <p className="mt-2 text-sm text-muted-foreground">
+              Impossible de recuperer l'ID du projet depuis la route. Verifiez le parametre{" "}
+              <code className="mx-1">:id</code> ou <code className="mx-1">:projectId</code>.
             </p>
           </div>
         </div>
@@ -194,20 +197,60 @@ export function TrainingPage() {
 
   return (
     <AppLayout>
-      <div className="w-full min-w-0 space-y-5 sm:space-y-6 lg:space-y-8 pb-8">
-        {/* Header */}
-        <motion.div
-          initial={{ opacity: 0, y: -10 }}
+      <div className="w-full min-w-0 space-y-5 pb-8 sm:space-y-6 lg:space-y-7">
+        <motion.section
+          initial={{ opacity: 0, y: -12 }}
           animate={{ opacity: 1, y: 0 }}
-          className="space-y-2 text-center lg:text-left"
+          className="ai-surface-strong relative overflow-hidden p-6 sm:p-8"
         >
-          <h1 className="text-3xl font-bold text-gradient">Studio d'entraînement</h1>
-          <p className="text-muted-foreground">Configurez et lancez vos modèles en {steps.length} étapes</p>
-        </motion.div>
+          <div className="pointer-events-none absolute -left-16 top-8 h-36 w-36 rounded-full bg-primary/15 blur-3xl" />
+          <div className="pointer-events-none absolute right-0 top-0 h-40 w-40 rounded-full bg-secondary/12 blur-3xl" />
 
-        {/* Stepper */}
-        <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }}>
-          <div className="overflow-x-auto pb-2">
+          <div className="relative space-y-4">
+            <span className="ai-chip">
+              <Sparkles className="h-3.5 w-3.5" />
+              AI Training Studio
+            </span>
+            <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+              <div>
+                <h1 className="text-3xl font-bold tracking-tight sm:text-4xl">Studio d'entrainement</h1>
+                <p className="mt-2 text-sm text-muted-foreground sm:text-base">
+                  Configurez, comparez et lancez vos modeles en {steps.length} etapes.
+                </p>
+              </div>
+              <div className="grid grid-cols-3 gap-3 text-xs sm:text-sm">
+                <div className="rounded-xl border border-border/60 bg-card/70 px-3 py-2 text-center">
+                  <p className="font-semibold text-foreground">{config.datasetVersionId ? "OK" : "N/A"}</p>
+                  <p className="text-muted-foreground">Dataset</p>
+                </div>
+                <div className="rounded-xl border border-border/60 bg-card/70 px-3 py-2 text-center">
+                  <p className="font-semibold text-foreground">{config.models.length}</p>
+                  <p className="text-muted-foreground">Modeles</p>
+                </div>
+                <div className="rounded-xl border border-border/60 bg-card/70 px-3 py-2 text-center">
+                  <p className="font-semibold text-foreground">{config.metrics.length}</p>
+                  <p className="text-muted-foreground">Metriques</p>
+                </div>
+              </div>
+            </div>
+
+            <div className="space-y-1.5">
+              <div className="flex items-center justify-between text-xs text-muted-foreground">
+                <span>Progression</span>
+                <span>{progressValue}%</span>
+              </div>
+              <div className="h-2 overflow-hidden rounded-full bg-muted">
+                <div
+                  className="h-full rounded-full bg-gradient-to-r from-primary to-secondary transition-all duration-300"
+                  style={{ width: `${progressValue}%` }}
+                />
+              </div>
+            </div>
+          </div>
+        </motion.section>
+
+        <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }}>
+          <div className="ai-surface overflow-x-auto p-3 sm:p-4">
             <div className="min-w-[680px] md:min-w-0">
               <WizardStepper
                 steps={steps}
@@ -219,7 +262,6 @@ export function TrainingPage() {
           </div>
         </motion.div>
 
-        {/* Step Content */}
         <AnimatePresence mode="wait" custom={1}>
           <motion.div
             key={currentStep}
@@ -260,21 +302,21 @@ export function TrainingPage() {
           </motion.div>
         </AnimatePresence>
 
-        {/* Navigation */}
         {currentStep < steps.length - 1 && (
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
-            className="flex items-center justify-between pt-4 border-t border-border/50"
+            className="ai-surface flex items-center justify-between border-border/60 px-4 py-3"
           >
             <Button variant="ghost" onClick={goPrev} disabled={currentStep === 0} className="gap-2">
               <ChevronLeft className="h-4 w-4" />
-              Précédent
+              Precedent
             </Button>
 
-            <span className="text-sm text-muted-foreground">
-              Étape {currentStep + 1} / {steps.length}
-            </span>
+            <div className="hidden items-center gap-2 text-sm text-muted-foreground sm:flex">
+              <CheckCircle2 className="h-4 w-4 text-success" />
+              Etape {currentStep + 1} / {steps.length}
+            </div>
 
             <Button onClick={goNext} disabled={!canGoNext} className="gap-2 gradient-premium text-primary-foreground">
               Suivant
@@ -282,9 +324,10 @@ export function TrainingPage() {
             </Button>
           </motion.div>
         )}
+
         {currentStep === 2 && step3Validation.hasErrors && (
-          <div className="rounded-lg border border-destructive/30 bg-destructive/5 p-3 text-xs text-destructive">
-            Corrigez les erreurs Step 3 pour continuer ({step3Validation.errorCount} erreur(s)).
+          <div className="rounded-lg border border-destructive/30 bg-destructive/10 p-3 text-xs text-destructive">
+            Corrigez les erreurs de l'etape 3 pour continuer ({step3Validation.errorCount} erreur(s)).
           </div>
         )}
       </div>
@@ -293,4 +336,3 @@ export function TrainingPage() {
 }
 
 export default TrainingPage;
-
