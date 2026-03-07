@@ -18,6 +18,7 @@ import type {
   TrainingSession,
   TrainingValidationPreviewSubset,
   TrainingValidationPreviewMode,
+  SavedModelSummary,
 } from "@/types";
 export type { TrainingValidationPreviewSubset, TrainingValidationPreviewMode };
 import {
@@ -28,7 +29,77 @@ import {
 
 export type { TrainingSession, ModelResult };
 
-type SaveModelResponse = { success: boolean; message?: string };
+type SaveModelResponse = {
+  success: boolean;
+  message?: string;
+  isNowActive?: boolean;
+  modelId?: string | number;
+  previousActiveModelId?: string | number | null;
+};
+
+type RawRecord = Record<string, unknown>;
+
+function _toSaveModelResponse(raw: RawRecord): SaveModelResponse {
+  return {
+    success: Boolean(raw["success"]),
+    message: raw["message"] != null ? String(raw["message"]) : undefined,
+    isNowActive: Boolean(raw["isNowActive"] ?? raw["is_now_active"]),
+    modelId: (raw["modelId"] ?? raw["model_id"]) as string | number | undefined,
+    previousActiveModelId: (raw["previousActiveModelId"] ?? raw["previous_active_model_id"]) as
+      | string
+      | number
+      | null
+      | undefined,
+  };
+}
+
+function _toSavedModelSummary(raw: RawRecord): SavedModelSummary {
+  return {
+    id: String(raw["id"] ?? raw["modelId"] ?? raw["model_id"] ?? ""),
+    modelType: String(raw["modelType"] ?? raw["model_type"] ?? ""),
+    taskType:
+      (raw["taskType"] as "classification" | "regression") ??
+      (raw["task_type"] as "classification" | "regression") ??
+      "classification",
+    sessionId: String(raw["sessionId"] ?? raw["session_id"] ?? ""),
+    datasetVersionId:
+      raw["datasetVersionId"] != null
+        ? String(raw["datasetVersionId"])
+        : raw["dataset_version_id"] != null
+          ? String(raw["dataset_version_id"])
+          : null,
+    datasetVersionName:
+      raw["datasetVersionName"] != null
+        ? String(raw["datasetVersionName"])
+        : raw["dataset_version_name"] != null
+          ? String(raw["dataset_version_name"])
+          : null,
+    isActive: Boolean(raw["isActive"] ?? raw["is_active"]),
+    isSaved: Boolean(raw["isSaved"] ?? raw["is_saved"]),
+    featureNames:
+      ((raw["featureNames"] ?? raw["feature_names"]) as string[] | undefined) ?? [],
+    threshold: (raw["threshold"] as number) ?? 0.5,
+    trainedAt: String(raw["trainedAt"] ?? raw["trained_at"] ?? ""),
+    testScore:
+      raw["testScore"] != null
+        ? (raw["testScore"] as number)
+        : raw["test_score"] != null
+          ? (raw["test_score"] as number)
+          : undefined,
+    primaryMetric:
+      raw["primaryMetric"] != null
+        ? String(raw["primaryMetric"])
+        : raw["primary_metric"] != null
+          ? String(raw["primary_metric"])
+          : null,
+    trainingTime:
+      raw["trainingTime"] != null
+        ? (raw["trainingTime"] as number)
+        : raw["training_time"] != null
+          ? (raw["training_time"] as number)
+          : undefined,
+  };
+}
 
 export type TrainingPreprocessingCapabilities = {
   numericImputation: NumericImputationStrategy[];
@@ -125,7 +196,9 @@ export type TrainingStartPayload = {
   targetColumn: string;
   taskType: TrainingConfig["taskType"];
   models: string[];
-  useGridSearch: boolean;
+  searchType: string;
+  nIterRandomSearch: number;
+  useGridSearch: boolean;  // backward compat
   gridCvFolds: number;
   gridScoring: string;
   useSmote: boolean;
@@ -217,8 +290,8 @@ function toPreprocessingCapabilities(raw: unknown): TrainingPreprocessingCapabil
       fallback.categoricalEncoding
     );
     const defaultsRawTyped = (src.defaults ?? {}) as Partial<TrainingPreprocessingDefaults>;
-    const rawSupportsPerColumn = (src as any)?.supportsPerColumn;
-    const columnTypes = sanitizeColumnTypes(toUniqueStringList((src as any)?.columnTypes));
+    const rawSupportsPerColumn = src.supportsPerColumn;
+    const columnTypes = sanitizeColumnTypes(toUniqueStringList(src.columnTypes));
 
     return {
       numericImputation: numericImputation.length ? numericImputation : fallback.numericImputation,
@@ -256,11 +329,15 @@ function toPreprocessingCapabilities(raw: unknown): TrainingPreprocessingCapabil
   }
 
   // Legacy backend shape support.
-  const legacy = src as Record<string, any>;
-  const impNum = toUniqueStringList(legacy?.imputation?.numeric);
-  const impCat = toUniqueStringList(legacy?.imputation?.categorical);
-  const encCat = toUniqueStringList(legacy?.encoding?.categorical);
-  const sclNum = toUniqueStringList(legacy?.scaling?.numeric);
+  const legacy = src as {
+    imputation?: { numeric?: unknown; categorical?: unknown };
+    encoding?: { categorical?: unknown };
+    scaling?: { numeric?: unknown };
+  };
+  const impNum = toUniqueStringList(legacy.imputation?.numeric);
+  const impCat = toUniqueStringList(legacy.imputation?.categorical);
+  const encCat = toUniqueStringList(legacy.encoding?.categorical);
+  const sclNum = toUniqueStringList(legacy.scaling?.numeric);
 
   return {
     numericImputation: sanitizeEnumList(impNum, fallback.numericImputation).length
@@ -378,7 +455,9 @@ export function toTrainingStartPayload(config: TrainingConfig): TrainingStartPay
     targetColumn: String(config.targetColumn ?? "").trim(),
     taskType: config.taskType,
     models: [...(config.models ?? [])].map((m) => String(m).trim()).filter(Boolean),
-    useGridSearch: Boolean(config.useGridSearch),
+    searchType: config.searchType ?? "none",
+    nIterRandomSearch: Number(config.nIterRandomSearch ?? 40),
+    useGridSearch: (config.searchType ?? "none") !== "none",  // backward compat
     gridCvFolds: Number(config.gridCvFolds),
     gridScoring: String(config.gridScoring ?? "auto"),
     useSmote,
@@ -423,7 +502,7 @@ export const trainingService = {
     return {
       ...(raw as Omit<TrainingCapabilities, "preprocessingCapabilities">),
       preprocessingCapabilities: toPreprocessingCapabilities(
-        (raw as any)?.preprocessingCapabilities ?? (raw as any)?.preprocessing
+        raw.preprocessingCapabilities ?? raw.preprocessing
       ),
     };
   },
@@ -481,16 +560,31 @@ export const trainingService = {
   },
 
   async saveModel(projectId: string, sessionId: string, modelId: string): Promise<SaveModelResponse> {
-    return await apiClient.post<SaveModelResponse>(
-      `/projects/${projectId}/training/sessions/${sessionId}/models/${modelId}/save`
+    const raw = await apiClient.post<RawRecord>(
+      `/projects/${projectId}/training/sessions/${sessionId}/models/${encodeURIComponent(modelId)}/save`
     );
+    return _toSaveModelResponse(raw);
+  },
+
+  async unsaveModel(projectId: string, sessionId: string, modelId: string): Promise<void> {
+    await apiClient.delete(
+      `/projects/${projectId}/training/sessions/${sessionId}/models/${encodeURIComponent(modelId)}/save`
+    );
+  },
+
+  async getSavedModels(projectId: string): Promise<SavedModelSummary[]> {
+    const raw = await apiClient.get<RawRecord[]>(
+      `/projects/${projectId}/training/saved-models`
+    );
+    return raw.map(_toSavedModelSummary);
   },
 
   async downloadResults(projectId: string, sessionId: string): Promise<Blob> {
     try {
       const { blob } = await apiClient.getBlob(`/projects/${projectId}/training/sessions/${sessionId}/download`);
       return blob;
-    } catch {
+    } catch (primaryError) {
+      console.warn('downloadResults: primary /download endpoint failed, trying /export fallback', primaryError);
       const { blob } = await apiClient.getBlob(`/projects/${projectId}/training/sessions/${sessionId}/export`);
       return blob;
     }

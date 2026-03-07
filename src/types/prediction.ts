@@ -14,6 +14,28 @@ export interface ActiveModelInfo {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// Saved models list (used by prediction page dropdown)
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** One entry in the list of saved models, returned by GET /saved-models. */
+export interface SavedModelSummary {
+  id: string;
+  modelType: string;
+  taskType: 'classification' | 'regression';
+  sessionId: string;
+  datasetVersionId: string | null;
+  datasetVersionName: string | null;
+  isActive: boolean;
+  isSaved: boolean;
+  featureNames: string[];
+  threshold: number;
+  trainedAt: string;
+  testScore?: number;
+  primaryMetric?: string | null;
+  trainingTime?: number;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Prediction result structures
 // ─────────────────────────────────────────────────────────────────────────────
 

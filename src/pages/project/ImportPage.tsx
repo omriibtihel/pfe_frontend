@@ -211,7 +211,7 @@ export function ImportPage() {
   return (
     <AppLayout>
       <motion.div
-        className="space-y-6 max-w-4xl mx-auto"
+        className="space-y-6 w-full"
         initial="initial"
         animate="animate"
         variants={staggerContainer}

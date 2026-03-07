@@ -225,7 +225,15 @@ export function Step6Summary({ projectId, config, onStartTraining, onGoToResults
     },
     { label: "Classe positive", value: config.positiveLabel == null || String(config.positiveLabel).trim() === "" ? "-" : String(config.positiveLabel) },
     { label: "Debug training", value: config.trainingDebug ? "Active" : "Desactive" },
-    { label: "GridSearch", value: config.useGridSearch ? `Active (${config.gridCvFolds} folds)` : "Desactive" },
+    {
+      label: "Optimisation HP",
+      value:
+        config.searchType === "grid"
+          ? `GridSearch (${config.gridCvFolds} folds)`
+          : config.searchType === "random"
+          ? `RandomizedSearch (${config.nIterRandomSearch ?? 40} iters, ${config.gridCvFolds} folds)`
+          : "Desactivee",
+    },
   ];
 
   return (

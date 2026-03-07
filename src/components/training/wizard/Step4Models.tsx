@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, type ReactNode } from "react";
-import { motion } from "framer-motion";
+import { AnimatePresence, motion } from "framer-motion";
 import { AlertTriangle, BarChart3, Brain, CheckCircle2, Grid3X3, MoreHorizontal, Sparkles, Zap } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -20,6 +20,8 @@ import type {
   TrainingConfig,
   TrainingHyperparamFieldSchema,
   TrainingThresholdStrategy,
+  GridScoringOption,
+  SearchType,
 } from "@/types";
 import { DEFAULT_TRAINING_BALANCING } from "@/types";
 import { cn } from "@/lib/utils";
@@ -40,21 +42,23 @@ type ModelCardOption = {
 };
 
 const modelCatalog: Array<{ value: ModelType; label: string; desc: string; icon: ReactNode }> = [
-  { value: "randomforest", label: "Random Forest", desc: "Robuste, interpretable", icon: <Brain className="h-4 w-4" /> },
-  { value: "xgboost", label: "XGBoost", desc: "Haute performance", icon: <Sparkles className="h-4 w-4" /> },
-  { value: "lightgbm", label: "LightGBM", desc: "Rapide, efficace", icon: <Zap className="h-4 w-4" /> },
-  { value: "svm", label: "SVM", desc: "Bon pour petits datasets", icon: <Brain className="h-4 w-4" /> },
-  { value: "knn", label: "KNN", desc: "Simple, intuitif", icon: <Brain className="h-4 w-4" /> },
-  { value: "decisiontree", label: "Decision Tree", desc: "Tres interpretable", icon: <Brain className="h-4 w-4" /> },
-  { value: "logisticregression", label: "Logistic Reg.", desc: "Classification lineaire", icon: <BarChart3 className="h-4 w-4" /> },
+  { value: "randomforest",     label: "Random Forest",    desc: "Robuste, interpretable",          icon: <Brain className="h-4 w-4" /> },
+  { value: "extratrees",       label: "Extra Trees",      desc: "Plus rapide que RF, moins de variance", icon: <Brain className="h-4 w-4" /> },
+  { value: "xgboost",          label: "XGBoost",          desc: "Haute performance",               icon: <Sparkles className="h-4 w-4" /> },
+  { value: "lightgbm",         label: "LightGBM",         desc: "Rapide, efficace",                icon: <Zap className="h-4 w-4" /> },
+  { value: "gradientboosting", label: "Gradient Boosting",desc: "Boosting sklearn natif",          icon: <BarChart3 className="h-4 w-4" /> },
+  { value: "svm",              label: "SVM",              desc: "Bon pour petits datasets",        icon: <Brain className="h-4 w-4" /> },
+  { value: "knn",              label: "KNN",              desc: "Simple, intuitif",                icon: <Brain className="h-4 w-4" /> },
+  { value: "decisiontree",     label: "Decision Tree",    desc: "Tres interpretable",              icon: <Brain className="h-4 w-4" /> },
+  { value: "logisticregression", label: "Logistic Reg.", desc: "Classification lineaire",         icon: <BarChart3 className="h-4 w-4" /> },
 ];
 
-const gridScoringOptions = [
-  { value: "auto", label: "Auto" },
-  { value: "roc_auc", label: "ROC AUC" },
-  { value: "average_precision", label: "Avg Precision" },
-  { value: "f1_weighted", label: "F1 Weighted" },
-  { value: "r2", label: "R²" },
+const GRID_SCORING_OPTIONS: Array<{ value: GridScoringOption; label: string; desc: string }> = [
+  { value: "auto", label: "Auto", desc: "Choisit automatiquement selon le type de tâche" },
+  { value: "roc_auc", label: "ROC AUC", desc: "Classification — aire sous la courbe ROC" },
+  { value: "average_precision", label: "Avg Precision", desc: "Classification — PR-AUC, robuste aux déséquilibres" },
+  { value: "f1_weighted", label: "F1 Weighted", desc: "Classification multi-classe pondérée" },
+  { value: "r2", label: "R² Score", desc: "Régression uniquement" },
 ];
 
 const fallbackBalancingStrategies: Array<{ id: TrainingBalancingStrategy; label: string }> = [
@@ -142,6 +146,25 @@ export function Step4Models({ projectId, config, onConfigChange }: Step4Props) {
   const [balanceLoading, setBalanceLoading] = useState(false);
   const [balanceError, setBalanceError] = useState<string | null>(null);
   const [pendingStrategy, setPendingStrategy] = useState<TrainingBalancingStrategy | null>(null);
+  const [cvFoldsError, setCvFoldsError] = useState<string | null>(null);
+
+  const scoringOptions = useMemo(
+    () =>
+      GRID_SCORING_OPTIONS.filter((o) => {
+        if (config.taskType === "regression") return o.value === "auto" || o.value === "r2";
+        return o.value !== "r2";
+      }),
+    [config.taskType]
+  );
+
+  const handleCvFoldsChange = (raw: string) => {
+    const n = Number.parseInt(raw, 10);
+    if (!Number.isFinite(n)) { setCvFoldsError("Valeur invalide"); return; }
+    if (n < 2) { setCvFoldsError("Minimum 2 folds"); onConfigChange({ gridCvFolds: 2 }); return; }
+    if (n > 10) { setCvFoldsError("Maximum 10 folds"); onConfigChange({ gridCvFolds: 10 }); return; }
+    setCvFoldsError(null);
+    onConfigChange({ gridCvFolds: n });
+  };
 
   useEffect(() => {
     let mounted = true;
@@ -285,7 +308,16 @@ export function Step4Models({ projectId, config, onConfigChange }: Step4Props) {
     [activeModelKey, availableModels]
   );
   const activeModelSchema = modelHpSchema[activeModelKey] ?? {};
-  const activeModelFields = useMemo(() => Object.entries(activeModelSchema), [activeModelSchema]);
+  // Filter out fields that don't apply to the current task type (e.g. class_weight in regression).
+  const activeModelFields = useMemo(
+    () =>
+      Object.entries(activeModelSchema).filter(([, fieldSchema]) => {
+        const supportedIn = fieldSchema.supported_in;
+        if (!supportedIn || supportedIn.length === 0) return true;
+        return supportedIn.includes(config.taskType);
+      }),
+    [activeModelSchema, config.taskType]
+  );
   const activeModelSelected = useMemo(
     () => (config.models ?? []).some((m) => normalizeModelKey(m) === activeModelKey),
     [activeModelKey, config.models]
@@ -338,7 +370,7 @@ export function Step4Models({ projectId, config, onConfigChange }: Step4Props) {
           </CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
             {availableModels.map((m, i) => {
               const selected = config.models.includes(m.value);
               const modelKey = normalizeModelKey(m.value);
@@ -407,7 +439,7 @@ export function Step4Models({ projectId, config, onConfigChange }: Step4Props) {
               <Badge variant="outline" className="uppercase">
                 {activeModel?.label ?? activeModelKey}
               </Badge>
-              {config.useGridSearch && (
+              {(config.searchType ?? "none") !== "none" && (
                 <Badge variant="secondary" className="text-[10px] ml-auto">
                   Listes: separees par virgules
                 </Badge>
@@ -431,14 +463,26 @@ export function Step4Models({ projectId, config, onConfigChange }: Step4Props) {
                 const displayValue = toDisplayText(rawModelValue, fieldSchema.default);
                 const fieldType = String(fieldSchema.type ?? "").toLowerCase();
                 const enumOptions = Array.isArray(fieldSchema.enum) ? fieldSchema.enum : [];
-                const isEnumSelect = !config.useGridSearch && fieldType === "enum";
+                const isSearchActive = (config.searchType ?? "none") !== "none";
+                const isEnumSelect = !isSearchActive && fieldType === "enum";
+                const isEnumOrNullSelect = !isSearchActive && fieldType === "enum_or_null";
+
+                // For enum_or_null: sentinel string "null" maps to null value; actual null → "null" sentinel.
+                const enumOrNullValue =
+                  rawModelValue === null || rawModelValue === undefined
+                    ? String(fieldSchema.default ?? "null")
+                    : String(rawModelValue);
+
+                const handleEnumOrNull = (next: string) => {
+                  setModelField(activeModelKey, fieldName, next === "null" ? null : next);
+                };
 
                 return (
                   <div key={`${activeModelKey}-${fieldName}`} className="space-y-1">
                     <div className="flex items-center justify-between gap-3">
                       <Label className="text-xs font-medium">{fieldName}</Label>
                       <span className="text-[11px] text-muted-foreground">
-                        Default: {String(fieldSchema.default ?? "")}
+                        Default: {String(fieldSchema.default ?? "null")}
                       </span>
                     </div>
 
@@ -458,6 +502,25 @@ export function Step4Models({ projectId, config, onConfigChange }: Step4Props) {
                           ))}
                         </SelectContent>
                       </Select>
+                    ) : isEnumOrNullSelect ? (
+                      <Select value={enumOrNullValue} onValueChange={handleEnumOrNull}>
+                        <SelectTrigger className="h-8 text-xs">
+                          <SelectValue placeholder="Choisir..." />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="null">
+                            <span className="text-muted-foreground italic">null — désactivé</span>
+                          </SelectItem>
+                          {enumOptions.map((opt) => (
+                            <SelectItem key={`${activeModelKey}-${fieldName}-${opt}`} value={String(opt)}>
+                              {String(opt)}
+                              {String(opt) === String(fieldSchema.default) && (
+                                <span className="ml-1.5 text-[10px] text-muted-foreground">(défaut)</span>
+                              )}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
                     ) : (
                       <Input
                         type={fieldType === "int" || fieldType === "float" ? "number" : "text"}
@@ -466,11 +529,11 @@ export function Step4Models({ projectId, config, onConfigChange }: Step4Props) {
                           setModelField(
                             activeModelKey,
                             fieldName,
-                            parseFieldValue(e.target.value, fieldSchema, Boolean(config.useGridSearch))
+                            parseFieldValue(e.target.value, fieldSchema, isSearchActive)
                           )
                         }
                         className="h-8 text-xs"
-                        placeholder={config.useGridSearch ? "ex: 100,200" : `ex: ${String(fieldSchema.default ?? "")}`}
+                        placeholder={isSearchActive ? "ex: 100,200" : `ex: ${String(fieldSchema.default ?? "")}`}
                       />
                     )}
 
@@ -643,48 +706,134 @@ export function Step4Models({ projectId, config, onConfigChange }: Step4Props) {
         </Card>
 
         <Card className="glass-premium shadow-card">
-          <CardContent className="py-5 space-y-4">
-            <label className="flex items-start gap-3 cursor-pointer">
-              <Checkbox checked={config.useGridSearch} onCheckedChange={(c) => onConfigChange({ useGridSearch: !!c })} />
-              <div>
-                <div className="flex items-center gap-2">
-                  <Grid3X3 className="h-4 w-4 text-primary" />
-                  <span className="font-semibold text-sm">GridSearch CV</span>
-                </div>
-                <p className="text-xs text-muted-foreground mt-1">Optimisation automatique des hyperparametres</p>
+          <CardHeader className="pb-3">
+            <CardTitle className="flex items-center gap-2 text-base">
+              <div className="p-2 rounded-xl bg-primary/10">
+                <Grid3X3 className="h-4 w-4 text-primary" />
               </div>
-            </label>
+              Optimisation des hyperparametres
+              {(config.searchType ?? "none") !== "none" && (
+                <Badge variant="secondary" className="ml-auto text-xs">
+                  {config.gridCvFolds} folds
+                </Badge>
+              )}
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="pt-0 space-y-4">
+            <div className="space-y-1">
+              <Label htmlFor="search-type" className="text-xs text-muted-foreground">Methode de recherche</Label>
+              <Select
+                value={config.searchType ?? "none"}
+                onValueChange={(v) => onConfigChange({
+                  searchType: v as SearchType,
+                  useGridSearch: v !== "none",
+                })}
+              >
+                <SelectTrigger id="search-type" className="h-8 text-xs">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">
+                    <span>Aucune</span>
+                    <span className="ml-2 text-[10px] text-muted-foreground">Parametres fixes uniquement</span>
+                  </SelectItem>
+                  <SelectItem value="grid">
+                    <span>GridSearch</span>
+                    <span className="ml-2 text-[10px] text-muted-foreground">Grille fixe, exhaustif</span>
+                  </SelectItem>
+                  <SelectItem value="random">
+                    <span>RandomizedSearch</span>
+                    <span className="ml-2 text-[10px] text-muted-foreground">Espace continu, plus efficace</span>
+                  </SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
 
-            {config.useGridSearch && (
-              <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} className="space-y-3 pl-7">
-                <div className="flex items-center gap-3">
-                  <label className="text-xs text-muted-foreground whitespace-nowrap">CV Folds</label>
-                  <Input
-                    type="number"
-                    min={2}
-                    max={10}
-                    value={config.gridCvFolds}
-                    onChange={(e) => onConfigChange({ gridCvFolds: Math.max(2, parseInt(e.target.value, 10) || 3) })}
-                    className="w-20 h-8 text-xs"
-                  />
-                </div>
-                <div className="flex items-center gap-3">
-                  <label className="text-xs text-muted-foreground whitespace-nowrap">Scoring</label>
-                  <Select value={config.gridScoring} onValueChange={(v) => onConfigChange({ gridScoring: v })}>
-                    <SelectTrigger className="h-8 text-xs w-36">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {gridScoringOptions.map((o) => (
-                        <SelectItem key={o.value} value={o.value}>
-                          {o.label}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-              </motion.div>
-            )}
+            <AnimatePresence initial={false}>
+              {(config.searchType ?? "none") !== "none" && (
+                <motion.div
+                  key="search-config"
+                  initial={{ opacity: 0, height: 0 }}
+                  animate={{ opacity: 1, height: "auto" }}
+                  exit={{ opacity: 0, height: 0 }}
+                  transition={{ duration: 0.2 }}
+                  className="overflow-hidden"
+                >
+                  <div className="space-y-4 pt-2 border-t border-border/40">
+                    {config.searchType === "random" && (
+                      <div className="space-y-1">
+                        <Label htmlFor="n-iter" className="text-xs text-muted-foreground">Nombre d'iterations</Label>
+                        <Input
+                          id="n-iter"
+                          type="number"
+                          min={5}
+                          max={300}
+                          value={config.nIterRandomSearch ?? 40}
+                          onChange={(e) => {
+                            const v = parseInt(e.target.value, 10);
+                            if (!isNaN(v) && v >= 5 && v <= 300) {
+                              onConfigChange({ nIterRandomSearch: v });
+                            }
+                          }}
+                          className="w-24 h-8 text-xs"
+                        />
+                        <p className="text-[11px] text-muted-foreground">Entre 5 et 300 (defaut: 40)</p>
+                      </div>
+                    )}
+
+                    <div className="space-y-1">
+                      <Label htmlFor="cv-folds" className="text-xs text-muted-foreground">CV Folds</Label>
+                      <Input
+                        id="cv-folds"
+                        type="number"
+                        min={2}
+                        max={10}
+                        value={config.gridCvFolds}
+                        onChange={(e) => handleCvFoldsChange(e.target.value)}
+                        className={cn("w-24 h-8 text-xs", cvFoldsError && "border-destructive")}
+                      />
+                      {cvFoldsError ? (
+                        <p className="text-[11px] text-destructive">{cvFoldsError}</p>
+                      ) : (
+                        <p className="text-[11px] text-muted-foreground">Entre 2 et 10 (defaut: 3)</p>
+                      )}
+                    </div>
+
+                    <div className="space-y-1">
+                      <Label htmlFor="gs-scoring" className="text-xs text-muted-foreground">Scoring</Label>
+                      <Select
+                        value={config.gridScoring}
+                        onValueChange={(v) => onConfigChange({ gridScoring: v as GridScoringOption })}
+                      >
+                        <SelectTrigger id="gs-scoring" className="h-8 text-xs">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {scoringOptions.map((o) => (
+                            <SelectItem key={o.value} value={o.value}>
+                              <span>{o.label}</span>
+                              <span className="ml-2 text-[10px] text-muted-foreground">{o.desc}</span>
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+
+                    {config.models.length >= 3 && (
+                      <div className="rounded-lg border border-amber-300/50 bg-amber-50/60 dark:bg-amber-950/20 p-2.5 text-[11px] flex items-start gap-2 text-amber-800 dark:text-amber-400">
+                        <AlertTriangle className="h-3.5 w-3.5 shrink-0 mt-0.5" />
+                        <span>
+                          {config.searchType === "random"
+                            ? `RandomizedSearch avec ${config.models.length} modeles × ${config.nIterRandomSearch ?? 40} iterations`
+                            : `GridSearch avec ${config.models.length} modeles × ${config.gridCvFolds} folds`}{" "}
+                          peut significativement allonger le temps d'entrainement.
+                        </span>
+                      </div>
+                    )}
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
           </CardContent>
         </Card>
       </div>

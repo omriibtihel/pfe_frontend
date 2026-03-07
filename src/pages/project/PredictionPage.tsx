@@ -1,34 +1,55 @@
-import { useState, useEffect } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useEffect, useMemo, useState } from 'react';
+import { useNavigate, useParams } from 'react-router-dom';
 import {
-  Target,
+  AlertCircle,
+  Bookmark,
+  Brain,
+  CalendarDays,
+  CheckCircle2,
+  ChevronRight,
+  Clock,
   FileUp,
   FormInput,
-  Play,
+  Layers,
   Loader2,
-  AlertCircle,
-  CheckCircle2,
-  Brain,
+  Play,
+  Target,
+  Zap,
 } from 'lucide-react';
+
 import { AppLayout } from '@/layouts/AppLayout';
-import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Modal } from '@/components/ui/modal';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { FileUpload } from '@/components/ui/file-upload';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { FileUpload } from '@/components/ui/file-upload';
+import { Modal } from '@/components/ui/modal';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import { useToast } from '@/hooks/use-toast';
+import {
+  buildSavedModelVersionGroups,
+  getDefaultSelectedModelId,
+  getDefaultSelectedVersionId,
+} from '@/pages/project/predictionPage.helpers';
 import { predictionService } from '@/services/predictionService';
-import type { ActiveModelInfo, PredictionResponse } from '@/types';
+import type { PredictionResponse, SavedModelSummary } from '@/types';
 
 export function PredictionPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const { toast } = useToast();
 
-  const [activeModel, setActiveModel] = useState<ActiveModelInfo | null>(null);
-  const [loadingModel, setLoadingModel] = useState(true);
+  const [savedModels, setSavedModels] = useState<SavedModelSummary[]>([]);
+  const [selectedVersionId, setSelectedVersionId] = useState<string>('');
+  const [selectedModelId, setSelectedModelId] = useState<string>('');
+  const [loadingModels, setLoadingModels] = useState(true);
   const [noModelError, setNoModelError] = useState<string | null>(null);
 
   const [mode, setMode] = useState<'manual' | 'file'>('file');
@@ -37,60 +58,86 @@ export function PredictionPage() {
   const [file, setFile] = useState<File | null>(null);
   const [manualData, setManualData] = useState<Record<string, string>>({});
 
-  // Load the project's active model on mount
   useEffect(() => {
     if (!id) return;
-    setLoadingModel(true);
+
+    setLoadingModels(true);
     predictionService
-      .getActiveModel(id)
-      .then((info) => {
-        setActiveModel(info);
+      .getSavedModels(id)
+      .then((models) => {
+        setSavedModels(models);
         setNoModelError(null);
       })
       .catch((err: Error) => {
-        const msg: string = err.message || '';
-        if (msg.includes('NO_ACTIVE_MODEL') || msg.includes('Aucun modèle actif')) {
-          setNoModelError(
-            'Aucun modèle actif pour ce projet. Entraînez un modèle puis cliquez sur « Sauvegarder » pour l\'activer.',
-          );
-        } else {
-          setNoModelError(msg || 'Impossible de charger le modèle actif.');
-        }
+        setNoModelError(err.message || 'Impossible de charger les modeles sauvegardes.');
       })
-      .finally(() => setLoadingModel(false));
+      .finally(() => setLoadingModels(false));
   }, [id]);
+
+  const versionGroups = useMemo(
+    () => buildSavedModelVersionGroups(savedModels),
+    [savedModels],
+  );
+
+  useEffect(() => {
+    setSelectedVersionId((current) => getDefaultSelectedVersionId(versionGroups, current));
+  }, [versionGroups]);
+
+  const selectedVersion = useMemo(
+    () => versionGroups.find((group) => group.id === selectedVersionId) ?? null,
+    [selectedVersionId, versionGroups],
+  );
+
+  const modelsForSelectedVersion = selectedVersion?.models ?? [];
+
+  useEffect(() => {
+    setSelectedModelId((current) => getDefaultSelectedModelId(modelsForSelectedVersion, current));
+  }, [modelsForSelectedVersion]);
+
+  useEffect(() => {
+    setManualData({});
+  }, [selectedModelId]);
+
+  const selectedModel =
+    modelsForSelectedVersion.find((model) => model.id === selectedModelId) ??
+    savedModels.find((model) => model.id === selectedModelId) ??
+    null;
 
   const updateManualField = (field: string, value: string) => {
     setManualData((prev) => ({ ...prev, [field]: value }));
   };
 
   const handlePredict = async () => {
-    if (!id || !activeModel) return;
+    if (!id || !selectedModel) return;
+
     setIsPredicting(true);
     try {
       let result: PredictionResponse;
       if (mode === 'file') {
         if (!file) {
-          toast({ title: 'Veuillez sélectionner un fichier', variant: 'destructive' });
+          toast({ title: 'Veuillez selectionner un fichier', variant: 'destructive' });
           return;
         }
-        result = await predictionService.predictWithFile(id, file);
+        result = await predictionService.predictWithSavedModel(id, selectedModel.id, file);
       } else {
         const rows = [
           Object.fromEntries(
-            Object.entries(manualData).map(([k, v]) => [k, isNaN(Number(v)) ? v : Number(v)]),
+            Object.entries(manualData).map(([key, value]) => [
+              key,
+              Number.isNaN(Number(value)) ? value : Number(value),
+            ]),
           ),
         ];
-        result = await predictionService.predictManual(id, rows);
+        result = await predictionService.predictManualWithSavedModel(id, selectedModel.id, rows);
       }
-      // Store result in sessionStorage for the results page
+
       sessionStorage.setItem('lastPrediction', JSON.stringify(result));
       sessionStorage.setItem('lastPredictionFile', file?.name ?? 'manual');
-      toast({ title: `Prédiction terminée — ${result.nRows} ligne(s)` });
+      toast({ title: `Prediction terminee - ${result.nRows} ligne(s)` });
       navigate(`/projects/${id}/predict/results`);
     } catch (error) {
       toast({
-        title: 'Erreur de prédiction',
+        title: 'Erreur de prediction',
         description: error instanceof Error ? error.message : 'Une erreur est survenue.',
         variant: 'destructive',
       });
@@ -101,43 +148,44 @@ export function PredictionPage() {
 
   const canPredict =
     !isPredicting &&
-    activeModel !== null &&
+    selectedModel !== null &&
     (mode === 'file' ? file !== null : Object.keys(manualData).length > 0);
 
   return (
     <AppLayout>
-      <div className="space-y-6 max-w-4xl mx-auto">
-        {/* Header */}
-        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+      <div className="w-full space-y-6">
+        <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
           <div>
-            <h1 className="text-3xl font-bold text-foreground">Prédiction</h1>
-            <p className="text-muted-foreground mt-1">
-              Utilisez votre modèle entraîné pour faire des prédictions
+            <h1 className="text-3xl font-bold text-foreground">Prediction</h1>
+            <p className="mt-1 text-muted-foreground">
+              Utilisez vos modèles entraînés pour faire des prédictions.
             </p>
           </div>
           <Badge variant="secondary" className="self-start">
-            <Target className="h-3 w-3 mr-1" /> Inférence
+            <Target className="mr-1 h-3 w-3" /> Inference
           </Badge>
         </div>
 
-        {/* Active model banner */}
-        {loadingModel ? (
+        {loadingModels ? (
           <Card>
             <CardContent className="flex items-center gap-3 py-4">
               <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
-              <span className="text-muted-foreground">Chargement du modèle actif…</span>
+              <span className="text-muted-foreground">Chargement des modeles sauvegardes...</span>
             </CardContent>
           </Card>
-        ) : noModelError ? (
+        ) : noModelError || savedModels.length === 0 ? (
           <Card className="border-destructive/50 bg-destructive/5">
             <CardContent className="flex items-start gap-3 py-4">
-              <AlertCircle className="h-5 w-5 text-destructive mt-0.5 shrink-0" />
+              <AlertCircle className="mt-0.5 h-5 w-5 shrink-0 text-destructive" />
               <div>
-                <p className="font-medium text-destructive">Aucun modèle actif</p>
-                <p className="text-sm text-muted-foreground mt-1">{noModelError}</p>
+                <p className="font-medium text-destructive">Aucun modèle sauvegardé</p>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  {noModelError ??
+                    "Entraînez des modèles puis cliquez sur 'Enregistrer' pour les sauvegarder."}
+                </p>
                 <Button
                   variant="link"
-                  className="p-0 h-auto text-sm mt-1"
+                  className="mt-1 h-auto p-0 text-sm"
                   onClick={() => navigate(`/projects/${id}/training`)}
                 >
                   Aller vers l'entraînement →
@@ -145,41 +193,188 @@ export function PredictionPage() {
               </div>
             </CardContent>
           </Card>
-        ) : activeModel ? (
-          <Card className="border-primary/30 bg-primary/5">
-            <CardContent className="flex items-center gap-3 py-4">
-              <div className="w-10 h-10 rounded-full bg-primary/20 flex items-center justify-center shrink-0">
+        ) : (
+          <Card className="border-primary/30">
+            <CardHeader className="pb-3">
+              <CardTitle className="flex items-center gap-2 text-base">
                 <Brain className="h-5 w-5 text-primary" />
+                Sélection du modèle
+              </CardTitle>
+              <CardDescription>
+                {savedModels.length} modèle{savedModels.length > 1 ? 's' : ''} sauvegardé
+                {savedModels.length > 1 ? 's' : ''} sur {versionGroups.length} version
+                {versionGroups.length > 1 ? 's' : ''} de données
+              </CardDescription>
+            </CardHeader>
+
+            <CardContent className="space-y-4">
+              {/* Version selector */}
+              <div className="space-y-2">
+                <Label htmlFor="prediction-version-select" className="flex items-center gap-1.5">
+                  <Layers className="h-3.5 w-3.5 text-muted-foreground" />
+                  Version de données
+                </Label>
+                <Select value={selectedVersionId} onValueChange={setSelectedVersionId}>
+                  <SelectTrigger id="prediction-version-select" className="w-full">
+                    <SelectValue placeholder="Choisir une version de données..." />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {versionGroups.map((group) => (
+                      <SelectItem
+                        key={group.id}
+                        value={group.id}
+                        textValue={`${group.label} (${group.models.length} modèle${group.models.length > 1 ? 's' : ''})`}
+                      >
+                        <div className="flex items-center justify-between gap-3">
+                          <span className="font-medium">{group.label}</span>
+                          <span className="rounded-full bg-muted px-2 py-0.5 text-xs text-muted-foreground">
+                            {group.models.length} modèle{group.models.length > 1 ? 's' : ''}
+                          </span>
+                        </div>
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-2 flex-wrap">
-                  <p className="font-semibold capitalize">{activeModel.modelType}</p>
-                  <Badge variant="default" className="text-xs">
-                    <CheckCircle2 className="h-3 w-3 mr-1" /> Modèle actif
-                  </Badge>
-                  <Badge variant="outline" className="text-xs">
-                    {activeModel.taskType}
-                  </Badge>
-                  {activeModel.threshold !== 0.5 && (
-                    <Badge variant="secondary" className="text-xs">
-                      seuil {activeModel.threshold.toFixed(2)}
-                    </Badge>
-                  )}
+
+              {/* Model selector */}
+              <div className="space-y-2">
+                <Label htmlFor="prediction-model-select" className="flex items-center gap-1.5">
+                  <Bookmark className="h-3.5 w-3.5 text-muted-foreground" />
+                  Modèle sauvegardé
+                </Label>
+                <Select
+                  value={selectedModelId}
+                  onValueChange={setSelectedModelId}
+                  disabled={!modelsForSelectedVersion.length}
+                >
+                  <SelectTrigger id="prediction-model-select" className="w-full">
+                    <SelectValue placeholder="Choisir un modèle..." />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {modelsForSelectedVersion.map((model) => {
+                      const scoreLabel =
+                        model.testScore != null
+                          ? `${(model.testScore * 100).toFixed(1)}%${model.primaryMetric ? ` ${model.primaryMetric}` : ''}`
+                          : null;
+                      const triggerText = [
+                        model.modelType.toUpperCase(),
+                        scoreLabel,
+                        model.isActive ? '· Actif' : null,
+                      ]
+                        .filter(Boolean)
+                        .join(' ');
+
+                      return (
+                        <SelectItem key={model.id} value={model.id} textValue={triggerText}>
+                          <div className="flex w-full items-center gap-2 py-0.5">
+                            <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+                              <div className="flex items-center gap-2">
+                                <span className="font-semibold uppercase">
+                                  {model.modelType}
+                                </span>
+                                {model.isActive && (
+                                  <span className="inline-flex items-center gap-0.5 rounded bg-primary/10 px-1.5 py-0.5 text-[10px] font-semibold text-primary">
+                                    <Zap className="h-2.5 w-2.5" /> Actif
+                                  </span>
+                                )}
+                                {scoreLabel && (
+                                  <span className="text-xs font-medium text-emerald-600 dark:text-emerald-400">
+                                    {scoreLabel}
+                                  </span>
+                                )}
+                              </div>
+                              <div className="flex items-center gap-2 text-[11px] text-muted-foreground">
+                                <span>Session #{model.sessionId}</span>
+                                {model.trainedAt && (
+                                  <>
+                                    <ChevronRight className="h-2.5 w-2.5" />
+                                    <span>
+                                      {new Date(model.trainedAt).toLocaleDateString('fr-FR', {
+                                        day: '2-digit',
+                                        month: 'short',
+                                        year: 'numeric',
+                                      })}
+                                    </span>
+                                  </>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+                        </SelectItem>
+                      );
+                    })}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {/* Selected model details panel */}
+              {selectedModel && (
+                <div className="rounded-lg border border-border/60 bg-muted/30 p-3 space-y-2">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                    Détails du modèle sélectionné
+                  </p>
+                  <div className="grid grid-cols-2 gap-x-4 gap-y-1.5 text-xs">
+                    <ModelDetailRow
+                      icon={<Brain className="h-3 w-3" />}
+                      label="Type"
+                      value={selectedModel.modelType.toUpperCase()}
+                    />
+                    <ModelDetailRow
+                      icon={<Target className="h-3 w-3" />}
+                      label="Tâche"
+                      value={selectedModel.taskType === 'classification' ? 'Classification' : 'Régression'}
+                    />
+                    <ModelDetailRow
+                      icon={<CheckCircle2 className="h-3 w-3" />}
+                      label="Features"
+                      value={`${selectedModel.featureNames.length} colonne${selectedModel.featureNames.length > 1 ? 's' : ''}`}
+                    />
+                    {selectedModel.testScore != null && (
+                      <ModelDetailRow
+                        icon={<Target className="h-3 w-3" />}
+                        label={selectedModel.primaryMetric ?? 'Score'}
+                        value={`${(selectedModel.testScore * 100).toFixed(1)}%`}
+                        highlight
+                      />
+                    )}
+                    {selectedModel.threshold !== 0.5 && (
+                      <ModelDetailRow
+                        icon={<ChevronRight className="h-3 w-3" />}
+                        label="Seuil"
+                        value={selectedModel.threshold.toFixed(3)}
+                      />
+                    )}
+                    {selectedModel.trainingTime != null && (
+                      <ModelDetailRow
+                        icon={<Clock className="h-3 w-3" />}
+                        label="Durée"
+                        value={`${selectedModel.trainingTime.toFixed(1)}s`}
+                      />
+                    )}
+                    {selectedModel.trainedAt && (
+                      <ModelDetailRow
+                        icon={<CalendarDays className="h-3 w-3" />}
+                        label="Entraîné le"
+                        value={new Date(selectedModel.trainedAt).toLocaleString('fr-FR', {
+                          day: '2-digit',
+                          month: 'short',
+                          hour: '2-digit',
+                          minute: '2-digit',
+                        })}
+                      />
+                    )}
+                  </div>
                 </div>
-                <p className="text-sm text-muted-foreground mt-0.5">
-                  {activeModel.featureNames.length} feature(s) attendues ·{' '}
-                  entraîné le {new Date(activeModel.trainedAt).toLocaleDateString('fr-FR')}
-                </p>
-              </div>
+              )}
             </CardContent>
           </Card>
-        ) : null}
+        )}
 
-        {/* Mode Selection */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
           <Card
             className={`cursor-pointer transition-all ${
-              mode === 'manual' ? 'ring-2 ring-primary border-primary' : 'hover:border-primary/50'
+              mode === 'manual' ? 'border-primary ring-2 ring-primary' : 'hover:border-primary/50'
             }`}
             onClick={() => setMode('manual')}
           >
@@ -194,9 +389,9 @@ export function PredictionPage() {
               <Button
                 variant={mode === 'manual' ? 'default' : 'outline'}
                 className="w-full"
-                disabled={!activeModel}
-                onClick={(e) => {
-                  e.stopPropagation();
+                disabled={!selectedModel}
+                onClick={(event) => {
+                  event.stopPropagation();
                   setMode('manual');
                   setShowManualModal(true);
                 }}
@@ -208,7 +403,7 @@ export function PredictionPage() {
 
           <Card
             className={`cursor-pointer transition-all ${
-              mode === 'file' ? 'ring-2 ring-primary border-primary' : 'hover:border-primary/50'
+              mode === 'file' ? 'border-primary ring-2 ring-primary' : 'hover:border-primary/50'
             }`}
             onClick={() => setMode('file')}
           >
@@ -217,13 +412,13 @@ export function PredictionPage() {
                 <FileUp className="h-5 w-5 text-secondary" />
                 Import de fichier
               </CardTitle>
-              <CardDescription>Chargez un fichier CSV/JSON/Parquet</CardDescription>
+              <CardDescription>Chargez un fichier CSV / JSON / Parquet</CardDescription>
             </CardHeader>
             <CardContent>
               {mode === 'file' ? (
-                <FileUpload onUpload={(f) => setFile(f)} />
+                <FileUpload onUpload={(uploadedFile) => setFile(uploadedFile)} />
               ) : (
-                <div className="h-24 border-2 border-dashed border-border rounded-lg flex items-center justify-center text-muted-foreground text-sm">
+                <div className="flex h-24 items-center justify-center rounded-lg border-2 border-dashed border-border text-sm text-muted-foreground">
                   Sélectionnez ce mode
                 </div>
               )}
@@ -231,52 +426,50 @@ export function PredictionPage() {
           </Card>
         </div>
 
-        {/* Predict Button */}
         <Button
           size="lg"
-          className="w-full h-14 text-lg bg-gradient-to-r from-primary to-secondary shadow-glow"
+          className="h-14 w-full bg-gradient-to-r from-primary to-secondary text-lg shadow-glow"
           onClick={handlePredict}
           disabled={!canPredict}
         >
           {isPredicting ? (
             <>
-              <Loader2 className="h-5 w-5 mr-2 animate-spin" />
-              Prédiction en cours…
+              <Loader2 className="mr-2 h-5 w-5 animate-spin" />
+              Prédiction en cours...
             </>
           ) : (
             <>
-              <Play className="h-5 w-5 mr-2" />
+              <Play className="mr-2 h-5 w-5" />
               Prédire le diagnostic
             </>
           )}
         </Button>
       </div>
 
-      {/* Manual Input Modal — columns driven by the active model's feature_names */}
       <Modal
         isOpen={showManualModal}
         onClose={() => setShowManualModal(false)}
         title="Saisie des données patient"
         size="lg"
       >
-        {activeModel && activeModel.featureNames.length > 0 ? (
+        {selectedModel && selectedModel.featureNames.length > 0 ? (
           <>
-            <div className="grid grid-cols-2 gap-4 max-h-96 overflow-y-auto">
-              {activeModel.featureNames.map((col) => (
-                <div key={col} className="space-y-1">
-                  <Label htmlFor={col} className="capitalize">
-                    {col}
+            <div className="grid max-h-96 grid-cols-2 gap-4 overflow-y-auto">
+              {selectedModel.featureNames.map((column) => (
+                <div key={column} className="space-y-1">
+                  <Label htmlFor={column} className="capitalize">
+                    {column}
                   </Label>
                   <Input
-                    id={col}
-                    value={manualData[col] ?? ''}
-                    onChange={(e) => updateManualField(col, e.target.value)}
-                    placeholder={`Entrez ${col}`}
+                    id={column}
+                    value={manualData[column] ?? ''}
+                    onChange={(event) => updateManualField(column, event.target.value)}
+                    placeholder={`Entrez ${column}`}
                   />
                 </div>
               ))}
             </div>
-            <div className="flex justify-end gap-2 mt-6">
+            <div className="mt-6 flex justify-end gap-2">
               <Button variant="outline" onClick={() => setShowManualModal(false)}>
                 Annuler
               </Button>
@@ -285,11 +478,35 @@ export function PredictionPage() {
           </>
         ) : (
           <p className="text-muted-foreground">
-            Impossible de charger les colonnes du modèle actif.
+            Impossible de charger les colonnes du modèle sélectionné.
           </p>
         )}
       </Modal>
     </AppLayout>
+  );
+}
+
+function ModelDetailRow({
+  icon,
+  label,
+  value,
+  highlight = false,
+}: {
+  icon: React.ReactNode;
+  label: string;
+  value: string;
+  highlight?: boolean;
+}) {
+  return (
+    <div className="flex items-center gap-1.5">
+      <span className="shrink-0 text-muted-foreground" aria-hidden="true">
+        {icon}
+      </span>
+      <span className="text-muted-foreground">{label} :</span>
+      <span className={`font-medium ${highlight ? 'text-primary' : 'text-foreground'}`}>
+        {value}
+      </span>
+    </div>
   );
 }
 

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { motion } from "framer-motion";
 import {
   Layers,
@@ -20,17 +20,9 @@ import { Switch } from "@/components/ui/switch";
 import { cn } from "@/lib/utils";
 import { trainingService } from "@/services/trainingService";
 import type { TrainingConfig } from "@/types";
+import { HOLDOUT_PRESETS, type HoldoutPreset } from "../constants";
 
 type SplitMethod = "holdout" | "kfold" | "stratified_kfold";
-
-type HoldoutPreset = {
-  label: string;
-  train: number;
-  val: number;
-  test: number;
-  description: string;
-  recommended?: boolean;
-};
 
 interface Step2Props {
   projectId: string;
@@ -63,13 +55,6 @@ function normalizeRatios(train: number, val: number, test: number) {
 
   return { train: t, val: v, test: te };
 }
-
-const HOLDOUT_PRESETS: HoldoutPreset[] = [
-  { label: "70/15/15", train: 70, val: 15, test: 15, description: "Equilibre general", recommended: true },
-  { label: "80/10/10", train: 80, val: 10, test: 10, description: "Bon compromis precision/stabilite" },
-  { label: "80/0/20", train: 80, val: 0, test: 20, description: "Sans validation, ideal avec CV" },
-  { label: "90/0/10", train: 90, val: 0, test: 10, description: "Priorite a l'apprentissage" },
-];
 
 const SPLIT_METHOD_LABELS: Record<SplitMethod, string> = {
   holdout: "Holdout (train/val/test)",
@@ -161,11 +146,11 @@ export function Step2SplitStrategy({ projectId, config, onConfigChange }: Step2P
       preset.train === ratios.train && preset.val === ratios.val && preset.test === ratios.test
   );
 
-  const applyHoldoutPreset = (preset: HoldoutPreset) => {
+  const applyHoldoutPreset = useCallback((preset: HoldoutPreset) => {
     onConfigChange({ trainRatio: preset.train, valRatio: preset.val, testRatio: preset.test });
-  };
+  }, [onConfigChange]);
 
-  const handleTrainChange = (rawValue: unknown) => {
+  const handleTrainChange = useCallback((rawValue: unknown) => {
     const train = clampInt(rawValue, 50, 95);
     const remaining = 100 - train;
     const currentOther = ratios.val + ratios.test;
@@ -178,15 +163,15 @@ export function Step2SplitStrategy({ projectId, config, onConfigChange }: Step2P
     const val = clampInt(Math.round((ratios.val / currentOther) * remaining), 0, remaining);
     const test = remaining - val;
     onConfigChange({ trainRatio: train, valRatio: val, testRatio: test });
-  };
+  }, [onConfigChange, ratios.val, ratios.test]);
 
-  const handleValidationChange = (rawValue: unknown) => {
+  const handleValidationChange = useCallback((rawValue: unknown) => {
     const remaining = 100 - ratios.train;
     const val = clampInt(rawValue, 0, remaining);
     onConfigChange({ valRatio: val, testRatio: remaining - val });
-  };
+  }, [onConfigChange, ratios.train]);
 
-  const handleRatioInput = (field: "train" | "val" | "test", rawValue: string) => {
+  const handleRatioInput = useCallback((field: "train" | "val" | "test", rawValue: string) => {
     if (field === "train") {
       handleTrainChange(rawValue);
       return;
@@ -201,7 +186,7 @@ export function Step2SplitStrategy({ projectId, config, onConfigChange }: Step2P
 
     const test = clampInt(rawValue, 0, remaining);
     onConfigChange({ valRatio: remaining - test, testRatio: test });
-  };
+  }, [handleTrainChange, onConfigChange, ratios.train]);
 
   return (
     <div className="space-y-6">

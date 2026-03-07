@@ -64,6 +64,8 @@ export function TrainingPage() {
     targetColumn: "",
     taskType: "classification",
     models: [],
+    searchType: "none",
+    nIterRandomSearch: 40,
     useGridSearch: false,
     gridCvFolds: 3,
     gridScoring: "auto",

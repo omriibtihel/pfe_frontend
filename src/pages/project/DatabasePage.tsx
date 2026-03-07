@@ -241,7 +241,7 @@ const onConfirmTarget = async () => {
   if (!datasets.length) {
     return (
       <AppLayout>
-        <div className="max-w-3xl mx-auto space-y-3">
+        <div className="space-y-3">
           <h1 className="text-2xl font-bold">Exploration des données</h1>
           <p className="text-muted-foreground">
             Aucun dataset n’est disponible pour ce projet. Importez un fichier pour continuer.

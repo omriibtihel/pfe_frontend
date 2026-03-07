@@ -1,7 +1,5 @@
 import type { DetailedClassificationMetrics, ModelResult } from '@/types';
 
-// ─── Constants ────────────────────────────────────────────────────────────────
-
 export const modelColors: Record<string, string> = {
   lightgbm: 'from-blue-500 to-blue-600',
   xgboost: 'from-purple-500 to-purple-600',
@@ -12,21 +10,25 @@ export const modelColors: Record<string, string> = {
   logisticregression: 'from-cyan-500 to-cyan-600',
   logreg: 'from-cyan-500 to-cyan-600',
   naivebayes: 'from-pink-500 to-pink-600',
+  extratrees: 'from-emerald-500 to-emerald-600',
+  et: 'from-emerald-500 to-emerald-600',
+  gradientboosting: 'from-amber-500 to-amber-600',
+  gb: 'from-amber-500 to-amber-600',
+  gbm: 'from-amber-500 to-amber-600',
+  ridge: 'from-violet-500 to-violet-600',
 };
 
 export const metricLabels: Record<string, string> = {
   accuracy: 'Accuracy',
-  precision: 'Precision',
+  precision: 'Précision',
   recall: 'Recall',
   f1: 'F1',
   roc_auc: 'ROC AUC',
   pr_auc: 'PR AUC',
-  r2: 'R2',
+  r2: 'R²',
   rmse: 'RMSE',
   mae: 'MAE',
 };
-
-// ─── Types ────────────────────────────────────────────────────────────────────
 
 export type ClassificationType = 'binary' | 'multiclass' | 'multilabel' | 'unknown';
 
@@ -35,6 +37,7 @@ export type FeatureImportanceChartRow = {
   label: string;
   rawImportance: number;
   normalizedImportance: number;
+  displayImportance: number;
 };
 
 export type AverageRow = {
@@ -75,8 +78,6 @@ export type ClassificationView = {
   warnings: string[];
 };
 
-// ─── Formatters ───────────────────────────────────────────────────────────────
-
 export function toPercent(value?: number | null): string {
   if (!Number.isFinite(value)) return '-';
   return `${(Number(value) * 100).toFixed(1)}%`;
@@ -114,15 +115,18 @@ export function toUniqueWarnings(values: unknown[]): string[] {
 }
 
 export const WARNING_LABELS: Record<string, string> = {
-  dataset_is_already_balanced: 'Dataset déjà équilibré — aucun rééchantillonnage appliqué.',
-  severe_imbalance_detected: 'Déséquilibre sévère — préférez PR-AUC plutôt que l\'accuracy.',
-  tiny_dataset_high_variance_risk: 'Dataset très petit — risque de forte variance.',
-  smote_requires_minority_count_at_least_6: 'SMOTE requiert ≥ 6 échantillons en classe minoritaire.',
-  random_undersampling_requires_minority_count_at_least_30: 'Sous-échantillonnage requiert ≥ 30 échantillons en classe minoritaire.',
-  target_has_single_class: 'La cible ne contient qu\'une seule classe.',
-  target_is_not_binary: 'La cible n\'est pas binaire.',
-  threshold_optimization_skipped_no_validation_data: 'Optimisation du seuil ignorée : aucune donnée de validation.',
-  threshold_optimization_skipped_predict_proba_not_available: 'Optimisation du seuil ignorée : predict_proba non disponible.',
+  dataset_is_already_balanced: 'Dataset déjà équilibré - aucun rééchantillonnage appliqué.',
+  severe_imbalance_detected: "Déséquilibre sévère - préférez PR-AUC plutôt que l'accuracy.",
+  tiny_dataset_high_variance_risk: 'Dataset très petit - risque de forte variance.',
+  smote_requires_minority_count_at_least_6: 'SMOTE requiert >= 6 échantillons en classe minoritaire.',
+  random_undersampling_requires_minority_count_at_least_30:
+    'Sous-échantillonnage requiert >= 30 échantillons en classe minoritaire.',
+  target_has_single_class: "La cible ne contient qu'une seule classe.",
+  target_is_not_binary: "La cible n'est pas binaire.",
+  threshold_optimization_skipped_no_validation_data:
+    'Optimisation du seuil ignorée : aucune donnée de validation.',
+  threshold_optimization_skipped_predict_proba_not_available:
+    'Optimisation du seuil ignorée : predict_proba non disponible.',
 };
 
 export function humanizeWarning(key: string): string {
@@ -134,9 +138,10 @@ export function truncateFeatureLabel(value: string, max = 24): string {
   return `${value.slice(0, max - 3)}...`;
 }
 
-// ─── Data builders ────────────────────────────────────────────────────────────
-
-export function buildFeatureImportanceChartData(result: ModelResult, topN = 8): FeatureImportanceChartRow[] {
+export function buildFeatureImportanceChartData(
+  result: ModelResult,
+  topN = 8,
+): FeatureImportanceChartRow[] {
   const source = Array.isArray(result.featureImportance) ? result.featureImportance : [];
   const cleaned = source
     .map((item) => ({
@@ -148,12 +153,19 @@ export function buildFeatureImportanceChartData(result: ModelResult, topN = 8): 
     .slice(0, topN);
 
   const maxImportance = cleaned.reduce((max, item) => Math.max(max, Math.abs(item.rawImportance)), 0);
+  const sumImportance = cleaned.reduce((s, item) => s + Math.abs(item.rawImportance), 0);
+  const alreadyProportional = maxImportance <= 1.0;
 
   return cleaned.map((item) => ({
     feature: item.feature,
     label: truncateFeatureLabel(item.feature),
     rawImportance: item.rawImportance,
     normalizedImportance: maxImportance > 0 ? Math.abs(item.rawImportance) / maxImportance : 0,
+    displayImportance: alreadyProportional
+      ? item.rawImportance
+      : sumImportance > 0
+        ? Math.abs(item.rawImportance) / sumImportance
+        : 0,
   }));
 }
 
@@ -167,10 +179,12 @@ export function getPreprocessingSummary(result: ModelResult): string {
     const parts: string[] = [];
     if (Object.keys(defaults).length) {
       parts.push(
-        `Defaults: numImp=${String(defaults.numericImputation ?? '-')}, numScale=${String(defaults.numericScaling ?? '-')}, catImp=${String(defaults.categoricalImputation ?? '-')}, catEnc=${String(defaults.categoricalEncoding ?? '-')}`
+        `Defaults: numImp=${String(defaults.numericImputation ?? '-')}, numScale=${String(defaults.numericScaling ?? '-')}, catImp=${String(defaults.categoricalImputation ?? '-')}, catEnc=${String(defaults.categoricalEncoding ?? '-')}`,
       );
     }
-    if (Object.keys(effectiveByColumn).length) parts.push(`effectiveByColumn: ${Object.keys(effectiveByColumn).length}`);
+    if (Object.keys(effectiveByColumn).length) {
+      parts.push(`effectiveByColumn: ${Object.keys(effectiveByColumn).length}`);
+    }
     if (droppedColumns.length) parts.push(`dropped: ${droppedColumns.length}`);
     return parts.join(' | ');
   }
@@ -206,7 +220,9 @@ export function getClassificationType(result: ModelResult): ClassificationType {
   const rawType = String(detailed?.meta?.classification_type ?? '').trim().toLowerCase();
   if (rawType === 'binary' || rawType === 'multiclass' || rawType === 'multilabel') return rawType;
 
-  const hasPos = Number.isFinite(Number(result.metrics?.precision_pos)) || Number.isFinite(Number(result.metrics?.recall_pos));
+  const hasPos =
+    Number.isFinite(Number(result.metrics?.precision_pos)) ||
+    Number.isFinite(Number(result.metrics?.recall_pos));
   if (hasPos) return 'binary';
 
   const cm = Array.isArray(result.confusionMatrix) ? result.confusionMatrix : [];
@@ -215,13 +231,16 @@ export function getClassificationType(result: ModelResult): ClassificationType {
   return 'unknown';
 }
 
-export function buildConfusionPayload(result: ModelResult, detailed: DetailedClassificationMetrics): ConfusionPayload {
+export function buildConfusionPayload(
+  result: ModelResult,
+  detailed: DetailedClassificationMetrics,
+): ConfusionPayload {
   const rawPayload = detailed?.confusion_matrix;
   const rawMatrix = Array.isArray(rawPayload?.matrix)
-    ? rawPayload?.matrix
+    ? rawPayload.matrix
     : Array.isArray(result.confusionMatrix)
-    ? result.confusionMatrix
-    : [];
+      ? result.confusionMatrix
+      : [];
 
   const matrix = rawMatrix
     .filter((row) => Array.isArray(row))
@@ -229,7 +248,7 @@ export function buildConfusionPayload(result: ModelResult, detailed: DetailedCla
       row.map((v) => {
         const n = Number(v);
         return Number.isFinite(n) ? n : 0;
-      })
+      }),
     );
 
   const rawLabels = Array.isArray(rawPayload?.labels) ? rawPayload.labels : [];
@@ -238,32 +257,35 @@ export function buildConfusionPayload(result: ModelResult, detailed: DetailedCla
   return { labels, matrix };
 }
 
-export function buildAveragesRows(result: ModelResult, detailed: DetailedClassificationMetrics): AverageRow[] {
-  const macro = detailed?.averaged?.macro ?? {};
-  const weighted = detailed?.averaged?.weighted ?? {};
-  const micro = detailed?.averaged?.micro ?? {};
+export function buildAveragesRows(
+  result: ModelResult,
+  detailed: DetailedClassificationMetrics,
+): AverageRow[] {
+  const macro = (detailed?.averaged?.macro ?? {}) as Record<string, unknown>;
+  const weighted = (detailed?.averaged?.weighted ?? {}) as Record<string, unknown>;
+  const micro = (detailed?.averaged?.micro ?? {}) as Record<string, unknown>;
 
   const rows: AverageRow[] = [
     {
       key: 'macro',
       label: 'Macro',
-      precision: toFiniteNumber((macro as any)?.precision ?? result.metrics?.precision_macro),
-      recall: toFiniteNumber((macro as any)?.recall ?? result.metrics?.recall_macro),
-      f1: toFiniteNumber((macro as any)?.f1 ?? result.metrics?.f1_macro),
+      precision: toFiniteNumber(macro.precision ?? result.metrics?.precision_macro),
+      recall: toFiniteNumber(macro.recall ?? result.metrics?.recall_macro),
+      f1: toFiniteNumber(macro.f1 ?? result.metrics?.f1_macro),
     },
     {
       key: 'weighted',
       label: 'Weighted',
-      precision: toFiniteNumber((weighted as any)?.precision ?? result.metrics?.precision_weighted),
-      recall: toFiniteNumber((weighted as any)?.recall ?? result.metrics?.recall_weighted),
-      f1: toFiniteNumber((weighted as any)?.f1 ?? result.metrics?.f1_weighted),
+      precision: toFiniteNumber(weighted.precision ?? result.metrics?.precision_weighted),
+      recall: toFiniteNumber(weighted.recall ?? result.metrics?.recall_weighted),
+      f1: toFiniteNumber(weighted.f1 ?? result.metrics?.f1_weighted),
     },
     {
       key: 'micro',
       label: 'Micro',
-      precision: toFiniteNumber((micro as any)?.precision ?? result.metrics?.precision_micro),
-      recall: toFiniteNumber((micro as any)?.recall ?? result.metrics?.recall_micro),
-      f1: toFiniteNumber((micro as any)?.f1 ?? result.metrics?.f1_micro),
+      precision: toFiniteNumber(micro.precision ?? result.metrics?.precision_micro),
+      recall: toFiniteNumber(micro.recall ?? result.metrics?.recall_micro),
+      f1: toFiniteNumber(micro.f1 ?? result.metrics?.f1_micro),
     },
   ];
 
@@ -292,20 +314,27 @@ export function buildClassificationView(result: ModelResult): ClassificationView
   const detailed = getDetailedMetrics(result);
   const global = (detailed?.global ?? {}) as Record<string, unknown>;
   const binary = (detailed?.binary ?? {}) as Record<string, unknown>;
+  const macro = (detailed?.averaged?.macro ?? {}) as Record<string, unknown>;
   const classificationType = getClassificationType(result);
 
   const precisionPos = toFiniteNumber(binary.precision_pos ?? result.metrics?.precision_pos);
   const recallPos = toFiniteNumber(binary.recall_pos ?? result.metrics?.recall_pos);
   const f1Pos = toFiniteNumber(binary.f1_pos ?? result.metrics?.f1_pos);
 
-  const macroPrecision = toFiniteNumber((detailed?.averaged?.macro as any)?.precision ?? result.metrics?.precision_macro ?? result.metrics?.precision);
-  const macroRecall = toFiniteNumber((detailed?.averaged?.macro as any)?.recall ?? result.metrics?.recall_macro ?? result.metrics?.recall);
-  const macroF1 = toFiniteNumber((detailed?.averaged?.macro as any)?.f1 ?? result.metrics?.f1_macro ?? result.metrics?.f1);
+  const macroPrecision = toFiniteNumber(
+    macro.precision ?? result.metrics?.precision_macro ?? result.metrics?.precision,
+  );
+  const macroRecall = toFiniteNumber(
+    macro.recall ?? result.metrics?.recall_macro ?? result.metrics?.recall,
+  );
+  const macroF1 = toFiniteNumber(
+    macro.f1 ?? result.metrics?.f1_macro ?? result.metrics?.f1,
+  );
 
   const isBinary = classificationType === 'binary';
 
   const balancingWarnings: unknown[] = Array.isArray((result.balancing as Record<string, unknown>)?.warnings)
-    ? (result.balancing as Record<string, unknown>).warnings as unknown[]
+    ? ((result.balancing as Record<string, unknown>).warnings as unknown[])
     : [];
 
   const warnings = toUniqueWarnings([

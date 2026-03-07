@@ -1,22 +1,12 @@
 import { motion, AnimatePresence } from 'framer-motion';
 import { Loader2, CheckCircle2, Brain, Sparkles } from 'lucide-react';
-import { Progress } from '@/components/ui/progress';
 import { ModelType } from '@/types';
+import { MODEL_LABELS } from './constants';
 
 interface TrainingProgressProps {
   isTraining: boolean;
   selectedModels: ModelType[];
 }
-
-const modelLabels: Record<ModelType, string> = {
-  lightgbm: 'LightGBM',
-  xgboost: 'XGBoost',
-  randomforest: 'Random Forest',
-  svm: 'SVM',
-  knn: 'KNN',
-  decisiontree: 'Decision Tree',
-  logreg: 'Logistic Regression',
-};
 
 export function TrainingProgress({ isTraining, selectedModels }: TrainingProgressProps) {
   if (!isTraining) return null;
@@ -58,17 +48,10 @@ export function TrainingProgress({ isTraining, selectedModels }: TrainingProgres
                   className="flex items-center gap-3 p-3 rounded-lg bg-muted/50"
                 >
                   <Loader2 className="h-4 w-4 animate-spin text-primary" />
-                  <span className="text-sm font-medium flex-1 text-left">{modelLabels[model]}</span>
+                  <span className="text-sm font-medium flex-1 text-left">{MODEL_LABELS[model] ?? model}</span>
                   <Sparkles className="h-4 w-4 text-muted-foreground" />
                 </motion.div>
               ))}
-            </div>
-
-            <div className="pt-4">
-              <Progress value={66} className="h-2" />
-              <p className="text-xs text-muted-foreground mt-2">
-                Optimisation des hyperparamètres...
-              </p>
             </div>
           </div>
         </motion.div>

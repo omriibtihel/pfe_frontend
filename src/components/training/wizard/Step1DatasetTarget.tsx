@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { motion } from "framer-motion";
 import { Database, Target, Table2, Columns, Rows3 } from "lucide-react";
 
@@ -85,6 +85,14 @@ export function Step1DatasetTarget({ projectId, config, onConfigChange }: Step1P
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [projectId, config.datasetVersionId]);
 
+  const handleVersionChange = useCallback((v: string) => {
+    onConfigChange({ datasetVersionId: v, targetColumn: "", positiveLabel: null });
+  }, [onConfigChange]);
+
+  const handleTargetChange = useCallback((v: string) => {
+    onConfigChange({ targetColumn: v, positiveLabel: null });
+  }, [onConfigChange]);
+
   const selectedColumns = useMemo(() => {
     return columns.filter((c) => c.name !== config.targetColumn);
   }, [columns, config.targetColumn]);
@@ -114,13 +122,7 @@ export function Step1DatasetTarget({ projectId, config, onConfigChange }: Step1P
           <CardContent>
             <Select
               value={config.datasetVersionId ? String(config.datasetVersionId) : ""}
-              onValueChange={(v) =>
-                onConfigChange({
-                  datasetVersionId: v,
-                  targetColumn: "",
-                  positiveLabel: null,
-                })
-              }
+              onValueChange={handleVersionChange}
             >
               <SelectTrigger className="h-11">
                 <SelectValue placeholder="Sélectionner une version" />
@@ -157,7 +159,7 @@ export function Step1DatasetTarget({ projectId, config, onConfigChange }: Step1P
           <CardContent>
             <Select
               value={config.targetColumn || ""}
-              onValueChange={(v) => onConfigChange({ targetColumn: v, positiveLabel: null })}
+              onValueChange={handleTargetChange}
               disabled={!columns.length}
             >
               <SelectTrigger className="h-11">

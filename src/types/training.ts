@@ -3,12 +3,15 @@ export type ModelType =
   | 'lightgbm'
   | 'xgboost'
   | 'randomforest'
+  | 'extratrees'
+  | 'gradientboosting'
   | 'svm'
   | 'knn'
   | 'decisiontree'
   | 'logreg'
   | 'logisticregression'
-  | 'naivebayes';
+  | 'naivebayes'
+  | 'ridge';
 export type MetricType =
   | 'accuracy'
   | 'precision'
@@ -51,6 +54,8 @@ export type TrainingThresholdStrategy =
   | 'min_recall'
   | 'precision_recall_balance';
 export type TrainingImbalanceLevel = 'balanced' | 'mild' | 'moderate' | 'severe' | 'critical';
+export type GridScoringOption = 'auto' | 'roc_auc' | 'average_precision' | 'f1_weighted' | 'r2';
+export type SearchType = 'none' | 'grid' | 'random';
 export type TrainingDatasetScale = 'tiny' | 'small' | 'medium' | 'large';
 
 export interface TrainingPreprocessingDefaults {
@@ -120,7 +125,7 @@ export type ModelHyperparamValue = ModelHyperparamScalar | ModelHyperparamScalar
 export type ModelHyperparams = Record<string, Record<string, ModelHyperparamValue>>;
 
 export interface TrainingHyperparamFieldSchema {
-  type: 'int' | 'int_or_none' | 'float' | 'float_or_enum' | 'enum' | 'str';
+  type: 'int' | 'int_or_none' | 'float' | 'float_or_enum' | 'enum' | 'enum_or_null' | 'str';
   default: ModelHyperparamValue;
   min?: number;
   max?: number;
@@ -129,7 +134,17 @@ export interface TrainingHyperparamFieldSchema {
   lt?: number;
   le?: number;
   enum?: string[];
+  /** Task types for which this field is applicable (e.g. ['classification']). */
+  supported_in?: string[];
   help?: string;
+}
+
+export interface ClassWeightModelCapability {
+  supported: boolean;
+  supportedIn: string[];
+  options: Array<string | null>;
+  default: string | null;
+  help: string;
 }
 
 export const DEFAULT_TRAINING_PREPROCESSING_DEFAULTS: TrainingPreprocessingDefaults = {
@@ -156,10 +171,14 @@ export interface TrainingConfig {
   targetColumn: string;
   taskType: TaskType;
   models: ModelType[];
+  /** "none" | "grid" | "random" — replaces useGridSearch. Defaults to "none". */
+  searchType: SearchType;
+  nIterRandomSearch: number;
+  /** @deprecated Use searchType instead. Kept for backward compat. */
   useGridSearch: boolean;
   useClassWeight?: boolean;
   gridCvFolds: number;
-  gridScoring: string;
+  gridScoring: GridScoringOption;
   useSmote: boolean;
   balancing?: TrainingBalancingConfig;
   splitMethod: SplitMethod;
@@ -287,6 +306,19 @@ export interface TrainingThresholdingInfo {
   [key: string]: unknown;
 }
 
+export interface ModelPreprocessingArtifact {
+  droppedColumns?: string[];
+  effectiveByColumn?: Record<string, unknown>;
+  [key: string]: unknown;
+}
+
+export interface ModelBalancingArtifact {
+  strategy_applied?: string;
+  refit_metric?: string;
+  imbalance_ratio?: number;
+  [key: string]: unknown;
+}
+
 export interface ModelResult {
   id: string;
   modelType: ModelType;
@@ -308,10 +340,16 @@ export interface ModelResult {
   splitInfo?: ModelSplitInfo | null;
   gridSearch?: {
     enabled?: boolean;
+    /** "grid" pour GridSearchCV, "random" pour RandomizedSearchCV. */
+    searchType?: 'grid' | 'random' | null;
     cvBestScore?: number | null;
     cvScoring?: string | null;
     bestParams?: Record<string, unknown> | null;
     cvSplits?: number | null;
+    /** Nombre de combinaisons testées (grid) ou d'itérations (random). */
+    nCandidates?: number | null;
+    /** Top N candidats testés avec leur score CV (optionnel, produit par le backend). */
+    cvResultsSummary?: Array<{ params: Record<string, unknown>; mean_score: number }> | null;
   } | null;
   // Cross-validation result fields (populated when splitMethod != 'holdout')
   cvFoldResults?: CvFoldResult[] | null;
@@ -334,9 +372,13 @@ export interface ModelResult {
     metrics?: Record<string, number>;
   } | null;
   splitDebug?: Record<string, unknown> | null;
-  preprocessing?: Record<string, unknown> | null;
-  balancing?: Record<string, unknown> | null;
+  preprocessing?: ModelPreprocessingArtifact | null;
+  balancing?: ModelBalancingArtifact | null;
   thresholding?: TrainingThresholdingInfo | null;
+  /** Seuil de décision effectivement utilisé pour le calcul des métriques test. */
+  thresholdUsed?: number | null;
+  /** Source du seuil : "disabled" | "default_0.5" | "val_set_optimized" | "train_fallback_optimized" | etc. */
+  thresholdSource?: string | null;
   smote?: Record<string, unknown> | null;
   hyperparams?: {
     requested?: Record<string, unknown>;
@@ -345,12 +387,15 @@ export interface ModelResult {
     best?: Record<string, unknown>;
   } | null;
   trainingTime: number;
+  isSaved?: boolean;
+  isActive?: boolean;
 }
 
 export interface TrainingSession {
   id: string;
   projectId: string;
   datasetVersionId?: string | null;
+  activeModelId?: string | null;
   status?: 'queued' | 'running' | 'succeeded' | 'failed' | string;
   progress?: number;
   /** Label of the model currently being trained, e.g. "randomforest (2/4)". Null when idle. */

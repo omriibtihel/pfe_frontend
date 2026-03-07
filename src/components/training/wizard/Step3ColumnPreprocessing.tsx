@@ -5,6 +5,7 @@ import { AlertTriangle, CheckCircle2, Columns3, Info, SlidersHorizontal, XCircle
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Skeleton } from "@/components/ui/skeleton";
 import { Table, TableBody, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 
 import { dataService } from "@/services/dataService";
@@ -601,8 +602,20 @@ export function Step3ColumnPreprocessing({
           />
 
           {loadingColumns ? (
-            <div className="rounded-lg border border-border/60 p-4 text-sm text-muted-foreground">
-              Chargement des colonnes...
+            <div className="rounded-xl border border-border/60 overflow-hidden">
+              <div className="space-y-0 divide-y divide-border/40">
+                {Array.from({ length: 6 }).map((_, i) => (
+                  <div key={i} className="flex items-center gap-3 px-4 py-3">
+                    <Skeleton className="h-4 w-16 shrink-0" />
+                    <Skeleton className="h-4 w-4 shrink-0" />
+                    <Skeleton className="h-4 w-32" />
+                    <Skeleton className="h-4 w-16 shrink-0" />
+                    <Skeleton className="h-4 w-28" />
+                    <Skeleton className="h-4 w-28" />
+                    <Skeleton className="h-4 w-28" />
+                  </div>
+                ))}
+              </div>
             </div>
           ) : !rows.length ? (
             <div className="rounded-lg border border-border/60 p-4 text-sm text-muted-foreground">

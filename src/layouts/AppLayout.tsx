@@ -263,7 +263,7 @@ export function AppLayout({ children }: AppLayoutProps) {
           sidebarOpen ? "lg:ml-72" : "lg:ml-20"
         )}
       >
-        <div className="mx-auto max-w-[1600px] px-4 pb-10 pt-6 sm:px-6 lg:px-10 lg:py-10">{children}</div>
+        <div className="w-full px-4 pb-10 pt-6 sm:px-6 lg:px-8 lg:py-8 xl:px-10 xl:py-10">{children}</div>
       </main>
 
       <UserProfileDialog open={profileOpen} onOpenChange={setProfileOpen} />
