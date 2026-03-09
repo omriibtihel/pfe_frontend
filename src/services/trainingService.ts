@@ -1,10 +1,12 @@
 import apiClient, { type RequestOptions } from "@/services/apiClient";
 import type {
+  AutoMLConfig,
   TrainingBalanceAnalysis,
   TrainingBalancingConfig,
   TrainingBalancingStrategy,
   CategoricalEncodingStrategy,
   CategoricalImputationStrategy,
+  DatasetProfile,
   ModelHyperparams,
   ModelResult,
   NumericImputationStrategy,
@@ -15,6 +17,7 @@ import type {
   TrainingConfig,
   TrainingPreprocessingConfig,
   TrainingPreprocessingDefaults,
+  TrainingRecommendation,
   TrainingSession,
   TrainingValidationPreviewSubset,
   TrainingValidationPreviewMode,
@@ -525,6 +528,46 @@ export const trainingService = {
     );
   },
 
+  // ── Intelligent mode ─────────────────────────────────────────────────────
+
+  async profileDataset(
+    projectId: string,
+    versionId: string | number,
+    targetColumn: string,
+    opts?: RequestOptions
+  ): Promise<DatasetProfile> {
+    return await apiClient.post<DatasetProfile>(
+      `/projects/${projectId}/training/profile`,
+      { version_id: Number(versionId), target_column: String(targetColumn).trim() },
+      opts
+    );
+  },
+
+  async getRecommendation(
+    projectId: string,
+    versionId: string | number,
+    targetColumn: string,
+    opts?: RequestOptions
+  ): Promise<TrainingRecommendation> {
+    return await apiClient.post<TrainingRecommendation>(
+      `/projects/${projectId}/training/recommend`,
+      { version_id: Number(versionId), target_column: String(targetColumn).trim() },
+      opts
+    );
+  },
+
+  /**
+   * Subscribe to SSE events for a training session.
+   * Returns an EventSource that emits `message` events per SSE spec.
+   * The caller is responsible for closing the EventSource when done.
+   */
+  getSessionEventSource(projectId: string, sessionId: string, lastSeq = -1): EventSource {
+    const url = `/api/projects/${projectId}/training/sessions/${sessionId}/events?last_seq=${lastSeq}`;
+    return new EventSource(url, { withCredentials: true });
+  },
+
+  // ── Balance analysis ──────────────────────────────────────────────────────
+
   async analyzeBalance(
     projectId: string,
     versionId: string | number,
@@ -539,6 +582,22 @@ export const trainingService = {
       `/projects/${projectId}/training/analyze-balance`,
       payload,
       opts
+    );
+  },
+
+  async startAutoMLTraining(projectId: string, cfg: AutoMLConfig): Promise<TrainingSession> {
+    const payload = {
+      datasetVersionId: Number(String(cfg.datasetVersionId ?? "").trim()),
+      targetColumn: String(cfg.targetColumn ?? "").trim(),
+      taskType: cfg.taskType,
+      timeBudget: Number(cfg.timeBudget ?? 60),
+      metric: cfg.metric ?? null,
+      testRatio: Number(cfg.testRatio ?? 0.2),
+      positiveLabel: cfg.positiveLabel ?? null,
+    };
+    return await apiClient.post<TrainingSession>(
+      `/projects/${projectId}/training/automl`,
+      payload
     );
   },
 
@@ -569,6 +628,12 @@ export const trainingService = {
   async unsaveModel(projectId: string, sessionId: string, modelId: string): Promise<void> {
     await apiClient.delete(
       `/projects/${projectId}/training/sessions/${sessionId}/models/${encodeURIComponent(modelId)}/save`
+    );
+  },
+
+  async deleteModel(projectId: string, sessionId: string, modelId: string): Promise<void> {
+    await apiClient.delete(
+      `/projects/${projectId}/training/sessions/${sessionId}/models/${encodeURIComponent(modelId)}`
     );
   },
 

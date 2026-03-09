@@ -14,7 +14,7 @@ import {
   Loader2,
   Play,
   Target,
-  Zap,
+  Trash2,
 } from 'lucide-react';
 
 import { AppLayout } from '@/layouts/AppLayout';
@@ -39,6 +39,7 @@ import {
   getDefaultSelectedVersionId,
 } from '@/pages/project/predictionPage.helpers';
 import { predictionService } from '@/services/predictionService';
+import { trainingService } from '@/services/trainingService';
 import type { PredictionResponse, SavedModelSummary } from '@/types';
 
 export function PredictionPage() {
@@ -52,6 +53,7 @@ export function PredictionPage() {
   const [loadingModels, setLoadingModels] = useState(true);
   const [noModelError, setNoModelError] = useState<string | null>(null);
 
+  const [deletingModelId, setDeletingModelId] = useState<string | null>(null);
   const [mode, setMode] = useState<'manual' | 'file'>('file');
   const [showManualModal, setShowManualModal] = useState(false);
   const [isPredicting, setIsPredicting] = useState(false);
@@ -105,6 +107,21 @@ export function PredictionPage() {
 
   const updateManualField = (field: string, value: string) => {
     setManualData((prev) => ({ ...prev, [field]: value }));
+  };
+
+  const handleDeleteModel = async (model: SavedModelSummary) => {
+    if (!id || deletingModelId) return;
+    setDeletingModelId(model.id);
+    try {
+      await trainingService.deleteModel(id, model.sessionId, model.id);
+      setSavedModels((prev) => prev.filter((m) => m.id !== model.id));
+      if (selectedModelId === model.id) setSelectedModelId('');
+      toast({ title: 'Modèle supprimé', description: `${model.modelType.toUpperCase()} supprimé définitivement.` });
+    } catch (err) {
+      toast({ title: 'Erreur', description: err instanceof Error ? err.message : 'Impossible de supprimer le modèle.', variant: 'destructive' });
+    } finally {
+      setDeletingModelId(null);
+    }
   };
 
   const handlePredict = async () => {
@@ -237,75 +254,62 @@ export function PredictionPage() {
                 </Select>
               </div>
 
-              {/* Model selector */}
+              {/* Model selector + delete */}
               <div className="space-y-2">
-                <Label htmlFor="prediction-model-select" className="flex items-center gap-1.5">
+                <Label className="flex items-center gap-1.5">
                   <Bookmark className="h-3.5 w-3.5 text-muted-foreground" />
                   Modèle sauvegardé
                 </Label>
-                <Select
-                  value={selectedModelId}
-                  onValueChange={setSelectedModelId}
-                  disabled={!modelsForSelectedVersion.length}
-                >
-                  <SelectTrigger id="prediction-model-select" className="w-full">
-                    <SelectValue placeholder="Choisir un modèle..." />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {modelsForSelectedVersion.map((model) => {
-                      const scoreLabel =
-                        model.testScore != null
-                          ? `${(model.testScore * 100).toFixed(1)}%${model.primaryMetric ? ` ${model.primaryMetric}` : ''}`
-                          : null;
-                      const triggerText = [
-                        model.modelType.toUpperCase(),
-                        scoreLabel,
-                        model.isActive ? '· Actif' : null,
-                      ]
-                        .filter(Boolean)
-                        .join(' ');
-
-                      return (
-                        <SelectItem key={model.id} value={model.id} textValue={triggerText}>
-                          <div className="flex w-full items-center gap-2 py-0.5">
-                            <div className="flex min-w-0 flex-1 flex-col gap-0.5">
-                              <div className="flex items-center gap-2">
-                                <span className="font-semibold uppercase">
-                                  {model.modelType}
+                {modelsForSelectedVersion.length === 0 ? (
+                  <p className="text-sm text-muted-foreground">Aucun modèle pour cette version.</p>
+                ) : (
+                  <div className="flex items-center gap-2">
+                    <Select value={selectedModelId} onValueChange={setSelectedModelId}>
+                      <SelectTrigger className="flex-1">
+                        <SelectValue placeholder="Choisir un modèle..." />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {modelsForSelectedVersion.map((model) => {
+                          const scoreLabel =
+                            model.testScore != null
+                              ? ` — ${(model.testScore * 100).toFixed(1)}%${model.primaryMetric ? ` ${model.primaryMetric}` : ''}`
+                              : '';
+                          return (
+                            <SelectItem key={model.id} value={model.id}>
+                              <span className="font-medium uppercase">{model.modelType}</span>
+                              {model.isActive && (
+                                <span className="ml-1.5 text-xs text-primary font-semibold">(actif)</span>
+                              )}
+                              {scoreLabel && (
+                                <span className="ml-1 text-xs text-emerald-600 dark:text-emerald-400">
+                                  {scoreLabel}
                                 </span>
-                                {model.isActive && (
-                                  <span className="inline-flex items-center gap-0.5 rounded bg-primary/10 px-1.5 py-0.5 text-[10px] font-semibold text-primary">
-                                    <Zap className="h-2.5 w-2.5" /> Actif
-                                  </span>
-                                )}
-                                {scoreLabel && (
-                                  <span className="text-xs font-medium text-emerald-600 dark:text-emerald-400">
-                                    {scoreLabel}
-                                  </span>
-                                )}
-                              </div>
-                              <div className="flex items-center gap-2 text-[11px] text-muted-foreground">
-                                <span>Session #{model.sessionId}</span>
-                                {model.trainedAt && (
-                                  <>
-                                    <ChevronRight className="h-2.5 w-2.5" />
-                                    <span>
-                                      {new Date(model.trainedAt).toLocaleDateString('fr-FR', {
-                                        day: '2-digit',
-                                        month: 'short',
-                                        year: 'numeric',
-                                      })}
-                                    </span>
-                                  </>
-                                )}
-                              </div>
-                            </div>
-                          </div>
-                        </SelectItem>
-                      );
-                    })}
-                  </SelectContent>
-                </Select>
+                              )}
+                            </SelectItem>
+                          );
+                        })}
+                      </SelectContent>
+                    </Select>
+                    {selectedModelId && (
+                      <button
+                        type="button"
+                        aria-label="Supprimer le modèle sélectionné"
+                        disabled={!!deletingModelId}
+                        onClick={() => {
+                          const model = modelsForSelectedVersion.find((m) => m.id === selectedModelId);
+                          if (model) void handleDeleteModel(model);
+                        }}
+                        className="shrink-0 rounded-md border border-border p-2 text-muted-foreground hover:bg-destructive/10 hover:text-destructive disabled:opacity-50 transition-colors"
+                      >
+                        {deletingModelId === selectedModelId ? (
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                        ) : (
+                          <Trash2 className="h-4 w-4" />
+                        )}
+                      </button>
+                    )}
+                  </div>
+                )}
               </div>
 
               {/* Selected model details panel */}
@@ -452,10 +456,10 @@ export function PredictionPage() {
         title="Saisie des données patient"
         size="lg"
       >
-        {selectedModel && selectedModel.featureNames.length > 0 ? (
+        {selectedModel && (selectedModel.featureNames ?? []).length > 0 ? (
           <>
             <div className="grid max-h-96 grid-cols-2 gap-4 overflow-y-auto">
-              {selectedModel.featureNames.map((column) => (
+              {(selectedModel.featureNames ?? []).map((column) => (
                 <div key={column} className="space-y-1">
                   <Label htmlFor={column} className="capitalize">
                     {column}

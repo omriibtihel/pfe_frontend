@@ -63,7 +63,9 @@ export function Modal({
         {(title || description) && (
           <DialogHeader className="px-6 pt-6 pb-4 border-b border-border/40">
             {title ? <DialogTitle className="pr-8">{title}</DialogTitle> : null}
-            {description ? <DialogDescription>{description}</DialogDescription> : null}
+            <DialogDescription className={description ? undefined : 'sr-only'}>
+              {description ?? title ?? ''}
+            </DialogDescription>
           </DialogHeader>
         )}
 

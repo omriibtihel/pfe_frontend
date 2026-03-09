@@ -14,10 +14,11 @@ import {
 } from 'recharts';
 
 import { Badge } from '@/components/ui/badge';
+import { Bot } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import type { CvFoldResult, CvMetricsSummary, ModelResult } from '@/types';
+import type { CvFoldResult, CvMetricsSummary, MetricType, ModelResult } from '@/types';
 import { CvResultsPanel } from './CvResultsPanel';
 import { GridSearchResultsPanel } from './GridSearchResultsPanel';
 import {
@@ -52,6 +53,8 @@ interface ModelResultCardProps {
   isSaved?: boolean;
   isSaving?: boolean;
   defaultExpanded?: boolean;
+  /** Quand défini, seules les métriques présentes dans cette liste sont affichées (config manuelle). */
+  displayMetrics?: MetricType[] | null;
   onSaveModel: (modelId: string) => void;
 }
 
@@ -64,6 +67,7 @@ export function ModelResultCard({
   isSaved = false,
   isSaving = false,
   defaultExpanded = false,
+  displayMetrics,
   onSaveModel,
 }: ModelResultCardProps) {
   const [expanded, setExpanded] = useState(defaultExpanded);
@@ -77,42 +81,53 @@ export function ModelResultCard({
 
   const metricCards = isRegression
     ? [
-        { key: 'r2', label: metricLabels.r2, value: toNumber(result.metrics?.r2) },
-        { key: 'rmse', label: metricLabels.rmse, value: toNumber(result.metrics?.rmse) },
-        { key: 'mae', label: metricLabels.mae, value: toNumber(result.metrics?.mae) },
+        { key: 'r2', label: metricLabels.r2, value: toNumber(result.metrics?.r2), relatedMetrics: ['r2'] as MetricType[] },
+        { key: 'rmse', label: metricLabels.rmse, value: toNumber(result.metrics?.rmse), relatedMetrics: ['rmse'] as MetricType[] },
+        { key: 'mae', label: metricLabels.mae, value: toNumber(result.metrics?.mae), relatedMetrics: ['mae'] as MetricType[] },
       ]
     : [
         {
           key: 'accuracy',
           label: metricLabels.accuracy,
           value: toPercent(classView?.accuracy),
+          relatedMetrics: ['accuracy'] as MetricType[],
         },
         {
           key: 'roc_auc',
           label: metricLabels.roc_auc,
           value: toPercent(classView?.rocAuc),
+          relatedMetrics: ['roc_auc'] as MetricType[],
         },
         {
           key: 'pr_auc',
           label: metricLabels.pr_auc,
           value: toPercent(classView?.prAuc),
+          relatedMetrics: ['pr_auc'] as MetricType[],
         },
         {
           key: 'precision_main',
           label: isBinary ? `Précision (+${classView?.positiveLabel ?? ''})` : 'Précision (macro)',
           value: toPercent(classView?.precisionMain),
+          relatedMetrics: ['precision', 'precision_macro', 'precision_weighted', 'precision_micro'] as MetricType[],
         },
         {
           key: 'recall_main',
           label: isBinary ? `Rappel (+${classView?.positiveLabel ?? ''})` : 'Rappel (macro)',
           value: toPercent(classView?.recallMain),
+          relatedMetrics: ['recall', 'recall_macro', 'recall_weighted', 'recall_micro'] as MetricType[],
         },
         {
           key: 'f1_main',
           label: isBinary ? `F1 (+${classView?.positiveLabel ?? ''})` : 'F1 (macro)',
           value: toPercent(classView?.f1Main),
+          relatedMetrics: ['f1', 'f1_macro', 'f1_weighted', 'f1_micro', 'f1_pos'] as MetricType[],
         },
       ];
+
+  const displayMetricSet = displayMetrics ? new Set(displayMetrics) : null;
+  const visibleMetricCards = displayMetricSet
+    ? metricCards.filter((card) => card.relatedMetrics.some((m) => displayMetricSet.has(m)))
+    : metricCards;
 
   return (
     <motion.article
@@ -129,6 +144,12 @@ export function ModelResultCard({
             <div className="flex items-center gap-2 flex-wrap">
               <CardTitle className="text-base">{result.modelType.toUpperCase()}</CardTitle>
               {isBestModel && <Badge className="bg-amber-500 text-xs text-white">Meilleur</Badge>}
+              {result.automl && (
+                <Badge variant="outline" className="gap-1 text-xs border-violet-500 text-violet-700 dark:text-violet-400">
+                  <Bot className="h-3 w-3" aria-hidden="true" />
+                  {result.automl.bestEstimator ?? 'AutoML'}
+                </Badge>
+              )}
               {isActive && (
                 <Badge className="gap-1 text-xs bg-primary text-primary-foreground">
                   <Zap className="h-3 w-3" aria-hidden="true" /> Actif
@@ -159,7 +180,7 @@ export function ModelResultCard({
         <CardContent className="space-y-5">
           <section aria-label="Métriques clés">
             <div className="grid grid-cols-3 gap-2">
-              {metricCards.map((metric) => (
+              {visibleMetricCards.map((metric) => (
                 <div key={metric.key} className="rounded-lg bg-muted/50 p-2.5 text-center">
                   <p className="text-xl font-bold text-primary">{metric.value}</p>
                   <p className="mt-0.5 text-[11px] leading-tight text-muted-foreground">
@@ -228,6 +249,37 @@ export function ModelResultCard({
 
           {expanded && (
             <div id={`details-${result.id}`} className="space-y-5">
+              {result.automl && (
+                <section aria-label="Informations AutoML">
+                  <div className="rounded-lg border border-border/60 bg-muted/30 p-3 space-y-2">
+                    <p className="text-xs font-semibold text-foreground">AutoML — FLAML</p>
+                    <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs text-muted-foreground">
+                      <span>Meilleur modèle trouvé</span>
+                      <span className="font-medium text-foreground">
+                        {result.automl.bestEstimator ?? '—'}
+                      </span>
+                      <span>Itérations explorées</span>
+                      <span className="font-medium text-foreground">
+                        {result.automl.nIterations ?? '—'}
+                      </span>
+                      <span>Temps total</span>
+                      <span className="font-medium text-foreground">
+                        {result.automl.totalTimeS != null
+                          ? `${result.automl.totalTimeS.toFixed(1)}s`
+                          : '—'}
+                        {result.automl.timeBudgetS != null
+                          ? ` / ${result.automl.timeBudgetS}s budget`
+                          : ''}
+                      </span>
+                      <span>Métrique optimisée</span>
+                      <span className="font-medium text-foreground">
+                        {result.automl.metricOptimized ?? '—'}
+                      </span>
+                    </div>
+                  </div>
+                </section>
+              )}
+
               {result.isCV && result.cvSummary && (
                 <section aria-label="Résultats de validation croisée">
                   <CvResultsPanel

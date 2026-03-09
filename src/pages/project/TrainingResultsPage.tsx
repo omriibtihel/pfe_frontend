@@ -270,6 +270,8 @@ export function TrainingResultsPage() {
   }, [session]);
 
   const isRegression = session?.config?.taskType === 'regression';
+  const isCustomConfig = session?.config?.configMode === 'manual';
+  const selectedMetrics = isCustomConfig ? (session?.config?.metrics ?? null) : null;
 
   if (isLoading) {
     return (
@@ -425,6 +427,7 @@ export function TrainingResultsPage() {
                     isSaved={savedModelIds.has(normalizeId(result.id))}
                     isSaving={savingModelIds.has(normalizeId(result.id))}
                     defaultExpanded={false}
+                    displayMetrics={selectedMetrics}
                     onSaveModel={handleSaveModel}
                   />
                 ))}
