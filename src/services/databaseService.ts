@@ -106,6 +106,26 @@ export type SampleOut = {
   rows: Record<string, any>[];
 };
 
+// -------------------------
+// NORMALITY TEST
+// -------------------------
+export type NormalityColResult = {
+  col: string;
+  n: number;
+  mean: number;
+  std: number;
+  skewness: number;
+  kurtosis: number;
+  test_used: "shapiro" | "dagostino";
+  stat: number;
+  p_value: number;
+  is_normal: boolean;
+};
+
+export type NormalityTestOut = {
+  results: NormalityColResult[];
+};
+
 export const databaseService = {
   async getOverview(projectId: string | number, datasetId: number, rows = 10) {
     return typedGet<DatasetOverviewOut>(
@@ -215,6 +235,17 @@ export const databaseService = {
 
     return typedGet<HistogramOut>(
       `/projects/${projectId}/datasets/${datasetId}/charts/hist?${qs.toString()}`
+    );
+  },
+
+  async normalityTest(
+    projectId: string | number,
+    datasetId: number,
+    columns: string[]
+  ) {
+    return typedPostJson<NormalityTestOut>(
+      `/projects/${projectId}/datasets/${datasetId}/normality-test`,
+      { columns }
     );
   },
 };

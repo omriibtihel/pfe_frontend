@@ -2,7 +2,7 @@ import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { BrowserRouter, Routes, Route } from "react-router-dom";
+import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { AuthProvider } from "@/contexts/AuthContext";
 import ProtectedRoute from "@/routes/ProtectedRoute";
 
@@ -16,12 +16,10 @@ import SignupPage from "@/pages/auth/SignupPage";
 // Dashboard
 import DashboardPage from "@/pages/dashboard/DashboardPage";
 
-
 // Project Pages
 import NewProjectPage from "@/pages/project/NewProjectPage";
 import ImportPage from "@/pages/project/ImportPage";
-import DatabasePage from "@/pages/project/DatabasePage";
-import DataDescriptionPage from "@/pages/project/DataDescriptionPage";
+import DataExplorationPage from "@/pages/project/DataExplorationPage";
 import ChartsPage from "@/pages/project/ChartsPage";
 import ProcessingPage from "@/pages/project/ProcessingPage";
 import VersionsPage from "@/pages/project/VersionsPage";
@@ -48,14 +46,18 @@ const App = () => (
             <Route path="/" element={<LandingPage />} />
             <Route path="/login" element={<LoginPage />} />
             <Route path="/signup" element={<SignupPage />} />
-            
+
             {/* Protected Routes */}
             <Route path="/dashboard" element={<ProtectedRoute><DashboardPage /></ProtectedRoute>} />
             <Route path="/projects" element={<ProtectedRoute><DashboardPage /></ProtectedRoute>} />
             <Route path="/projects/new" element={<ProtectedRoute><NewProjectPage /></ProtectedRoute>} />
             <Route path="/projects/:id/import" element={<ProtectedRoute><ImportPage /></ProtectedRoute>} />
-            <Route path="/projects/:id/database" element={<ProtectedRoute><DatabasePage /></ProtectedRoute>} />
-            <Route path="/projects/:id/description" element={<ProtectedRoute><DataDescriptionPage /></ProtectedRoute>} />
+
+            {/* Unified data exploration page */}
+            <Route path="/projects/:id/database" element={<ProtectedRoute><DataExplorationPage /></ProtectedRoute>} />
+            {/* Redirect old /description URL to unified page */}
+            <Route path="/projects/:id/description" element={<Navigate to="../database" replace />} />
+
             <Route path="/projects/:id/charts" element={<ProtectedRoute><ChartsPage /></ProtectedRoute>} />
             <Route path="/projects/:id/processing" element={<ProtectedRoute><ProcessingPage /></ProtectedRoute>} />
             <Route path="/projects/:id/versions" element={<ProtectedRoute><VersionsPage /></ProtectedRoute>} />
@@ -64,10 +66,10 @@ const App = () => (
             <Route path="/projects/:projectId/versions/:versionId/training/results" element={<ProtectedRoute><TrainingResultsPage /></ProtectedRoute>} />
             <Route path="/projects/:id/predict" element={<ProtectedRoute><PredictionPage /></ProtectedRoute>} />
             <Route path="/projects/:id/predict/results" element={<ProtectedRoute><PredictionResultsPage /></ProtectedRoute>} />
-            
+
             {/* Admin Routes */}
             <Route path="/admin" element={<ProtectedRoute requireAdmin><AdminDashboardPage /></ProtectedRoute>} />
-            
+
             <Route path="*" element={<NotFound />} />
           </Routes>
         </BrowserRouter>

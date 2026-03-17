@@ -16,7 +16,6 @@ import {
   ChevronLeft,
   User,
   BarChart3,
-  FileText,
   Sparkles,
 } from "lucide-react";
 
@@ -37,8 +36,7 @@ const navItems = [
 
 const projectNavItems = [
   { path: "import", icon: Upload, label: "Import" },
-  { path: "database", icon: Database, label: "Base de donnees" },
-  { path: "description", icon: FileText, label: "Description" },
+  { path: "database", icon: Database, label: "Données" },
   { path: "charts", icon: BarChart3, label: "Graphiques" },
   { path: "processing", icon: Settings2, label: "Pretraitement" },
   { path: "versions", icon: GitBranch, label: "Versions" },

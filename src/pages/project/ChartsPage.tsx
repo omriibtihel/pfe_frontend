@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import {
-  BarChart2,
   BarChart3,
   ChevronRight,
   Download,
@@ -20,6 +19,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { PageSkeleton } from "@/components/ui/loading-skeleton";
 import { useToast } from "@/hooks/use-toast";
 
@@ -35,6 +35,7 @@ import databaseService, {
 } from "@/services/databaseService";
 
 import CorrelationHeatmap from "@/components/ui/CorrelationHeatmap";
+import { NormalityTestPanel } from "@/components/ui/NormalityTestPanel";
 
 import {
   ResponsiveContainer,
@@ -96,7 +97,7 @@ const CHART_TABS: { key: ChartKind; label: string; Icon: any }[] = [
   { key: "area", label: "Area", Icon: AreaIcon },
   { key: "pie", label: "Pie", Icon: PieIcon },
   { key: "doughnut", label: "Anneau", Icon: PieIcon },
-  { key: "hist", label: "Histogram", Icon: BarChart2 },
+  { key: "hist", label: "Histogram", Icon: BarChart3 },
   { key: "scatter", label: "Scatter", Icon: ScatterIcon },
   { key: "bubble", label: "Bubble", Icon: CircleDot },
   { key: "radar", label: "Radar", Icon: RadarIcon },
@@ -193,9 +194,6 @@ export function ChartsPage() {
   const [bx, setBx] = useState<string>("");
   const [by, setBy] = useState<string>("");
   const [bz, setBz] = useState<string>("");
-
-  // heatmap
-  const [heatCols, setHeatCols] = useState<string[]>([]);
 
   // chart results
   const [chartLoading, setChartLoading] = useState(false);
@@ -313,9 +311,6 @@ export function ChartsPage() {
     setBy((p) => p || defNum2);
     setBz((p) => p || defNum3);
 
-    // Heatmap default: first 6 numeric
-    setHeatCols((prev) => (prev.length ? prev : numericCols.slice(0, 6).map((c) => c.name)));
-
     // If there are no numeric columns, force count
     if (!numericCols.length) setAgg("count");
 
@@ -424,7 +419,6 @@ export function ChartsPage() {
     by,
     bz,
     sampleN,
-    heatCols,
     isAggChart,
     isPieChart,
   ]);
@@ -537,6 +531,22 @@ export function ChartsPage() {
           </div>
         </div>
 
+        {/* Tabs: Graphiques / Tests Statistiques */}
+        <Tabs defaultValue="charts">
+          <TabsList className="mb-4">
+            <TabsTrigger value="charts">Graphiques</TabsTrigger>
+            <TabsTrigger value="normality">Tests Statistiques</TabsTrigger>
+          </TabsList>
+
+          <TabsContent value="normality">
+            <NormalityTestPanel
+              projectId={projectId}
+              activeDatasetId={activeDatasetId!}
+              columns={columns}
+            />
+          </TabsContent>
+
+          <TabsContent value="charts">
         {/* Main studio card */}
         <Card className="rounded-3xl overflow-hidden">
           <CardHeader className="border-b bg-muted/30">
@@ -1034,6 +1044,8 @@ export function ChartsPage() {
             </div>
           </CardContent>
         </Card>
+          </TabsContent>
+        </Tabs>
       </div>
     </AppLayout>
   );
