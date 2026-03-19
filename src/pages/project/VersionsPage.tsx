@@ -168,7 +168,7 @@ export function VersionsPage() {
               <Button
                 size="sm"
                 className="flex-1 bg-gradient-to-r from-primary to-secondary"
-                onClick={() => navigate(`/projects/${projectId}/processing?version=${v.id}&mode=edit`)}
+                onClick={() => navigate(`/projects/${projectId}/nettoyage?version=${v.id}&mode=edit`)}
               >
                 <Target className="h-4 w-4 mr-1" />
                 Prétraiter

@@ -20,7 +20,7 @@ import { Switch } from "@/components/ui/switch";
 import { cn } from "@/lib/utils";
 import { trainingService } from "@/services/trainingService";
 import type { TrainingConfig } from "@/types";
-import { HOLDOUT_PRESETS, type HoldoutPreset } from "../constants";
+import { HOLDOUT_PRESETS, type HoldoutPreset } from "@/components/training/constants";
 
 type SplitMethod = "holdout" | "kfold" | "stratified_kfold";
 

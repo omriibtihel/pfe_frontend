@@ -8,21 +8,32 @@ import {
   Database,
   Settings2,
   GitBranch,
+  Sliders,
   Brain,
   Target,
   LogOut,
   Menu,
   X,
   ChevronLeft,
+  ChevronRight,
   User,
   BarChart3,
-  Sparkles,
+  Moon,
+  Sun,
 } from "lucide-react";
 
 import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import { ThemeToggle } from "@/components/ThemeToggle";
+import {
+  DropdownMenu,
+  DropdownMenuCheckboxItem,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { UserProfileDialog } from "@/components/UserProfileDialog";
 
 interface AppLayoutProps {
@@ -35,20 +46,33 @@ const navItems = [
 ];
 
 const projectNavItems = [
-  { path: "import", icon: Upload, label: "Import" },
-  { path: "database", icon: Database, label: "Données" },
-  { path: "charts", icon: BarChart3, label: "Graphiques" },
-  { path: "processing", icon: Settings2, label: "Pretraitement" },
-  { path: "versions", icon: GitBranch, label: "Versions" },
-  { path: "training", icon: Brain, label: "Entrainement" },
-  { path: "predict", icon: Target, label: "Prediction" },
+  { path: "import",      icon: Upload,    label: "Import" },
+  { path: "database",    icon: Database,  label: "Données" },
+  { path: "charts",      icon: BarChart3, label: "Graphiques" },
+  { path: "nettoyage",   icon: Settings2, label: "Nettoyage" },
+  { path: "versions",    icon: GitBranch, label: "Versions" },
+  { path: "preparation", icon: Sliders,   label: "Préparation ML" },
+  { path: "training",    icon: Brain,     label: "Entrainement" },
+  { path: "predict",     icon: Target,    label: "Prediction" },
 ];
 
 export function AppLayout({ children }: AppLayoutProps) {
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
+  const [isDark, setIsDark] = useState(() => {
+    const stored = localStorage.getItem("theme");
+    const prefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
+    return stored === "dark" || (!stored && prefersDark);
+  });
   const { user, logout } = useAuth();
+
+  const toggleTheme = () => {
+    const newDark = !isDark;
+    setIsDark(newDark);
+    document.documentElement.classList.toggle("dark", newDark);
+    localStorage.setItem("theme", newDark ? "dark" : "light");
+  };
   const location = useLocation();
   const navigate = useNavigate();
 
@@ -152,19 +176,6 @@ export function AppLayout({ children }: AppLayoutProps) {
           </Button>
         </div>
 
-        {sidebarOpen && (
-          <div className="px-4 pt-4">
-            <div className="ai-surface flex items-center justify-between px-3 py-2.5">
-              <div className="flex items-center gap-2 text-xs font-semibold text-primary">
-                <Sparkles className="h-3.5 w-3.5" />
-                Workspace actif
-              </div>
-              <span className="rounded-full bg-success/15 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-success">
-                Online
-              </span>
-            </div>
-          </div>
-        )}
 
         <nav className="flex-1 space-y-2 overflow-y-auto p-4 scrollbar-modern">
           {navItems.map((item) => {
@@ -219,39 +230,89 @@ export function AppLayout({ children }: AppLayoutProps) {
           )}
         </nav>
 
-        <div className="space-y-3 border-t border-border/60 bg-muted/20 p-4">
-          <ThemeToggle collapsed={!sidebarOpen} />
-
-          <button
-            onClick={() => setProfileOpen(true)}
-            className={cn(
-              "group w-full cursor-pointer rounded-xl border border-border/60 bg-card/70 p-3 transition-all duration-300 hover:bg-card",
-              "flex items-center gap-3",
-              !sidebarOpen && "justify-center p-2"
-            )}
-          >
-            <div className="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-primary/20 via-secondary/20 to-accent/20 ring-2 ring-primary/10 transition-all group-hover:ring-primary/35">
-              <User className="h-5 w-5 text-primary transition-transform group-hover:scale-110" />
-            </div>
-            {sidebarOpen && (
-              <div className="min-w-0 flex-1 text-left">
-                <p className="truncate text-sm font-semibold">{user?.fullName}</p>
+        <div className="border-t border-border/60 p-3">
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <button
+                className={cn(
+                  "group w-full cursor-pointer rounded-xl border border-border/60 bg-card/70 p-3",
+                  "flex items-center gap-3 transition-all duration-300 hover:bg-card",
+                  !sidebarOpen && "justify-center p-2"
+                )}
+              >
+                <div className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-xl ring-2 ring-primary/10 transition-all group-hover:ring-primary/35 overflow-hidden">
+                  {user?.profilePhoto ? (
+                    <img
+                      src={`http://127.0.0.1:8000${user.profilePhoto}`}
+                      alt={user.fullName}
+                      className="h-full w-full object-cover"
+                    />
+                  ) : (
+                    <div className="flex h-full w-full items-center justify-center bg-gradient-to-br from-primary/20 via-secondary/20 to-accent/20">
+                      <User className="h-4 w-4 text-primary transition-transform group-hover:scale-110" />
+                    </div>
+                  )}
+                </div>
+                {sidebarOpen && (
+                  <>
+                    <div className="min-w-0 flex-1 text-left">
+                      <p className="truncate text-sm font-semibold">{user?.fullName}</p>
+                      <p className="truncate text-xs text-muted-foreground">{user?.email}</p>
+                    </div>
+                    <ChevronRight className="h-3.5 w-3.5 flex-shrink-0 text-muted-foreground" />
+                  </>
+                )}
+              </button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent side="top" align="start" className="w-56">
+              <DropdownMenuLabel className="font-normal">
+                <p className="font-semibold">{user?.fullName}</p>
                 <p className="truncate text-xs text-muted-foreground">{user?.email}</p>
-              </div>
-            )}
-          </button>
-
-          <Button
-            variant="ghost"
-            className={cn(
-              "w-full rounded-xl text-muted-foreground transition-all duration-300 hover:bg-destructive/10 hover:text-destructive",
-              !sidebarOpen && "px-0"
-            )}
-            onClick={handleLogout}
-          >
-            <LogOut className="h-4 w-4" />
-            {sidebarOpen && <span className="ml-2 font-medium">Deconnexion</span>}
-          </Button>
+              </DropdownMenuLabel>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem onClick={toggleTheme} className="flex items-center justify-between cursor-pointer">
+                <span className="flex items-center gap-2">
+                  <span className="relative h-4 w-4">
+                    <Sun className={cn(
+                      "absolute inset-0 h-4 w-4 transition-all duration-300",
+                      isDark ? "opacity-0 rotate-90 scale-50" : "opacity-100 rotate-0 scale-100"
+                    )} />
+                    <Moon className={cn(
+                      "absolute inset-0 h-4 w-4 transition-all duration-300",
+                      isDark ? "opacity-100 rotate-0 scale-100" : "opacity-0 -rotate-90 scale-50"
+                    )} />
+                  </span>
+                  Mode sombre
+                </span>
+                {/* Animated pill toggle */}
+                <span
+                  className={cn(
+                    "relative inline-flex h-5 w-9 flex-shrink-0 rounded-full border-2 border-transparent",
+                    "transition-colors duration-300 ease-in-out",
+                    isDark ? "bg-primary" : "bg-muted-foreground/30"
+                  )}
+                >
+                  <span className={cn(
+                    "inline-block h-4 w-4 transform rounded-full bg-white shadow-sm",
+                    "transition-transform duration-300 ease-in-out",
+                    isDark ? "translate-x-4" : "translate-x-0"
+                  )} />
+                </span>
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem onClick={() => setProfileOpen(true)}>
+                <User className="mr-2 h-4 w-4" />
+                Mon profil
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                onClick={handleLogout}
+                className="text-destructive focus:text-destructive"
+              >
+                <LogOut className="mr-2 h-4 w-4" />
+                Déconnexion
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
       </aside>
 

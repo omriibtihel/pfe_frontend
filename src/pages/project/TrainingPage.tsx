@@ -6,14 +6,13 @@ import {
   ChevronLeft,
   ChevronRight,
   Database,
-  Scissors,
-  Columns,
   Brain,
   BarChart3,
   Rocket,
   Sparkles,
   CheckCircle2,
   SlidersHorizontal,
+  AlertTriangle,
 } from "lucide-react";
 
 import { AppLayout } from "@/layouts/AppLayout";
@@ -39,19 +38,13 @@ import { DEFAULT_TRAINING_BALANCING, DEFAULT_TRAINING_PREPROCESSING } from "@/ty
 
 import { WizardStepper } from "@/components/training/wizard/WizardStepper";
 import { Step1DatasetTarget } from "@/components/training/wizard/Step1DatasetTarget";
-import { Step2SplitStrategy } from "@/components/training/wizard/Step2SplitStrategy";
-import {
-  Step3ColumnPreprocessing,
-  type Step3ValidationState,
-} from "@/components/training/wizard/Step3ColumnPreprocessing";
 import { Step4Models } from "@/components/training/wizard/Step4Models";
 import { Step5Metrics } from "@/components/training/wizard/Step5Metrics";
 import { Step6Summary } from "@/components/training/wizard/Step6Summary";
+import { loadPrepConfig } from "@/utils/prepConfig";
 
 const steps = [
   { label: "Dataset & Cible", icon: <Database className="h-5 w-5" /> },
-  { label: "Split", icon: <Scissors className="h-5 w-5" /> },
-  { label: "Colonnes", icon: <Columns className="h-5 w-5" /> },
   { label: "Modeles", icon: <Brain className="h-5 w-5" /> },
   { label: "Metriques", icon: <BarChart3 className="h-5 w-5" /> },
   { label: "Lancer", icon: <Rocket className="h-5 w-5" /> },
@@ -147,7 +140,7 @@ function ModeDialog({
                   </li>
                   <li className="flex items-center gap-1">
                     <CheckCircle2 className="h-3 w-3 text-green-500" />
-                    Wizard en 6 etapes
+                    Wizard en 4 etapes
                   </li>
                 </ul>
               </CardContent>
@@ -187,12 +180,6 @@ export function TrainingPage() {
   const [showModeDialog, setShowModeDialog] = useState(false);
   const [currentStep, setCurrentStep] = useState(0);
   const [completedSteps, setCompletedSteps] = useState<Set<number>>(new Set());
-  const [step3Validation, setStep3Validation] = useState<Step3ValidationState>({
-    hasErrors: false,
-    errorCount: 0,
-    warningCount: 0,
-    isValidating: false,
-  });
 
   const [config, setConfig] = useState<TrainingConfig>({
     datasetVersionId: routeVersionId ? String(routeVersionId) : "",
@@ -264,17 +251,13 @@ export function TrainingPage() {
       case 0:
         return !!config.datasetVersionId && !!config.targetColumn;
       case 1:
-        return true;
-      case 2:
-        return !step3Validation.hasErrors;
-      case 3:
         return (config.models || []).length > 0;
-      case 4:
+      case 2:
         return (config.metrics || []).length > 0;
       default:
         return false;
     }
-  }, [currentStep, config, step3Validation.hasErrors]);
+  }, [currentStep, config]);
 
   /** Clicking "Suivant" on step 0 opens the mode dialog instead of going directly to step 1 */
   const handleNext = useCallback(() => {
@@ -303,7 +286,24 @@ export function TrainingPage() {
       return null;
     }
     try {
-      const session = await trainingService.startTraining(projectId, config);
+      // Merge PrepConfig (split/preprocessing/balancing) from PreparationPage if available
+      const versionId = String(config.datasetVersionId || routeVersionId || "").trim();
+      const prepConfig = versionId ? loadPrepConfig(String(projectId), versionId) : null;
+      const mergedConfig: TrainingConfig = prepConfig
+        ? {
+            ...config,
+            splitMethod: prepConfig.splitMethod,
+            trainRatio: prepConfig.trainRatio,
+            valRatio: prepConfig.valRatio,
+            testRatio: prepConfig.testRatio,
+            kFolds: prepConfig.kFolds,
+            shuffle: prepConfig.shuffle,
+            preprocessing: prepConfig.preprocessing,
+            balancing: prepConfig.balancing,
+            useSmote: prepConfig.useSmote,
+          }
+        : config;
+      const session = await trainingService.startTraining(projectId, mergedConfig);
       toast({
         title: "Entrainement lance",
         description: `${(config.models || []).length} modele(s) en cours…`,
@@ -460,29 +460,14 @@ export function TrainingPage() {
               />
             )}
             {currentStep === 1 && (
-              <Step2SplitStrategy
-                projectId={String(projectId)}
-                config={config}
-                onConfigChange={updateConfig}
-              />
-            )}
-            {currentStep === 2 && (
-              <Step3ColumnPreprocessing
-                projectId={String(projectId)}
-                config={config}
-                onConfigChange={updateConfig}
-                onValidationStateChange={setStep3Validation}
-              />
-            )}
-            {currentStep === 3 && (
               <Step4Models
                 projectId={String(projectId)}
                 config={config}
                 onConfigChange={updateConfig}
               />
             )}
-            {currentStep === 4 && <Step5Metrics config={config} onConfigChange={updateConfig} />}
-            {currentStep === 5 && (
+            {currentStep === 2 && <Step5Metrics config={config} onConfigChange={updateConfig} />}
+            {currentStep === 3 && (
               <Step6Summary
                 projectId={String(projectId)}
                 config={config}
@@ -537,11 +522,6 @@ export function TrainingPage() {
           </motion.div>
         )}
 
-        {currentStep === 2 && step3Validation.hasErrors && (
-          <div className="rounded-lg border border-destructive/30 bg-destructive/10 p-3 text-xs text-destructive">
-            Corrigez les erreurs de l'etape 3 pour continuer ({step3Validation.errorCount} erreur(s)).
-          </div>
-        )}
       </div>
 
       {/* Mode dialog — opens after step 1 is complete */}

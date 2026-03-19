@@ -478,14 +478,52 @@
     animation: float-slow 7s ease-in-out infinite;
   }
 
-    .scrollbar-modern {
-    scrollbar-width: thin; /* Firefox */
-    scrollbar-color: hsl(var(--muted-foreground) / 0.35) transparent;
+    /* ── Scrollbar global (toute la page) ── */
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: hsl(var(--primary) / 0.18) transparent;
+  }
+
+  *::-webkit-scrollbar {
+    width: 5px;
+    height: 5px;
+  }
+
+  *::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  *::-webkit-scrollbar-thumb {
+    background: linear-gradient(
+      180deg,
+      hsl(var(--primary) / 0.35) 0%,
+      hsl(var(--secondary) / 0.25) 100%
+    );
+    border-radius: 9999px;
+    transition: background 0.3s ease;
+  }
+
+  *::-webkit-scrollbar-thumb:hover {
+    background: linear-gradient(
+      180deg,
+      hsl(var(--primary) / 0.65) 0%,
+      hsl(var(--secondary) / 0.5) 100%
+    );
+  }
+
+  *::-webkit-scrollbar-corner {
+    background: transparent;
+  }
+
+  /* ── Classe utilitaire pour scrollbars invisibles au repos ── */
+  .scrollbar-modern {
+    scrollbar-width: thin;
+    scrollbar-color: hsl(var(--primary) / 0.18) transparent;
   }
 
   .scrollbar-modern::-webkit-scrollbar {
-    width: 10px;
-    height: 10px;
+    width: 5px;
+    height: 5px;
   }
 
   .scrollbar-modern::-webkit-scrollbar-track {
@@ -493,14 +531,21 @@
   }
 
   .scrollbar-modern::-webkit-scrollbar-thumb {
-    background-color: hsl(var(--muted-foreground) / 0.25);
+    background: linear-gradient(
+      180deg,
+      hsl(var(--primary) / 0.0) 0%,
+      hsl(var(--primary) / 0.0) 100%
+    );
     border-radius: 9999px;
-    border: 3px solid transparent;   /* makes it look thin + premium */
-    background-clip: content-box;
+    transition: background 0.4s ease;
   }
 
   .scrollbar-modern:hover::-webkit-scrollbar-thumb {
-    background-color: hsl(var(--muted-foreground) / 0.38);
+    background: linear-gradient(
+      180deg,
+      hsl(var(--primary) / 0.4) 0%,
+      hsl(var(--secondary) / 0.3) 100%
+    );
   }
 
   .scrollbar-modern::-webkit-scrollbar-corner {

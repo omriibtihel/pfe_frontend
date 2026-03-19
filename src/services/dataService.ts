@@ -4,7 +4,7 @@ import type { ProcessingOperation, DataVersion, DatasetColumn } from "@/types";
 
 /**
  * Processing "Prepare" module should be CLEANING ONLY (avoid leakage).
- * Keep legacy types for older parts of app, but ProcessingPage must use cleaning payload.
+ * Keep legacy types for older parts of app, but NettoyagePage must use cleaning payload.
  */
 export type OperationType = "cleaning" | "imputation" | "normalization" | "encoding" | "other";
 export type CleaningOperationType = "cleaning";
@@ -129,7 +129,7 @@ function normalizeVersion(v: DatasetVersionOut): VersionUI {
 }
 
 function processingBase(projectId: string | number, datasetId: number) {
-  return `/projects/${projectId}/datasets/${datasetId}/processing`;
+  return `/projects/${projectId}/datasets/${datasetId}/nettoyage`;
 }
 
 function versionsBase(projectId: string | number) {

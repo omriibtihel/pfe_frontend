@@ -4,7 +4,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { TrainingConfig } from "@/types";
 import { DEFAULT_TRAINING_PREPROCESSING } from "@/types";
-import { Step3ColumnPreprocessing } from "@/components/training/wizard/Step3ColumnPreprocessing";
+import { Step3ColumnPreprocessing } from "@/components/preparation/Step3ColumnPreprocessing";
 
 const {
   capabilities,

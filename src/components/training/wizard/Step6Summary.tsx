@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { Link } from "react-router-dom";
 import { motion } from "framer-motion";
 import {
   Play,
@@ -10,6 +11,7 @@ import {
   Rocket,
   AlertTriangle,
   ShieldAlert,
+  Sliders,
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -17,6 +19,7 @@ import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import type { TrainingConfig } from "@/types";
 import { trainingService, type TrainingValidationResponse } from "@/services/trainingService";
+import { loadPrepConfig } from "@/utils/prepConfig";
 
 interface Step6Props {
   projectId: string;
@@ -35,6 +38,9 @@ const EMPTY_VALIDATION: TrainingValidationResponse = {
 };
 
 export function Step6Summary({ projectId, config, onStartTraining, onGoToResults }: Step6Props) {
+  const versionId = String(config.datasetVersionId ?? "").trim();
+  const prepConfig = versionId ? loadPrepConfig(projectId, versionId) : null;
+
   const [status, setStatus] = useState<TrainStatus>("idle");
   const [progress, setProgress] = useState(0);
   const [error, setError] = useState<string | null>(null);
@@ -202,6 +208,14 @@ export function Step6Summary({ projectId, config, onStartTraining, onGoToResults
     [validation.error_details]
   );
 
+  const splitMethod = prepConfig?.splitMethod ?? config.splitMethod;
+  const trainRatio = prepConfig?.trainRatio ?? config.trainRatio;
+  const valRatio = prepConfig?.valRatio ?? config.valRatio;
+  const testRatio = prepConfig?.testRatio ?? config.testRatio;
+  const kFolds = prepConfig?.kFolds ?? config.kFolds;
+  const balancingStrategy = prepConfig?.balancing?.strategy ?? config.balancing?.strategy ?? (config.useSmote ? "smote" : "none");
+  const applyThreshold = prepConfig?.balancing?.applyThreshold ?? config.balancing?.applyThreshold ?? false;
+
   const summaryItems = [
     { label: "Dataset Version", value: config.datasetVersionId || "-" },
     { label: "Variable cible", value: config.targetColumn },
@@ -209,20 +223,14 @@ export function Step6Summary({ projectId, config, onStartTraining, onGoToResults
     {
       label: "Split",
       value:
-        config.splitMethod === "holdout"
-          ? `Holdout ${config.trainRatio}/${config.valRatio}/${config.testRatio}`
-          : `${config.splitMethod} (${config.kFolds} folds)`,
+        splitMethod === "holdout"
+          ? `Holdout ${trainRatio}/${valRatio}/${testRatio}`
+          : `${splitMethod} (${kFolds} folds)`,
     },
     { label: "Modeles", value: `${config.models.length} selectionne(s)` },
     { label: "Metriques", value: `${config.metrics.length} selectionnee(s)` },
-    {
-      label: "Balancing",
-      value: config.balancing?.strategy ?? (config.useSmote ? "smote" : "none"),
-    },
-    {
-      label: "Seuil optimise",
-      value: config.balancing?.applyThreshold ? "Oui" : "Non",
-    },
+    { label: "Balancing", value: balancingStrategy },
+    { label: "Seuil optimise", value: applyThreshold ? "Oui" : "Non" },
     { label: "Classe positive", value: config.positiveLabel == null || String(config.positiveLabel).trim() === "" ? "-" : String(config.positiveLabel) },
     { label: "Debug training", value: config.trainingDebug ? "Active" : "Desactive" },
     {
@@ -238,6 +246,23 @@ export function Step6Summary({ projectId, config, onStartTraining, onGoToResults
 
   return (
     <div className="space-y-6">
+      {!prepConfig && (
+        <div className="rounded-lg border border-amber-300/50 bg-amber-50/60 dark:bg-amber-950/20 p-3 text-sm flex items-start gap-3">
+          <AlertTriangle className="h-4 w-4 text-amber-600 mt-0.5 shrink-0" />
+          <span className="text-amber-800 dark:text-amber-300">
+            Aucune configuration de préparation trouvée pour cette version.{" "}
+            <Link
+              to={`/projects/${projectId}/preparation`}
+              className="underline font-medium inline-flex items-center gap-1"
+            >
+              <Sliders className="h-3.5 w-3.5" />
+              Configurer maintenant
+            </Link>{" "}
+            (split, prétraitement, rééquilibrage). Les valeurs par défaut seront utilisées.
+          </span>
+        </div>
+      )}
+
       <Card className="glass-premium shadow-card">
         <CardHeader className="pb-3">
           <CardTitle className="flex items-center gap-2 text-base">

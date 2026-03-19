@@ -59,6 +59,8 @@ interface Step3Props {
   config: TrainingConfig;
   onConfigChange: (updates: Partial<TrainingConfig>) => void;
   onValidationStateChange?: (state: Step3ValidationState) => void;
+  /** Désactive la validation serveur (utile quand les modèles ne sont pas encore sélectionnés) */
+  serverValidationEnabled?: boolean;
 }
 
 export type Step3ValidationState = {
@@ -96,6 +98,7 @@ export function Step3ColumnPreprocessing({
   config,
   onConfigChange,
   onValidationStateChange,
+  serverValidationEnabled = true,
 }: Step3Props) {
   const [capabilities, setCapabilities] = useState<TrainingPreprocessingCapabilities>(
     FALLBACK_PREPROCESSING_CAPABILITIES
@@ -236,6 +239,7 @@ export function Step3ColumnPreprocessing({
     projectId,
     config,
     enabled:
+      serverValidationEnabled &&
       Boolean(String(projectId ?? "").trim()) &&
       Boolean(String(config.datasetVersionId ?? "").trim()) &&
       Boolean(String(config.targetColumn ?? "").trim()) &&

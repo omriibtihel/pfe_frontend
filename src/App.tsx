@@ -21,8 +21,9 @@ import NewProjectPage from "@/pages/project/NewProjectPage";
 import ImportPage from "@/pages/project/ImportPage";
 import DataExplorationPage from "@/pages/project/DataExplorationPage";
 import ChartsPage from "@/pages/project/ChartsPage";
-import ProcessingPage from "@/pages/project/ProcessingPage";
+import NettoyagePage from "@/pages/project/NettoyagePage";
 import VersionsPage from "@/pages/project/VersionsPage";
+import PreparationPage from "@/pages/project/PreparationPage";
 import TrainingPage from "@/pages/project/TrainingPage";
 import TrainingResultsPage from "@/pages/project/TrainingResultsPage";
 import PredictionPage from "@/pages/project/PredictionPage";
@@ -59,8 +60,9 @@ const App = () => (
             <Route path="/projects/:id/description" element={<Navigate to="../database" replace />} />
 
             <Route path="/projects/:id/charts" element={<ProtectedRoute><ChartsPage /></ProtectedRoute>} />
-            <Route path="/projects/:id/processing" element={<ProtectedRoute><ProcessingPage /></ProtectedRoute>} />
+            <Route path="/projects/:id/nettoyage" element={<ProtectedRoute><NettoyagePage /></ProtectedRoute>} />
             <Route path="/projects/:id/versions" element={<ProtectedRoute><VersionsPage /></ProtectedRoute>} />
+            <Route path="/projects/:id/preparation" element={<ProtectedRoute><PreparationPage /></ProtectedRoute>} />
             <Route path="/projects/:id/training" element={<ProtectedRoute><TrainingPage /></ProtectedRoute>} />
             <Route path="/projects/:projectId/versions/:versionId/training" element={<ProtectedRoute><TrainingPage /></ProtectedRoute>} />
             <Route path="/projects/:projectId/versions/:versionId/training/results" element={<ProtectedRoute><TrainingResultsPage /></ProtectedRoute>} />

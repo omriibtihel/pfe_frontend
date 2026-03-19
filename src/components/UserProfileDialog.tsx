@@ -1,69 +1,89 @@
-import { useState } from 'react';
-import { User, Mail, Phone, Building2, Stethoscope, MapPin, Calendar, GraduationCap, Award, Edit2, Save, X } from 'lucide-react';
+import { useRef, useState } from 'react';
+import { User, Mail, Phone, Building2, Stethoscope, MapPin, Calendar, Edit2, Save, X, Loader2, Camera } from 'lucide-react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
 import { Separator } from '@/components/ui/separator';
 import { useAuth } from '@/contexts/AuthContext';
 import { cn } from '@/lib/utils';
 import { motion, AnimatePresence } from 'framer-motion';
+import authService from '@/services/authService';
+import { useToast } from '@/hooks/use-toast';
 
 interface UserProfileDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }
 
-interface DoctorProfile {
-  specialty: string;
-  hospital: string;
-  phone: string;
-  address: string;
-  registrationNumber: string;
-  yearsOfExperience: number;
-  education: string;
-  certifications: string[];
-}
-
 export function UserProfileDialog({ open, onOpenChange }: UserProfileDialogProps) {
   const { user, updateUser } = useAuth();
+  const { toast } = useToast();
   const [isEditing, setIsEditing] = useState(false);
-  
-  // Mock doctor profile data - in real app, this would come from API
-  const [profile, setProfile] = useState<DoctorProfile>({
-    specialty: 'Cardiologie',
-    hospital: 'CHU de Lyon',
-    phone: '+33 6 12 34 56 78',
-    address: 'Lyon, France',
-    registrationNumber: 'RPPS-12345678901',
-    yearsOfExperience: 12,
-    education: 'Université Paris Descartes - Médecine',
-    certifications: ['Cardiologie interventionnelle', 'Échocardiographie', 'Rythmologie']
+  const [isSaving, setIsSaving] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [photoFile, setPhotoFile] = useState<File | null>(null);
+  const [photoPreview, setPhotoPreview] = useState<string | null>(null);
+
+  const [edited, setEdited] = useState({
+    fullName: user?.fullName || '',
+    phone: user?.phone || '',
+    address: user?.address || '',
+    specialty: user?.specialty || '',
+    hospital: user?.hospital || '',
+    dateOfBirth: user?.dateOfBirth || '',
   });
 
-  const [editedProfile, setEditedProfile] = useState(profile);
-  const [editedName, setEditedName] = useState(user?.fullName || '');
+  const handlePhotoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setPhotoFile(file);
+    const reader = new FileReader();
+    reader.onload = () => setPhotoPreview(reader.result as string);
+    reader.readAsDataURL(file);
+  };
 
-  const handleSave = () => {
-    setProfile(editedProfile);
-    if (editedName !== user?.fullName) {
-      updateUser({ fullName: editedName });
+  const handleSave = async () => {
+    setIsSaving(true);
+    try {
+      const updated = await authService.updateProfile({
+        fullName: edited.fullName,
+        phone: edited.phone,
+        address: edited.address,
+        specialty: edited.specialty,
+        hospital: edited.hospital,
+        dateOfBirth: edited.dateOfBirth,
+        profilePhoto: photoFile ?? undefined,
+      });
+      updateUser(updated);
+      setPhotoFile(null);
+      setPhotoPreview(null);
+      setIsEditing(false);
+      toast({ title: 'Profil mis à jour', description: 'Vos informations ont été sauvegardées.' });
+    } catch (err) {
+      toast({ title: 'Erreur', description: (err as Error).message, variant: 'destructive' });
+    } finally {
+      setIsSaving(false);
     }
-    setIsEditing(false);
   };
 
   const handleCancel = () => {
-    setEditedProfile(profile);
-    setEditedName(user?.fullName || '');
+    setEdited({
+      fullName: user?.fullName || '',
+      phone: user?.phone || '',
+      address: user?.address || '',
+      specialty: user?.specialty || '',
+      hospital: user?.hospital || '',
+      dateOfBirth: user?.dateOfBirth || '',
+    });
+    setPhotoFile(null);
+    setPhotoPreview(null);
     setIsEditing(false);
   };
 
-  const InfoItem = ({ icon: Icon, label, value, editKey, type = 'text' }: { 
-    icon: typeof User; 
-    label: string; 
-    value: string | number; 
-    editKey?: keyof DoctorProfile;
-    type?: string;
+  const Field = ({ icon: Icon, label, fieldKey }: {
+    icon: typeof User;
+    label: string;
+    fieldKey: keyof typeof edited;
   }) => (
     <div className="flex items-start gap-3 p-3 rounded-xl bg-muted/30 hover:bg-muted/50 transition-colors">
       <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center flex-shrink-0">
@@ -71,18 +91,15 @@ export function UserProfileDialog({ open, onOpenChange }: UserProfileDialogProps
       </div>
       <div className="flex-1 min-w-0">
         <p className="text-xs text-muted-foreground font-medium">{label}</p>
-        {isEditing && editKey ? (
+        {isEditing ? (
           <Input
-            type={type}
-            value={editedProfile[editKey] as string | number}
-            onChange={(e) => setEditedProfile({ 
-              ...editedProfile, 
-              [editKey]: type === 'number' ? parseInt(e.target.value) || 0 : e.target.value 
-            })}
+            type={fieldKey === 'dateOfBirth' ? 'date' : 'text'}
+            value={edited[fieldKey]}
+            onChange={(e) => setEdited({ ...edited, [fieldKey]: e.target.value })}
             className="mt-1 h-8 text-sm"
           />
         ) : (
-          <p className="font-semibold text-sm truncate">{value}</p>
+          <p className="font-semibold text-sm truncate">{edited[fieldKey] || <span className="text-muted-foreground italic">Non renseigné</span>}</p>
         )}
       </div>
     </div>
@@ -108,8 +125,8 @@ export function UserProfileDialog({ open, onOpenChange }: UserProfileDialogProps
                       <X className="h-4 w-4 mr-1" />
                       Annuler
                     </Button>
-                    <Button size="sm" onClick={handleSave} className="rounded-lg bg-primary text-primary-foreground">
-                      <Save className="h-4 w-4 mr-1" />
+                    <Button size="sm" onClick={handleSave} disabled={isSaving} className="rounded-lg bg-primary text-primary-foreground">
+                      {isSaving ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <Save className="h-4 w-4 mr-1" />}
                       Sauvegarder
                     </Button>
                   </motion.div>
@@ -133,20 +150,37 @@ export function UserProfileDialog({ open, onOpenChange }: UserProfileDialogProps
 
         {/* Profile Header */}
         <div className="flex flex-col items-center py-6">
+          <input ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={handlePhotoChange} />
           <div className="relative">
-            <div className="w-24 h-24 rounded-2xl bg-gradient-to-br from-primary via-secondary to-accent flex items-center justify-center shadow-xl shadow-primary/25">
-              <User className="h-12 w-12 text-white" />
+            <div
+              className={cn("w-24 h-24 rounded-2xl shadow-xl shadow-primary/25 overflow-hidden", isEditing && "cursor-pointer")}
+              onClick={() => isEditing && fileInputRef.current?.click()}
+            >
+              {photoPreview ? (
+                <img src={photoPreview} alt="Aperçu" className="w-full h-full object-cover" />
+              ) : user?.profilePhoto ? (
+                <img src={`http://127.0.0.1:8000${user.profilePhoto}`} alt={user.fullName} className="w-full h-full object-cover" />
+              ) : (
+                <div className="w-full h-full bg-gradient-to-br from-primary via-secondary to-accent flex items-center justify-center">
+                  <User className="h-12 w-12 text-white" />
+                </div>
+              )}
+              {isEditing && (
+                <div className="absolute inset-0 bg-black/40 flex items-center justify-center">
+                  <Camera className="h-6 w-6 text-white" />
+                </div>
+              )}
             </div>
             <div className="absolute -bottom-2 -right-2 w-8 h-8 rounded-full bg-green-500 border-4 border-background flex items-center justify-center">
               <Stethoscope className="h-4 w-4 text-white" />
             </div>
           </div>
-          
+
           <div className="mt-4 text-center">
             {isEditing ? (
               <Input
-                value={editedName}
-                onChange={(e) => setEditedName(e.target.value)}
+                value={edited.fullName}
+                onChange={(e) => setEdited({ ...edited, fullName: e.target.value })}
                 className="text-center text-xl font-bold h-10"
               />
             ) : (
@@ -177,9 +211,18 @@ export function UserProfileDialog({ open, onOpenChange }: UserProfileDialogProps
             Informations de contact
           </h4>
           <div className="grid gap-3">
-            <InfoItem icon={Mail} label="Email" value={user?.email || ''} />
-            <InfoItem icon={Phone} label="Téléphone" value={profile.phone} editKey="phone" />
-            <InfoItem icon={MapPin} label="Localisation" value={profile.address} editKey="address" />
+            <div className="flex items-start gap-3 p-3 rounded-xl bg-muted/30">
+              <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center flex-shrink-0">
+                <Mail className="h-5 w-5 text-primary" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-xs text-muted-foreground font-medium">Email</p>
+                <p className="font-semibold text-sm truncate">{user?.email}</p>
+              </div>
+            </div>
+            <Field icon={Phone} label="Téléphone" fieldKey="phone" />
+            <Field icon={MapPin} label="Adresse" fieldKey="address" />
+            <Field icon={Calendar} label="Date de naissance" fieldKey="dateOfBirth" />
           </div>
         </div>
 
@@ -191,30 +234,8 @@ export function UserProfileDialog({ open, onOpenChange }: UserProfileDialogProps
             Informations professionnelles
           </h4>
           <div className="grid gap-3">
-            <InfoItem icon={Stethoscope} label="Spécialité" value={profile.specialty} editKey="specialty" />
-            <InfoItem icon={Building2} label="Établissement" value={profile.hospital} editKey="hospital" />
-            <InfoItem icon={Award} label="N° RPPS" value={profile.registrationNumber} editKey="registrationNumber" />
-            <InfoItem icon={Calendar} label="Années d'expérience" value={`${profile.yearsOfExperience} ans`} editKey="yearsOfExperience" type="number" />
-            <InfoItem icon={GraduationCap} label="Formation" value={profile.education} editKey="education" />
-          </div>
-        </div>
-
-        <Separator className="bg-border/50" />
-
-        {/* Certifications */}
-        <div className="space-y-4 py-4">
-          <h4 className="text-sm font-bold text-muted-foreground uppercase tracking-wider px-1">
-            Certifications
-          </h4>
-          <div className="flex flex-wrap gap-2">
-            {profile.certifications.map((cert, index) => (
-              <span 
-                key={index}
-                className="px-3 py-1.5 rounded-lg bg-secondary/20 text-secondary text-sm font-medium border border-secondary/30"
-              >
-                {cert}
-              </span>
-            ))}
+            <Field icon={Stethoscope} label="Spécialité" fieldKey="specialty" />
+            <Field icon={Building2} label="Établissement / Hôpital" fieldKey="hospital" />
           </div>
         </div>
       </DialogContent>

@@ -183,6 +183,18 @@ class ApiClient {
     }
   }
 
+  async putFormData<T>(url: string, body: FormData, opts?: RequestOptions): Promise<T> {
+    try {
+      const res = await this.axios.put<T>(url, body, {
+        headers: { "Content-Type": "multipart/form-data" },
+        ...this.cfg(opts),
+      });
+      return res.data;
+    } catch (err) {
+      throw new Error(extractErrorMessage(err));
+    }
+  }
+
   async postFormData<T>(url: string, body: FormData, opts?: RequestOptions): Promise<T> {
     try {
       const res = await this.axios.post<T>(

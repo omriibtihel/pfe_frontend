@@ -34,9 +34,9 @@ import datasetService, { DatasetOut as DatasetListItem } from "@/services/datase
 import apiClient from "@/services/apiClient";
 import type { ProcessingOperation } from "@/types";
 
-import { ColumnSelector } from "@/components/processing/ColumnSelector";
-import { AlertsModal } from "@/components/processing/AlertsModal";
-import { InspectorModal } from "@/components/processing/InspectorModal";
+import { ColumnSelector } from "@/components/nettoyage/ColumnSelector";
+import { AlertsModal } from "@/components/nettoyage/AlertsModal";
+import { InspectorModal } from "@/components/nettoyage/InspectorModal";
 
 /* -------------------------------------------------------
    Small utils
@@ -182,7 +182,7 @@ type SchemaState = {
 };
 
 async function fetchSchemaState(projectId: string, datasetId: number) {
-  return apiClient.get<SchemaState>(`/projects/${projectId}/datasets/${datasetId}/processing/schema`);
+  return apiClient.get<SchemaState>(`/projects/${projectId}/datasets/${datasetId}/nettoyage/schema`);
 }
 
 type SchemaActionPayload =
@@ -192,13 +192,13 @@ type SchemaActionPayload =
   | { schema_action: "dismiss_alert"; alert_key: string; dismissed: boolean };
 
 async function postSchemaAction(projectId: string, datasetId: number, payload: SchemaActionPayload) {
-  await apiClient.postJson(`/projects/${projectId}/datasets/${datasetId}/processing/schema`, payload);
+  await apiClient.postJson(`/projects/${projectId}/datasets/${datasetId}/nettoyage/schema`, payload);
 }
 
 /* -------------------------------------------------------
    Page
 ------------------------------------------------------- */
-export function ProcessingPage() {
+export function NettoyagePage() {
   const { id } = useParams();
   const projectId = id!;
   const navigate = useNavigate();
@@ -479,7 +479,7 @@ export function ProcessingPage() {
             setWorkspaceDatasetId(wsId);
             await refreshProcessing(wsId, 1);
 
-            toast({ title: "Workspace prêt", description: "Prétraitement isolé : aucune autre version ne sera affectée." });
+            toast({ title: "Workspace prêt", description: "Nettoyage isolé : aucune autre version ne sera affectée." });
           } catch (e) {
             setWorkspaceDatasetId(null);
             toast({
@@ -1655,4 +1655,4 @@ const clearOverride = async (col: string) => {
   );
 }
 
-export default ProcessingPage;
+export default NettoyagePage;

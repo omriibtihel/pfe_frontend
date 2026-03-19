@@ -2,17 +2,16 @@ import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
 import {
-  Activity,
-  ArrowRight,
+  CalendarDays,
+  Clock,
+  Clock3,
   FolderOpen,
+  Layers,
   Lightbulb,
   Plus,
   Search,
-  Target,
-  Trash2,
-  TrendingUp,
   Sparkles,
-  Clock3,
+  Trash2,
 } from "lucide-react";
 
 import { useAuth } from "@/contexts/AuthContext";
@@ -20,15 +19,43 @@ import { AppLayout } from "@/layouts/AppLayout";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { StatCard } from "@/components/ui/stat-card";
 import { Badge } from "@/components/ui/badge";
 import { ConfirmModal } from "@/components/ui/modal";
 import { PageSkeleton } from "@/components/ui/loading-skeleton";
 import { projectService } from "@/services/projectService";
-import { Project, ProjectStats } from "@/types";
+import type { Project } from "@/types";
 import { useToast } from "@/hooks/use-toast";
 import { staggerContainer, staggerItem, fadeInUp } from "@/components/ui/page-transition";
 import datasetService from "@/services/datasetService";
+
+const AI_TIPS = [
+  "La validation croisée K-Fold donne une estimation plus fiable de la généralisation que le simple holdout.",
+  "Normalisez toujours vos features numériques avant d'entraîner un SVM ou un réseau de neurones.",
+  "Un dataset déséquilibré peut fausser vos métriques — vérifiez le F1-score en plus de l'accuracy.",
+  "SMOTE génère des exemples synthétiques de la classe minoritaire plutôt que de simplement dupliquer.",
+  "L'importance des features (Random Forest) aide à identifier les variables redondantes avant le training.",
+  "Un modèle simple bien calibré surpasse souvent un modèle complexe sur-ajusté.",
+  "Consultez toujours la matrice de confusion : l'accuracy seule cache les faux négatifs critiques en médecine.",
+  "Le GridSearch exhaustif peut être remplacé par RandomSearch pour gagner 80% du gain en 20% du temps.",
+  "Séparez vos données en train/validation/test dès le début — ne touchez au test qu'une seule fois.",
+  "LightGBM et XGBoost convergent souvent plus vite que Random Forest sur des données tabulaires médicales.",
+];
+
+function getDailyTip(): string {
+  const dayOfYear = Math.floor((Date.now() - new Date(new Date().getFullYear(), 0, 0).getTime()) / 86_400_000);
+  return AI_TIPS[dayOfYear % AI_TIPS.length];
+}
+
+function timeAgo(dateStr: string): string {
+  if (!dateStr) return "—";
+  const diff = Date.now() - new Date(dateStr).getTime();
+  const days = Math.floor(diff / 86_400_000);
+  if (days === 0) return "Aujourd'hui";
+  if (days === 1) return "Hier";
+  if (days < 7) return `Il y a ${days} jours`;
+  if (days < 30) return `Il y a ${Math.floor(days / 7)} sem.`;
+  return `Il y a ${Math.floor(days / 30)} mois`;
+}
 
 export function DashboardPage() {
   const { user } = useAuth();
@@ -36,11 +63,12 @@ export function DashboardPage() {
   const { toast } = useToast();
 
   const [projects, setProjects] = useState<Project[]>([]);
-  const [stats, setStats] = useState<ProjectStats | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [deleteProject, setDeleteProject] = useState<Project | null>(null);
   const [openLoadingId, setOpenLoadingId] = useState<string | null>(null);
+
+  const dailyTip = useMemo(() => getDailyTip(), []);
 
   const dayLabel = useMemo(
     () =>
@@ -78,12 +106,8 @@ export function DashboardPage() {
       if (!user) return;
 
       try {
-        const [projectsData, statsData] = await Promise.all([
-          projectService.getProjects(user.id),
-          projectService.getStats(user.id),
-        ]);
+        const projectsData = await projectService.getProjects(user.id);
         setProjects(projectsData);
-        setStats(statsData);
       } catch {
         toast({
           title: "Erreur",
@@ -113,6 +137,17 @@ export function DashboardPage() {
   };
 
   const filteredProjects = projects.filter((p) => p.name.toLowerCase().includes(search.toLowerCase()));
+
+  const now = Date.now();
+  const thisMonthCount = projects.filter((p) => {
+    const d = new Date(p.createdAt).getTime();
+    return now - d < 30 * 86_400_000;
+  }).length;
+
+  const lastUpdated = projects.reduce<Project | null>((latest, p) => {
+    if (!latest) return p;
+    return new Date(p.updatedAt) > new Date(latest.updatedAt) ? p : latest;
+  }, null);
 
   if (isLoading) {
     return (
@@ -160,53 +195,64 @@ export function DashboardPage() {
           </div>
         </motion.section>
 
-        {stats && (
-          <motion.div variants={staggerItem} className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
-            <StatCard
-              title="Projets actifs"
-              value={stats.activeProjects}
-              icon={FolderOpen}
-              className="ai-surface bg-card/75"
-            />
-            <StatCard
-              title="Precision moyenne"
-              value={`${stats.averageAccuracy.toFixed(1)}%`}
-              icon={Target}
-              className="ai-surface bg-card/75"
-              iconClassName="bg-success/15"
-            />
-            <StatCard
-              title="Performance"
-              value={`+${stats.performanceGrowth}%`}
-              icon={TrendingUp}
-              className="ai-surface bg-card/75"
-              trend={{ value: stats.performanceGrowth, isPositive: true }}
-            />
-            <StatCard
-              title="Predictions"
-              value={stats.totalPredictions.toLocaleString()}
-              icon={Activity}
-              className="ai-surface bg-card/75"
-            />
-          </motion.div>
-        )}
+        <motion.div variants={staggerItem} className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+          {/* Total projets */}
+          <div className="ai-surface flex items-center gap-4 rounded-2xl bg-card/75 p-5">
+            <div className="flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-xl bg-primary/15">
+              <Layers className="h-6 w-6 text-primary" />
+            </div>
+            <div>
+              <p className="text-xs font-medium text-muted-foreground">Total projets</p>
+              <p className="text-3xl font-bold tracking-tight">{projects.length}</p>
+            </div>
+          </div>
+
+          {/* Créés ce mois */}
+          <div className="ai-surface flex items-center gap-4 rounded-2xl bg-card/75 p-5">
+            <div className="flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-xl bg-secondary/15">
+              <CalendarDays className="h-6 w-6 text-secondary" />
+            </div>
+            <div>
+              <p className="text-xs font-medium text-muted-foreground">Créés ce mois</p>
+              <p className="text-3xl font-bold tracking-tight">{thisMonthCount}</p>
+              <p className="text-xs text-muted-foreground">sur les 30 derniers jours</p>
+            </div>
+          </div>
+
+          {/* Dernière activité */}
+          <div className="ai-surface flex items-center gap-4 rounded-2xl bg-card/75 p-5">
+            <div className="flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-xl bg-accent/15">
+              <Clock className="h-6 w-6 text-accent" />
+            </div>
+            <div className="min-w-0">
+              <p className="text-xs font-medium text-muted-foreground">Dernière activité</p>
+              {lastUpdated ? (
+                <>
+                  <p className="truncate text-sm font-bold">{lastUpdated.name}</p>
+                  <p className="text-xs text-muted-foreground">{timeAgo(lastUpdated.updatedAt)}</p>
+                </>
+              ) : (
+                <p className="text-sm text-muted-foreground">—</p>
+              )}
+            </div>
+          </div>
+        </motion.div>
 
         <motion.div variants={fadeInUp}>
           <Card className="ai-surface border-primary/25 bg-gradient-to-r from-primary/10 via-secondary/5 to-transparent">
             <CardContent className="flex flex-col gap-4 py-5 sm:flex-row sm:items-center">
-              <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-primary/15">
+              <div className="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-xl bg-primary/15">
                 <Lightbulb className="h-5 w-5 text-primary" />
               </div>
               <div className="flex-1">
-                <p className="font-semibold">Conseil IA du jour</p>
-                <p className="text-sm text-muted-foreground">
-                  Utilisez la validation croisee K-Fold pour estimer plus finement la robustesse de vos modeles.
-                </p>
+                <div className="flex items-center gap-2">
+                  <p className="font-semibold">Conseil IA du jour</p>
+                  <span className="rounded-full bg-primary/15 px-2 py-0.5 text-[10px] font-semibold text-primary">
+                    {new Date().toLocaleDateString("fr-FR", { day: "numeric", month: "short" })}
+                  </span>
+                </div>
+                <p className="mt-0.5 text-sm text-muted-foreground">{dailyTip}</p>
               </div>
-              <Button variant="ghost" className="gap-2 self-start sm:self-center">
-                En savoir plus
-                <ArrowRight className="h-4 w-4" />
-              </Button>
             </CardContent>
           </Card>
         </motion.div>
@@ -252,9 +298,18 @@ export function DashboardPage() {
                   <CardHeader className="pb-4">
                     <div className="flex items-start justify-between gap-3">
                       <CardTitle className="line-clamp-2 text-lg">{project.name}</CardTitle>
-                      <Badge variant={project.status === "active" ? "default" : "secondary"}>
-                        {project.status === "active" ? "Actif" : "Termine"}
-                      </Badge>
+                      <div className="flex flex-col items-end gap-1">
+                        {project.id === lastUpdated?.id && (
+                          <Badge variant="outline" className="border-accent/50 text-accent text-[10px]">
+                            Récent
+                          </Badge>
+                        )}
+                        {thisMonthCount > 0 && new Date(project.createdAt).getTime() > now - 30 * 86_400_000 && project.id !== lastUpdated?.id && (
+                          <Badge variant="outline" className="border-secondary/50 text-secondary text-[10px]">
+                            Nouveau
+                          </Badge>
+                        )}
+                      </div>
                     </div>
                   </CardHeader>
                   <CardContent className="space-y-5">
@@ -277,9 +332,9 @@ export function DashboardPage() {
                       </div>
                     )}
 
-                    <div className="flex items-center justify-between text-xs text-muted-foreground">
-                      <span>Mis a jour</span>
-                      <span>{new Date(project.updatedAt).toLocaleDateString("fr-FR")}</span>
+                    <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                      <Clock3 className="h-3 w-3" />
+                      <span>{timeAgo(project.updatedAt)}</span>
                     </div>
 
                     <div className="flex gap-2">

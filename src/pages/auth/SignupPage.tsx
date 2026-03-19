@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import {
   Activity,
@@ -32,8 +32,20 @@ export function SignupPage() {
     address: "",
   });
 
+  const [profilePhoto, setProfilePhoto] = useState<File | null>(null);
+  const [photoPreview, setPhotoPreview] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const [isLoading, setIsLoading] = useState(false);
   const { signup } = useAuth();
+
+  const handlePhotoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setProfilePhoto(file);
+    const reader = new FileReader();
+    reader.onload = () => setPhotoPreview(reader.result as string);
+    reader.readAsDataURL(file);
+  };
   const navigate = useNavigate();
   const { toast } = useToast();
 
@@ -57,6 +69,7 @@ export function SignupPage() {
         address: formData.address,
         hospital: "",
         dateOfBirth: formData.dateOfBirth,
+        profilePhoto: profilePhoto ?? undefined,
       };
 
       const result = await signup(signupPayload);
@@ -190,10 +203,34 @@ export function SignupPage() {
 
             <div className="space-y-2">
               <Label>Photo de profil</Label>
-              <div className="flex h-24 items-center justify-center gap-2 rounded-xl border border-dashed border-border/70 bg-muted/20 text-sm text-muted-foreground transition-colors hover:border-primary/35">
-                <Upload className="h-4 w-4" />
-                Cliquez pour ajouter
-              </div>
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/*"
+                className="hidden"
+                onChange={handlePhotoChange}
+              />
+              <button
+                type="button"
+                onClick={() => fileInputRef.current?.click()}
+                className="flex h-24 w-full cursor-pointer items-center justify-center gap-3 rounded-xl border border-dashed border-border/70 bg-muted/20 text-sm text-muted-foreground transition-colors hover:border-primary/50 hover:bg-primary/5 hover:text-primary"
+              >
+                {photoPreview ? (
+                  <>
+                    <img
+                      src={photoPreview}
+                      alt="Aperçu"
+                      className="h-14 w-14 rounded-full object-cover ring-2 ring-primary/30"
+                    />
+                    <span className="text-xs">{profilePhoto?.name}</span>
+                  </>
+                ) : (
+                  <>
+                    <Upload className="h-4 w-4" />
+                    Cliquez pour ajouter une photo
+                  </>
+                )}
+              </button>
             </div>
 
             <Button type="submit" className="h-12 w-full gap-2 text-base font-semibold" disabled={isLoading}>
