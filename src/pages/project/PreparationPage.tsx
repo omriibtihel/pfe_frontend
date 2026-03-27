@@ -9,6 +9,8 @@ import {
   Save,
   Scissors,
   Sliders,
+  Tags,
+  TrendingUp,
 } from "lucide-react";
 
 import { AppLayout } from "@/layouts/AppLayout";
@@ -191,6 +193,13 @@ export function PreparationPage() {
     setIsSaved(false);
   }, []);
 
+  // Switch away from balancing tab when task type is regression (not applicable).
+  useEffect(() => {
+    if (prepConfig.taskType === "regression" && activeTab === "balancing") {
+      setActiveTab("split");
+    }
+  }, [prepConfig.taskType, activeTab]);
+
   const updateBalancing = useCallback(
     (updates: { balancing?: TrainingBalancingConfig; useSmote?: boolean }) => {
       setPrepConfig((prev) => ({
@@ -268,6 +277,31 @@ export function PreparationPage() {
                 </Select>
               </div>
 
+              {/* Task type selector */}
+              <div className="flex items-center gap-1.5 rounded-xl border bg-card/70 p-0.5">
+                {(["classification", "regression"] as const).map((type) => {
+                  const active = prepConfig.taskType === type;
+                  return (
+                    <button
+                      key={type}
+                      type="button"
+                      onClick={() => updateConfig({ taskType: type })}
+                      className={[
+                        "flex items-center gap-1.5 rounded-lg px-3 py-1 text-xs font-medium transition-all",
+                        active
+                          ? "bg-primary text-primary-foreground shadow-sm"
+                          : "text-muted-foreground hover:text-foreground",
+                      ].join(" ")}
+                    >
+                      {type === "classification"
+                        ? <Tags className="h-3 w-3" />
+                        : <TrendingUp className="h-3 w-3" />}
+                      {type === "classification" ? "Classification" : "Régression"}
+                    </button>
+                  );
+                })}
+              </div>
+
               {isSaved && savedVersionId === selectedVersionId && (
                 <Badge variant="outline" className="border-emerald-500 text-emerald-600 text-xs">
                   Config enregistrée
@@ -320,6 +354,7 @@ export function PreparationPage() {
                   )}
                 </Tooltip>
 
+                {prepConfig.taskType === "classification" && (
                 <Tooltip>
                   <TooltipTrigger asChild>
                     <span>
@@ -334,6 +369,7 @@ export function PreparationPage() {
                     <TooltipContent>Validez d'abord le split</TooltipContent>
                   )}
                 </Tooltip>
+                )}
               </TabsList>
 
               <Button

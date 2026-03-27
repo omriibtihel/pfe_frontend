@@ -66,6 +66,7 @@ export function DashboardPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [deleteProject, setDeleteProject] = useState<Project | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
   const [openLoadingId, setOpenLoadingId] = useState<string | null>(null);
 
   const dailyTip = useMemo(() => getDailyTip(), []);
@@ -123,17 +124,19 @@ export function DashboardPage() {
   }, [user, toast]);
 
   const handleDelete = async () => {
-    if (!deleteProject) return;
+    if (!deleteProject || isDeleting) return;
 
+    setIsDeleting(true);
     try {
       await projectService.deleteProject(deleteProject.id);
       setProjects((prev) => prev.filter((p) => p.id !== deleteProject.id));
+      setDeleteProject(null);
       toast({ title: "Projet supprime" });
     } catch {
       toast({ title: "Erreur", variant: "destructive" });
+    } finally {
+      setIsDeleting(false);
     }
-
-    setDeleteProject(null);
   };
 
   const filteredProjects = projects.filter((p) => p.name.toLowerCase().includes(search.toLowerCase()));
@@ -320,7 +323,7 @@ export function DashboardPage() {
                     {project.accuracy != null && (
                       <div className="space-y-2">
                         <div className="flex items-center justify-between text-xs text-muted-foreground">
-                          <span>Precision du modele</span>
+                          <span>Précision du modèle</span>
                           <span className="font-semibold text-foreground">{project.accuracy}%</span>
                         </div>
                         <div className="h-2 overflow-hidden rounded-full bg-muted">
@@ -365,6 +368,7 @@ export function DashboardPage() {
         description={`Voulez-vous supprimer "${deleteProject?.name}" ?`}
         variant="destructive"
         confirmText="Supprimer"
+        isLoading={isDeleting}
       />
     </AppLayout>
   );

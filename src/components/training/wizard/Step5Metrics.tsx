@@ -42,8 +42,15 @@ const classificationMetricGroups: MetricGroup[] = [
       { value: "f1", label: "F1 Score", desc: "Compromis precision / recall" },
       { value: "roc_auc", label: "ROC AUC", desc: "Aire sous la courbe ROC" },
       { value: "pr_auc", label: "PR AUC", desc: "Aire sous la courbe Precision-Recall" },
-      { value: "f1_pos", label: "F1 Positif", desc: "F1 de la classe positive" },
       { value: "confusion_matrix", label: "Matrice de confusion", desc: "Tableau TP/FP/TN/FN" },
+    ],
+  },
+  {
+    id: "binary",
+    title: "Binaire uniquement",
+    description: "Metriques de la classe positive. Ignorees en classification multiclasse.",
+    options: [
+      { value: "f1_pos", label: "F1 Positif", desc: "F1 de la classe positive (binaire seulement)" },
     ],
   },
   {

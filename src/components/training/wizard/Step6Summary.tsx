@@ -83,7 +83,21 @@ export function Step6Summary({ projectId, config, onStartTraining, onGoToResults
     setValidating(true);
 
     try {
-      const out = await trainingService.validateTraining(projectId, config);
+      const configToValidate: TrainingConfig = prepConfig
+        ? {
+            ...config,
+            splitMethod: prepConfig.splitMethod,
+            trainRatio: prepConfig.trainRatio,
+            valRatio: prepConfig.valRatio,
+            testRatio: prepConfig.testRatio,
+            kFolds: prepConfig.kFolds,
+            shuffle: prepConfig.shuffle,
+            preprocessing: prepConfig.preprocessing,
+            balancing: prepConfig.balancing,
+            useSmote: prepConfig.useSmote,
+          }
+        : config;
+      const out = await trainingService.validateTraining(projectId, configToValidate);
       if (seq !== validationSeqRef.current) return out;
       setValidation(out);
       return out;

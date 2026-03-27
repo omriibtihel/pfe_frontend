@@ -479,11 +479,11 @@ export function Step3ColumnPreprocessing({
 
             <div className="grid grid-cols-2 md:grid-cols-5 gap-2">
               {[
-                { label: "Features", value: rows.length, className: "" },
+                { label: "Variables", value: rows.length, className: "" },
                 { label: "Actives", value: activeRowsCount, className: "text-emerald-700" },
-                { label: "Droppees", value: droppedRowsCount, className: "text-amber-700" },
+                { label: "Supprimées", value: droppedRowsCount, className: "text-amber-700" },
                 { label: "Types auto", value: autoTypeRowsCount, className: "" },
-                { label: "Types forces", value: manualTypeRowsCount, className: "" },
+                { label: "Types forcés", value: manualTypeRowsCount, className: "" },
               ].map(({ label, value, className }) => (
                 <div key={label} className="rounded-lg border border-border/60 bg-background/70 p-2">
                   <p className="text-[11px] text-muted-foreground">{label}</p>

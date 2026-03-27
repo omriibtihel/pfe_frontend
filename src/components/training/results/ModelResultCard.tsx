@@ -7,6 +7,9 @@ import {
   CartesianGrid,
   Cell,
   LabelList,
+  Line,
+  LineChart,
+  ReferenceLine,
   ResponsiveContainer,
   Tooltip,
   XAxis,
@@ -78,6 +81,7 @@ export function ModelResultCard({
     [result, isRegression],
   );
   const isBinary = classView?.classificationType === 'binary';
+  const isAutomlNonBest = Boolean(result.automl && !result.automl.isBest);
 
   const metricCards = isRegression
     ? [
@@ -144,6 +148,11 @@ export function ModelResultCard({
             <div className="flex items-center gap-2 flex-wrap">
               <CardTitle className="text-base">{result.modelType.toUpperCase()}</CardTitle>
               {isBestModel && <Badge className="bg-amber-500 text-xs text-white">Meilleur</Badge>}
+              {isAutomlNonBest && (
+                <Badge variant="outline" className="text-xs border-muted-foreground/50 text-muted-foreground">
+                  Comparaison uniquement
+                </Badge>
+              )}
               {result.automl && (
                 <Badge variant="outline" className="gap-1 text-xs border-violet-500 text-violet-700 dark:text-violet-400">
                   <Bot className="h-3 w-3" aria-hidden="true" />
@@ -189,6 +198,13 @@ export function ModelResultCard({
                 </div>
               ))}
             </div>
+            {result.isCV && (
+              <div className="mt-2 flex justify-end">
+                <Badge variant="outline" className="text-xs gap-1">
+                  {result.hasHoldoutTest ? 'Source : test holdout' : 'Source : moyenne CV'}
+                </Badge>
+              </div>
+            )}
           </section>
 
           {!result.isCV && (
@@ -595,6 +611,53 @@ export function ModelResultCard({
                 </section>
               )}
 
+              {result.curves && (result.curves.roc || result.curves.pr) && (
+                <section aria-label="Courbes ROC et Precision-Recall">
+                  <p className="mb-2 text-sm font-medium">Courbes ROC & Precision-Recall</p>
+                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                    {result.curves.roc && (
+                      <div>
+                        <p className="mb-1 text-xs text-muted-foreground text-center">ROC Curve</p>
+                        <div className="rounded-lg border border-border/50 bg-muted/20 p-2" style={{ height: 180 }}>
+                          <ResponsiveContainer width="100%" height="100%">
+                            <LineChart
+                              data={result.curves.roc.map(([fpr, tpr]) => ({ fpr, tpr }))}
+                              margin={{ top: 4, right: 8, bottom: 16, left: 8 }}
+                            >
+                              <CartesianGrid strokeDasharray="3 3" stroke="rgba(128,128,128,0.15)" />
+                              <XAxis dataKey="fpr" type="number" domain={[0, 1]} tickCount={5} tick={{ fontSize: 10 }} label={{ value: 'FPR', position: 'insideBottom', offset: -4, fontSize: 10 }} />
+                              <YAxis type="number" domain={[0, 1]} tickCount={5} tick={{ fontSize: 10 }} label={{ value: 'TPR', angle: -90, position: 'insideLeft', offset: 8, fontSize: 10 }} />
+                              <Tooltip formatter={(v: number) => v.toFixed(3)} labelFormatter={(v: number) => `FPR: ${v.toFixed(3)}`} />
+                              <ReferenceLine stroke="#6b7280" strokeDasharray="4 4" segment={[{ x: 0, y: 0 }, { x: 1, y: 1 }]} />
+                              <Line type="monotone" dataKey="tpr" stroke="#8b5cf6" dot={false} strokeWidth={2} />
+                            </LineChart>
+                          </ResponsiveContainer>
+                        </div>
+                      </div>
+                    )}
+                    {result.curves.pr && (
+                      <div>
+                        <p className="mb-1 text-xs text-muted-foreground text-center">Precision-Recall Curve</p>
+                        <div className="rounded-lg border border-border/50 bg-muted/20 p-2" style={{ height: 180 }}>
+                          <ResponsiveContainer width="100%" height="100%">
+                            <LineChart
+                              data={result.curves.pr.map(([recall, precision]) => ({ recall, precision }))}
+                              margin={{ top: 4, right: 8, bottom: 16, left: 8 }}
+                            >
+                              <CartesianGrid strokeDasharray="3 3" stroke="rgba(128,128,128,0.15)" />
+                              <XAxis dataKey="recall" type="number" domain={[0, 1]} tickCount={5} tick={{ fontSize: 10 }} label={{ value: 'Recall', position: 'insideBottom', offset: -4, fontSize: 10 }} />
+                              <YAxis type="number" domain={[0, 1]} tickCount={5} tick={{ fontSize: 10 }} label={{ value: 'Precision', angle: -90, position: 'insideLeft', offset: 8, fontSize: 10 }} />
+                              <Tooltip formatter={(v: number) => v.toFixed(3)} labelFormatter={(v: number) => `Recall: ${v.toFixed(3)}`} />
+                              <Line type="monotone" dataKey="precision" stroke="#06b6d4" dot={false} strokeWidth={2} />
+                            </LineChart>
+                          </ResponsiveContainer>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </section>
+              )}
+
               <TechnicalDetails result={result} />
             </div>
           )}
@@ -603,14 +666,21 @@ export function ModelResultCard({
             <Button
               className="flex-1"
               variant={isSaved ? 'secondary' : 'default'}
-              disabled={isSaving}
+              disabled={isSaving || isAutomlNonBest}
               onClick={() => onSaveModel(result.id)}
+              title={
+                isAutomlNonBest
+                  ? 'Ce modèle est affiché à titre comparatif uniquement. Seul le meilleur modèle AutoML peut être sauvegardé pour les prédictions.'
+                  : undefined
+              }
               aria-label={
-                isSaving
-                  ? 'Enregistrement en cours...'
-                  : isSaved
-                    ? `Retirer ${result.modelType.toUpperCase()} des modèles sauvegardés`
-                    : `Sauvegarder ${result.modelType.toUpperCase()} pour les prédictions`
+                isAutomlNonBest
+                  ? `${result.modelType.toUpperCase()} — comparaison uniquement, non disponible pour la prédiction`
+                  : isSaving
+                    ? 'Enregistrement en cours...'
+                    : isSaved
+                      ? `Retirer ${result.modelType.toUpperCase()} des modèles sauvegardés`
+                      : `Sauvegarder ${result.modelType.toUpperCase()} pour les prédictions`
               }
             >
               {isSaving ? (

@@ -179,7 +179,7 @@ export function PredictionPage() {
             </p>
           </div>
           <Badge variant="secondary" className="self-start">
-            <Target className="mr-1 h-3 w-3" /> Inference
+            <Target className="mr-1 h-3 w-3" /> Inférence
           </Badge>
         </div>
 
@@ -331,7 +331,7 @@ export function PredictionPage() {
                     />
                     <ModelDetailRow
                       icon={<CheckCircle2 className="h-3 w-3" />}
-                      label="Features"
+                      label="Variables"
                       value={`${selectedModel.featureNames.length} colonne${selectedModel.featureNames.length > 1 ? 's' : ''}`}
                     />
                     {selectedModel.testScore != null && (

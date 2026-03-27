@@ -4,13 +4,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
+import { Modal } from "@/components/ui/modal";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { trainingService } from "@/services/trainingService";
@@ -39,19 +33,19 @@ interface BalancingPanelProps {
 }
 
 const fallbackBalancingStrategies: Array<{ id: TrainingBalancingStrategy; label: string }> = [
-  { id: "none", label: "Aucun reequilibrage" },
-  { id: "class_weight", label: "Class weight" },
+  { id: "none", label: "Aucun rééquilibrage" },
+  { id: "class_weight", label: "Poids de classes" },
   { id: "smote", label: "SMOTE" },
   { id: "smote_tomek", label: "SMOTE + Tomek" },
-  { id: "random_undersampling", label: "Random undersampling" },
-  { id: "threshold_optimization", label: "Threshold optimization" },
+  { id: "random_undersampling", label: "Sous-échantillonnage aléatoire" },
+  { id: "threshold_optimization", label: "Optimisation du seuil" },
 ];
 
 const thresholdStrategyOptions: Array<{ id: TrainingThresholdStrategy; label: string }> = [
   { id: "maximize_f1", label: "Maximiser F1" },
   { id: "maximize_f2", label: "Maximiser F2 (rappel)" },
-  { id: "min_recall", label: "Contrainte recall min" },
-  { id: "precision_recall_balance", label: "Equilibre precision/recall" },
+  { id: "min_recall", label: "Rappel minimum garanti" },
+  { id: "precision_recall_balance", label: "Équilibre précision/rappel" },
 ];
 
 function isSmoteStrategy(strategy: TrainingBalancingStrategy): boolean {
@@ -114,7 +108,7 @@ export function BalancingPanel({ projectId, config, onConfigChange }: BalancingP
       } catch (e: any) {
         if (!mounted) return;
         setBalanceAnalysis(null);
-        setBalanceError(String(e?.message || "Analyse du desequilibre indisponible."));
+        setBalanceError(String(e?.message || "Analyse du déséquilibre indisponible."));
       } finally {
         if (mounted) setBalanceLoading(false);
       }
@@ -162,7 +156,7 @@ export function BalancingPanel({ projectId, config, onConfigChange }: BalancingP
               <p className="text-xs text-warning mt-1">Disponible uniquement en classification.</p>
             )}
             {config.taskType === "classification" && balanceLoading && (
-              <p className="text-xs text-muted-foreground mt-1">Analyse du desequilibre en cours...</p>
+              <p className="text-xs text-muted-foreground mt-1">Analyse du déséquilibre en cours…</p>
             )}
             {config.taskType === "classification" && !balanceLoading && !!balanceError && (
               <p className="text-xs text-warning mt-1">{balanceError}</p>
@@ -305,37 +299,38 @@ export function BalancingPanel({ projectId, config, onConfigChange }: BalancingP
         </CardContent>
       </Card>
 
-      <Dialog open={pendingStrategy !== null} onOpenChange={(open) => { if (!open) setPendingStrategy(null); }}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <AlertTriangle className="h-4 w-4 text-warning" />
-              Dataset equilibre — strategie non necessaire
-            </DialogTitle>
-            <DialogDescription className="space-y-2 pt-1">
-              <span className="block">{balanceAnalysis?.summary_message}</span>
-              <span className="block">
-                La strategie <strong>{pendingStrategy}</strong> n'est pas necessaire sur un dataset equilibre et pourrait
-                desequilibrer artificiellement l'entrainement. Voulez-vous quand meme l'appliquer?
-              </span>
-            </DialogDescription>
-          </DialogHeader>
-          <div className="flex justify-end gap-2 pt-2">
-            <Button variant="outline" onClick={() => setPendingStrategy(null)}>
+      <Modal
+        isOpen={pendingStrategy !== null}
+        onClose={() => setPendingStrategy(null)}
+        icon={<AlertTriangle className="h-4 w-4 text-warning" />}
+        title="Dataset équilibré — stratégie non nécessaire"
+        size="md"
+        footer={
+          <div className="flex justify-end gap-2">
+            <Button variant="outline" size="sm" onClick={() => setPendingStrategy(null)}>
               Annuler
             </Button>
             <Button
               variant="destructive"
+              size="sm"
               onClick={() => {
                 if (pendingStrategy) applyBalancing({ strategy: pendingStrategy });
                 setPendingStrategy(null);
               }}
             >
-              Appliquer quand meme
+              Appliquer quand même
             </Button>
           </div>
-        </DialogContent>
-      </Dialog>
+        }
+      >
+        <div className="space-y-2 text-sm text-muted-foreground">
+          {balanceAnalysis?.summary_message && <p>{balanceAnalysis.summary_message}</p>}
+          <p>
+            La stratégie <strong>{pendingStrategy}</strong> n'est pas nécessaire sur un dataset équilibré et pourrait
+            déséquilibrer artificiellement l'entraînement. Voulez-vous quand même l'appliquer ?
+          </p>
+        </div>
+      </Modal>
     </>
   );
 }

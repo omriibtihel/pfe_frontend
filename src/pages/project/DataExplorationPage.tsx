@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import {
   AlertTriangle,
@@ -47,7 +47,8 @@ import { useDataExploration } from '@/hooks/useDataExploration';
 import DataTable from '@/components/ui/data-table';
 import CorrelationHeatmap from '@/components/ui/CorrelationHeatmap';
 import databaseService from '@/services/databaseService';
-import type { CorrelationOut } from '@/services/databaseService';
+import type { CorrelationOut, AnalyticsOverview, AnalyticsProfile } from '@/services/databaseService';
+import dataService, { type VersionUI } from '@/services/dataService';
 import { ReportExportModal } from '@/components/report/ReportExportModal';
 
 import {
@@ -152,6 +153,7 @@ function ColumnDetailPanel({
   onClose,
   projectId,
   datasetId,
+  versionId,
 }: {
   col: ColProfile;
   totalRows: number;
@@ -160,6 +162,7 @@ function ColumnDetailPanel({
   onClose: () => void;
   projectId: string;
   datasetId: number;
+  versionId?: number | null;
 }) {
   const missingPct = totalRows ? (col.missing / totalRows) * 100 : 0;
 
@@ -168,15 +171,20 @@ function ColumnDetailPanel({
 
   useEffect(() => {
     setChartData(null);
-    if (!datasetId || (col.kind !== 'numeric' && col.kind !== 'categorical' && col.kind !== 'text')) return;
+    const sourceId = versionId || datasetId;
+    if (!sourceId || (col.kind !== 'numeric' && col.kind !== 'categorical' && col.kind !== 'text')) return;
     setLoadingChart(true);
     const run = async () => {
       try {
         if (col.kind === 'numeric') {
-          const res = await databaseService.hist(projectId, datasetId, { col: col.name, bins: 15 });
+          const res = versionId
+            ? await databaseService.versionHist(projectId, versionId, { col: col.name, bins: 15 })
+            : await databaseService.hist(projectId, datasetId, { col: col.name, bins: 15 });
           setChartData(res.rows.map((b) => ({ label: b.x0.toFixed(2), count: b.count })));
         } else {
-          const res = await databaseService.valueCounts(projectId, datasetId, { col: col.name, top_k: 10 });
+          const res = versionId
+            ? await databaseService.versionValueCounts(projectId, versionId, { col: col.name, top_k: 10 })
+            : await databaseService.valueCounts(projectId, datasetId, { col: col.name, top_k: 10 });
           setChartData(res.rows.map((r) => ({ label: r.value || '(vide)', count: r.count })));
         }
       } catch {
@@ -186,7 +194,7 @@ function ColumnDetailPanel({
       }
     };
     void run();
-  }, [col.name, col.kind, projectId, datasetId]);
+  }, [col.name, col.kind, projectId, datasetId, versionId]);
 
   return (
     <div className="flex h-full flex-col">
@@ -364,6 +372,51 @@ export default function DataExplorationPage() {
     refreshPreview,
   } = useDataExploration(projectId);
 
+  // ── Version source state ─────────────────────────────────────────────────────
+  const [sourceType, setSourceType] = useState<'dataset' | 'version'>('dataset');
+  const [versions, setVersions] = useState<VersionUI[]>([]);
+  const [activeVersionId, setActiveVersionId] = useState<number | null>(null);
+  const [versionOverview, setVersionOverview] = useState<AnalyticsOverview | null>(null);
+  const [versionProfile, setVersionProfile] = useState<AnalyticsProfile | null>(null);
+  const [versionLoading, setVersionLoading] = useState(false);
+
+  // Load versions list once
+  useEffect(() => {
+    void dataService.getVersions(projectId).then((list) => {
+      setVersions(list);
+      setActiveVersionId((prev) => prev ?? list[0]?.id ?? null);
+    });
+  }, [projectId]);
+
+  const loadVersionAnalytics = useCallback(
+    async (vId: number, rows = 20, tk = 5) => {
+      setVersionLoading(true);
+      try {
+        const [o, p] = await Promise.all([
+          databaseService.getVersionOverview(projectId, vId, rows),
+          databaseService.getVersionProfile(projectId, vId, tk),
+        ]);
+        setVersionOverview(o);
+        setVersionProfile(p);
+      } catch (err) {
+        toast({ title: 'Erreur', description: (err as Error).message, variant: 'destructive' });
+      } finally {
+        setVersionLoading(false);
+      }
+    },
+    [projectId, toast],
+  );
+
+  // When version source is active and version selection changes, load analytics
+  useEffect(() => {
+    if (sourceType !== 'version' || !activeVersionId) return;
+    void loadVersionAnalytics(activeVersionId);
+  }, [projectId, sourceType, activeVersionId, loadVersionAnalytics]);
+
+  // Derived: use version or dataset analytics
+  const activeOverview = sourceType === 'version' ? versionOverview : overview;
+  const activeProfile = sourceType === 'version' ? versionProfile : profile;
+
   // ── UI state ────────────────────────────────────────────────────────────────
   const [activeTab, setActiveTab] = useState('apercu');
   const [rowsPreview, setRowsPreview] = useState(20);
@@ -389,8 +442,8 @@ export default function DataExplorationPage() {
   // ── Derived data ────────────────────────────────────────────────────────────
 
   const colProfiles: ColProfile[] = useMemo(() => {
-    if (!profile) return [];
-    return profile.profiles.map((p) => ({
+    if (!activeProfile) return [];
+    return activeProfile.profiles.map((p) => ({
       name: p.name,
       kind: p.kind,
       dtype: p.dtype,
@@ -401,10 +454,10 @@ export default function DataExplorationPage() {
       numeric: p.numeric ?? null,
       topValues: p.categorical?.top_values ?? [],
     }));
-  }, [profile]);
+  }, [activeProfile]);
 
-  const totalRows = overview?.shape?.rows ?? 0;
-  const totalCols = overview?.shape?.cols ?? 0;
+  const totalRows = activeOverview?.shape?.rows ?? 0;
+  const totalCols = activeOverview?.shape?.cols ?? 0;
 
   const numericCount = useMemo(
     () => colProfiles.filter((c) => c.kind === 'numeric').length,
@@ -499,6 +552,14 @@ export default function DataExplorationPage() {
     setShowTargetModal(true);
   };
 
+  const handleRefresh = useCallback(() => {
+    if (sourceType === 'version' && activeVersionId) {
+      void loadVersionAnalytics(activeVersionId);
+    } else {
+      void reload();
+    }
+  }, [sourceType, activeVersionId, loadVersionAnalytics, reload]);
+
   const handleConfirmTarget = async () => {
     if (!activeDatasetId) return;
     try {
@@ -525,7 +586,7 @@ export default function DataExplorationPage() {
     );
   }
 
-  if (!datasets.length) {
+  if (!datasets.length && (sourceType !== 'version' || !versions.length)) {
     return (
       <AppLayout>
         <div className="flex flex-col items-center justify-center py-20 gap-4 text-center">
@@ -566,31 +627,66 @@ export default function DataExplorationPage() {
           </div>
 
           <div className="flex flex-col sm:flex-row gap-2 sm:items-center">
-            {/* Dataset selector */}
-            <Select
-              value={String(activeDatasetId ?? '')}
-              onValueChange={(v) => void changeActiveDataset(Number(v))}
-            >
-              <SelectTrigger className="w-64">
-                <Layers className="h-4 w-4 mr-2 text-muted-foreground flex-shrink-0" />
-                <SelectValue placeholder="Choisir un dataset" />
-              </SelectTrigger>
-              <SelectContent>
-                {datasets.map((d) => (
-                  <SelectItem key={d.id} value={String(d.id)}>
-                    {d.original_name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            {/* Source toggle */}
+            <div className="flex rounded-lg border overflow-hidden text-sm">
+              <button
+                className={`px-3 py-1.5 transition ${sourceType === 'dataset' ? 'bg-white dark:bg-slate-900 font-medium' : 'text-muted-foreground hover:bg-muted/50'}`}
+                onClick={() => setSourceType('dataset')}
+              >
+                Dataset
+              </button>
+              <button
+                className={`px-3 py-1.5 border-l transition ${sourceType === 'version' ? 'bg-white dark:bg-slate-900 font-medium' : 'text-muted-foreground hover:bg-muted/50'}`}
+                onClick={() => setSourceType('version')}
+              >
+                Version
+              </button>
+            </div>
+
+            {/* Dataset / Version selector */}
+            {sourceType === 'version' ? (
+              <Select
+                value={String(activeVersionId ?? '')}
+                onValueChange={(v) => setActiveVersionId(Number(v))}
+              >
+                <SelectTrigger className="w-64">
+                  <Layers className="h-4 w-4 mr-2 text-muted-foreground flex-shrink-0" />
+                  <SelectValue placeholder="Choisir une version" />
+                </SelectTrigger>
+                <SelectContent>
+                  {versions.map((v) => (
+                    <SelectItem key={v.id} value={String(v.id)}>
+                      {v.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            ) : (
+              <Select
+                value={String(activeDatasetId ?? '')}
+                onValueChange={(v) => void changeActiveDataset(Number(v))}
+              >
+                <SelectTrigger className="w-64">
+                  <Layers className="h-4 w-4 mr-2 text-muted-foreground flex-shrink-0" />
+                  <SelectValue placeholder="Choisir un dataset" />
+                </SelectTrigger>
+                <SelectContent>
+                  {datasets.map((d) => (
+                    <SelectItem key={d.id} value={String(d.id)}>
+                      {d.original_name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            )}
 
             <Button
               variant="outline"
               size="sm"
-              onClick={() => void reload()}
-              disabled={isRefreshing}
+              onClick={handleRefresh}
+              disabled={isRefreshing || versionLoading}
             >
-              <RefreshCcw className={`h-4 w-4 mr-1.5 ${isRefreshing ? 'animate-spin' : ''}`} />
+              <RefreshCcw className={`h-4 w-4 mr-1.5 ${(isRefreshing || versionLoading) ? 'animate-spin' : ''}`} />
               Rafraîchir
             </Button>
 
@@ -598,7 +694,7 @@ export default function DataExplorationPage() {
               variant="outline"
               size="sm"
               onClick={() => setShowReport(true)}
-              disabled={!overview || !profile}
+              disabled={!activeOverview || !activeProfile || sourceType === 'version'}
             >
               <FileText className="h-4 w-4 mr-1.5" />
               Rapport PDF
@@ -723,8 +819,14 @@ export default function DataExplorationPage() {
                     <Button
                       variant="outline"
                       size="sm"
-                      onClick={() => void refreshPreview(rowsPreview, topK)}
-                      disabled={isRefreshing}
+                      onClick={() => {
+                        if (sourceType === 'version' && activeVersionId) {
+                          void loadVersionAnalytics(activeVersionId, rowsPreview, topK);
+                        } else {
+                          void refreshPreview(rowsPreview, topK);
+                        }
+                      }}
+                      disabled={isRefreshing || versionLoading}
                     >
                       Appliquer
                     </Button>
@@ -732,15 +834,15 @@ export default function DataExplorationPage() {
                 </div>
               </CardHeader>
               <CardContent>
-                {!overview?.preview?.length ? (
+                {!activeOverview?.preview?.length ? (
                   <p className="text-sm text-muted-foreground py-4 text-center">
                     Aucune donnée à afficher.
                   </p>
                 ) : (
                   <DataTable
-                    data={overview.preview}
+                    data={activeOverview.preview}
                     pageSize={10}
-                    columns={Object.keys(overview.preview[0]).map((key) => ({
+                    columns={Object.keys(activeOverview.preview[0]).map((key) => ({
                       key,
                       header: (
                         <span className="flex items-center gap-1.5">
@@ -957,7 +1059,8 @@ export default function DataExplorationPage() {
                         onSetTarget={() => handleOpenTargetModal(selectedCol.name)}
                         onClose={() => setSelectedCol(null)}
                         projectId={projectId}
-                        datasetId={activeDatasetId!}
+                        datasetId={activeDatasetId ?? 0}
+                        versionId={sourceType === 'version' ? activeVersionId : null}
                       />
                     </CardContent>
                   </Card>
@@ -1116,8 +1219,9 @@ export default function DataExplorationPage() {
             {/* Correlation heatmap */}
             <CorrelationHeatmap
               projectId={projectId}
-              datasetId={activeDatasetId}
-              dtypes={overview?.dtypes || {}}
+              datasetId={sourceType === 'version' ? null : activeDatasetId}
+              versionId={sourceType === 'version' ? activeVersionId : null}
+              dtypes={activeOverview?.dtypes || {}}
               onDataReady={setCorrelationData}
             />
           </TabsContent>
@@ -1140,7 +1244,7 @@ export default function DataExplorationPage() {
               <SelectValue placeholder="Sélectionner une colonne…" />
             </SelectTrigger>
             <SelectContent>
-              {(overview?.columns ?? []).map((col) => (
+              {(activeOverview?.columns ?? []).map((col) => (
                 <SelectItem key={col} value={col}>
                   {col}
                 </SelectItem>
@@ -1160,7 +1264,7 @@ export default function DataExplorationPage() {
       </Modal>
 
       {/* Report export modal */}
-      {overview && profile && activeDataset && (
+      {overview && profile && activeDataset && sourceType === 'dataset' && (
         <ReportExportModal
           open={showReport}
           onClose={() => setShowReport(false)}

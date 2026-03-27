@@ -86,9 +86,9 @@ function sec(v: unknown): string {
 const MODEL_NAMES: Record<string, string> = {
   lightgbm: 'LightGBM', xgboost: 'XGBoost',
   randomforest: 'Random Forest', svm: 'SVM',
-  knn: 'K-Nearest Neighbors', decisiontree: 'Decision Tree',
-  logisticregression: 'Logistic Regression', logreg: 'Logistic Regression',
-  naivebayes: 'Naive Bayes',
+  knn: 'K-Plus Proches Voisins', decisiontree: 'Arbre de décision',
+  logisticregression: 'Régression Logistique', logreg: 'Régression Logistique',
+  naivebayes: 'Naïf Bayésien',
 };
 function modelName(t: string): string { return MODEL_NAMES[t.toLowerCase()] ?? t.toUpperCase(); }
 
@@ -169,6 +169,92 @@ function hrule(doc: jsPDF, y: number): void {
   doc.setLineWidth(0.2);
   doc.line(M, y, W - M, y);
   doc.setLineWidth(0.1);
+}
+
+/**
+ * Dessine une courbe ROC ou PR dans un espace délimité.
+ * pts : [[x0,y0], [x1,y1], ...] en coordonnées normalisées [0,1].
+ * showDiag : true = trace la diagonale aléatoire (ROC uniquement).
+ */
+function drawMiniCurve(
+  doc: jsPDF,
+  pts: [number, number][],
+  x0: number, y0: number,
+  w: number,  h: number,
+  title: string,
+  subLabel: string,
+  showDiag: boolean,
+): void {
+  const PL = 9; const PB = 7; const PT = 10; const PR = 3;
+  const AX = x0 + PL;
+  const AY = y0 + h - PB;
+  const AW = w - PL - PR;
+  const AH = h - PB - PT;
+
+  // Cadre extérieur
+  fill(doc, C.white);
+  drawc(doc, C.border);
+  doc.setLineWidth(0.2);
+  doc.rect(x0, y0, w, h, 'FD');
+
+  // Zone de tracé
+  fill(doc, C.bg);
+  doc.rect(AX, y0 + PT, AW, AH, 'F');
+
+  // Titre
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(6.5);
+  txtc(doc, C.navy);
+  doc.text(title, x0 + w / 2, y0 + 5, { align: 'center' });
+
+  // Sous-label (AUC)
+  if (subLabel) {
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(5.5);
+    txtc(doc, C.muted);
+    doc.text(subLabel, x0 + w / 2, y0 + 9, { align: 'center' });
+  }
+
+  // Axes
+  drawc(doc, C.border);
+  doc.setLineWidth(0.15);
+  doc.line(AX, AY, AX + AW, AY);
+  doc.line(AX, AY, AX, y0 + PT);
+
+  // Graduations
+  doc.setFontSize(4.5);
+  txtc(doc, C.muted);
+  doc.setLineWidth(0.1);
+  for (let t = 0; t <= 4; t++) {
+    const v = t / 4;
+    const lx = AX + v * AW;
+    const ly = AY - v * AH;
+    doc.line(lx, AY, lx, AY + 0.7);
+    if (t === 0 || t === 2 || t === 4) doc.text(v.toFixed(1), lx, AY + 3.5, { align: 'center' });
+    doc.line(AX, ly, AX - 0.7, ly);
+    if (t === 2 || t === 4) doc.text(v.toFixed(1), AX - 1.2, ly + 1, { align: 'right' });
+  }
+
+  // Diagonale aléatoire (ROC)
+  if (showDiag) {
+    doc.setLineDashPattern([1.2, 1.2], 0);
+    drawc(doc, C.muted);
+    doc.setLineWidth(0.2);
+    doc.line(AX, AY, AX + AW, y0 + PT);
+    doc.setLineDashPattern([], 0);
+  }
+
+  // Courbe
+  if (pts.length >= 2) {
+    const px = (v: number) => AX + Math.max(0, Math.min(1, v)) * AW;
+    const py = (v: number) => AY - Math.max(0, Math.min(1, v)) * AH;
+    doc.setLineWidth(0.7);
+    drawc(doc, C.navyMid);
+    doc.setLineDashPattern([], 0);
+    for (let i = 1; i < pts.length; i++) {
+      doc.line(px(pts[i - 1][0]), py(pts[i - 1][1]), px(pts[i][0]), py(pts[i][1]));
+    }
+  }
 }
 
 /** Dernier finalY d'autoTable ou fallback. */
@@ -752,6 +838,42 @@ export function generateTrainingReportPdf(session: TrainingSession): void {
         y += 6;
       }
       y += 2;
+    }
+
+    // ── Courbes ROC / PR ─────────────────────────────────────────
+    const { curves } = r;
+    if (!isReg && curves && (curves.roc?.length || curves.pr?.length)) {
+      const CHART_W = 76;
+      const CHART_H = 58;
+      y = ensureY(doc, y, CHART_H + 12);
+
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(8);
+      txtc(doc, C.navy);
+      doc.text('Courbes de performance', M, y);
+      y += 5;
+
+      const rocAuc = safeN(r.metrics?.roc_auc);
+      const prAuc  = safeN(r.metrics?.pr_auc);
+
+      if (curves.roc?.length) {
+        const aucTxt = rocAuc != null ? `AUC = ${pct(rocAuc)}` : '';
+        drawMiniCurve(
+          doc, curves.roc as [number, number][],
+          M, y, CHART_W, CHART_H,
+          'Courbe ROC (Sensibilité / 1−Spécificité)', aucTxt, true,
+        );
+      }
+      if (curves.pr?.length) {
+        const aucTxt = prAuc != null ? `AUC-PR = ${pct(prAuc)}` : '';
+        const prX = curves.roc?.length ? M + CHART_W + 6 : M;
+        drawMiniCurve(
+          doc, curves.pr as [number, number][],
+          prX, y, CHART_W, CHART_H,
+          'Courbe Précision-Rappel', aucTxt, false,
+        );
+      }
+      y += CHART_H + 5;
     }
 
     y += 4;

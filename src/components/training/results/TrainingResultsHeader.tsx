@@ -99,9 +99,14 @@ function getDurationSeconds(session: TrainingSession): number | null {
 }
 
 function getSplitLabel(session: TrainingSession): string {
-  const { splitMethod, kFolds } = session.config;
+  const { splitMethod, kFolds, nRepeats } = session.config;
   if (splitMethod === 'kfold') return `K-Fold (k=${kFolds})`;
-  if (splitMethod === 'stratified_kfold') return `Stratified K-Fold (k=${kFolds})`;
+  if (splitMethod === 'stratified_kfold') return `K-Fold Stratifié (k=${kFolds})`;
+  if (splitMethod === 'repeated_stratified_kfold')
+    return `K-Fold Stratifié Répété (k=${kFolds}, r=${nRepeats ?? 3})`;
+  if (splitMethod === 'group_kfold') return `Group K-Fold (k=${kFolds})`;
+  if (splitMethod === 'stratified_group_kfold') return `Group K-Fold Stratifié (k=${kFolds})`;
+  if (splitMethod === 'loo') return 'Leave-One-Out';
   return 'Holdout';
 }
 

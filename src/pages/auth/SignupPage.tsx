@@ -101,7 +101,7 @@ export function SignupPage() {
           <div className="mb-6 space-y-2">
             <span className="ai-chip">
               <Sparkles className="h-3.5 w-3.5" />
-              Create account
+              Créer un compte
             </span>
             <h1 className="text-2xl font-bold tracking-tight">Creer votre espace professionnel</h1>
             <p className="text-sm text-muted-foreground">

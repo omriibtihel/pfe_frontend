@@ -5,7 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Modal } from "@/components/ui/modal";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -43,8 +43,8 @@ const modelCatalog: Array<{ value: ModelType; label: string; desc: string; icon:
   { value: "gradientboosting", label: "Gradient Boosting",desc: "Boosting sklearn natif",          icon: <BarChart3 className="h-4 w-4" /> },
   { value: "svm",              label: "SVM",              desc: "Bon pour petits datasets",        icon: <Brain className="h-4 w-4" /> },
   { value: "knn",              label: "KNN",              desc: "Simple, intuitif",                icon: <Brain className="h-4 w-4" /> },
-  { value: "decisiontree",     label: "Decision Tree",    desc: "Tres interpretable",              icon: <Brain className="h-4 w-4" /> },
-  { value: "logisticregression", label: "Logistic Reg.", desc: "Classification lineaire",         icon: <BarChart3 className="h-4 w-4" /> },
+  { value: "decisiontree",     label: "Arbre de décision", desc: "Très interprétable",             icon: <Brain className="h-4 w-4" /> },
+  { value: "logisticregression", label: "Rég. Logistique", desc: "Classification linéaire",      icon: <BarChart3 className="h-4 w-4" /> },
 ];
 
 const GRID_SCORING_OPTIONS: Array<{ value: GridScoringOption; label: string; desc: string }> = [
@@ -130,8 +130,8 @@ export function Step4Models({ projectId, config, onConfigChange }: Step4Props) {
   const handleCvFoldsChange = (raw: string) => {
     const n = Number.parseInt(raw, 10);
     if (!Number.isFinite(n)) { setCvFoldsError("Valeur invalide"); return; }
-    if (n < 2) { setCvFoldsError("Minimum 2 folds"); onConfigChange({ gridCvFolds: 2 }); return; }
-    if (n > 10) { setCvFoldsError("Maximum 10 folds"); onConfigChange({ gridCvFolds: 10 }); return; }
+    if (n < 2) { setCvFoldsError("Minimum 2 plis"); onConfigChange({ gridCvFolds: 2 }); return; }
+    if (n > 10) { setCvFoldsError("Maximum 10 plis"); onConfigChange({ gridCvFolds: 10 }); return; }
     setCvFoldsError(null);
     onConfigChange({ gridCvFolds: n });
   };
@@ -237,7 +237,7 @@ export function Step4Models({ projectId, config, onConfigChange }: Step4Props) {
             </div>
             Algorithmes
             <Badge variant="secondary" className="ml-auto text-xs">
-              {config.models.length} selectionne{config.models.length > 1 ? "s" : ""}
+              {config.models.length} sélectionné{config.models.length > 1 ? "s" : ""}
             </Badge>
           </CardTitle>
         </CardHeader>
@@ -289,7 +289,7 @@ export function Step4Models({ projectId, config, onConfigChange }: Step4Props) {
                       <span className="font-semibold text-sm">{m.label}</span>
                     </div>
                     <p className="text-xs text-muted-foreground mt-1">{m.desc}</p>
-                    {!m.installed && <p className="text-[11px] text-destructive mt-1">Non installe sur le backend</p>}
+                    {!m.installed && <p className="text-[11px] text-destructive mt-1">Non installé sur le backend</p>}
                   </div>
                 </motion.label>
               );
@@ -298,125 +298,120 @@ export function Step4Models({ projectId, config, onConfigChange }: Step4Props) {
         </CardContent>
       </Card>
 
-      <Dialog
-        open={Boolean(hpModalModel)}
-        onOpenChange={(open) => {
-          if (!open) setHpModalModel(null);
-        }}
-      >
-        <DialogContent className="sm:max-w-2xl max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              Hyperparametres
-              <Badge variant="outline" className="uppercase">
-                {activeModel?.label ?? activeModelKey}
+      <Modal
+        isOpen={Boolean(hpModalModel)}
+        onClose={() => setHpModalModel(null)}
+        size="2xl"
+        title={
+          <span className="flex items-center gap-2 flex-wrap">
+            Hyperparamètres
+            <Badge variant="outline" className="uppercase text-[11px] font-semibold">
+              {activeModel?.label ?? activeModelKey}
+            </Badge>
+            {(config.searchType ?? "none") !== "none" && (
+              <Badge variant="secondary" className="text-[10px]">
+                Listes : séparées par virgules
               </Badge>
-              {(config.searchType ?? "none") !== "none" && (
-                <Badge variant="secondary" className="text-[10px] ml-auto">
-                  Listes: separees par virgules
-                </Badge>
-              )}
-            </DialogTitle>
-            <DialogDescription>
-              {activeModelSelected
-                ? "Modifiez les hyperparametres du modele selectionne."
-                : "Modele non selectionne: les valeurs seront conservees mais ignorees tant que le modele n'est pas coche."}
-            </DialogDescription>
-          </DialogHeader>
+            )}
+          </span>
+        }
+        description={
+          activeModelSelected
+            ? "Modifiez les hyperparamètres du modèle sélectionné."
+            : "Modèle non sélectionné : les valeurs seront conservées mais ignorées tant que le modèle n'est pas coché."
+        }
+      >
+        {!activeModelFields.length ? (
+          <div className="rounded-lg border border-border/60 p-3 text-sm text-muted-foreground">
+            Aucun hyperparamètre configurable pour ce modèle.
+          </div>
+        ) : (
+          <div className="space-y-3">
+            {activeModelFields.map(([fieldName, fieldSchema]) => {
+              const rawModelValue = modelHyperparams[activeModelKey]?.[fieldName];
+              const displayValue = toDisplayText(rawModelValue, fieldSchema.default);
+              const fieldType = String(fieldSchema.type ?? "").toLowerCase();
+              const enumOptions = Array.isArray(fieldSchema.enum) ? fieldSchema.enum : [];
+              const isSearchActive = (config.searchType ?? "none") !== "none";
+              const isEnumSelect = !isSearchActive && fieldType === "enum";
+              const isEnumOrNullSelect = !isSearchActive && fieldType === "enum_or_null";
 
-          {!activeModelFields.length ? (
-            <div className="rounded-lg border border-border/60 p-3 text-sm text-muted-foreground">
-              Aucun hyperparametre configurable pour ce modele.
-            </div>
-          ) : (
-            <div className="space-y-3">
-              {activeModelFields.map(([fieldName, fieldSchema]) => {
-                const rawModelValue = modelHyperparams[activeModelKey]?.[fieldName];
-                const displayValue = toDisplayText(rawModelValue, fieldSchema.default);
-                const fieldType = String(fieldSchema.type ?? "").toLowerCase();
-                const enumOptions = Array.isArray(fieldSchema.enum) ? fieldSchema.enum : [];
-                const isSearchActive = (config.searchType ?? "none") !== "none";
-                const isEnumSelect = !isSearchActive && fieldType === "enum";
-                const isEnumOrNullSelect = !isSearchActive && fieldType === "enum_or_null";
+              const enumOrNullValue =
+                rawModelValue === null || rawModelValue === undefined
+                  ? String(fieldSchema.default ?? "null")
+                  : String(rawModelValue);
 
-                // For enum_or_null: sentinel string "null" maps to null value; actual null → "null" sentinel.
-                const enumOrNullValue =
-                  rawModelValue === null || rawModelValue === undefined
-                    ? String(fieldSchema.default ?? "null")
-                    : String(rawModelValue);
+              const handleEnumOrNull = (next: string) => {
+                setModelField(activeModelKey, fieldName, next === "null" ? null : next);
+              };
 
-                const handleEnumOrNull = (next: string) => {
-                  setModelField(activeModelKey, fieldName, next === "null" ? null : next);
-                };
-
-                return (
-                  <div key={`${activeModelKey}-${fieldName}`} className="space-y-1">
-                    <div className="flex items-center justify-between gap-3">
-                      <Label className="text-xs font-medium">{fieldName}</Label>
-                      <span className="text-[11px] text-muted-foreground">
-                        Default: {String(fieldSchema.default ?? "null")}
-                      </span>
-                    </div>
-
-                    {isEnumSelect ? (
-                      <Select
-                        value={String((rawModelValue as ModelHyperparamScalar) ?? fieldSchema.default ?? "")}
-                        onValueChange={(next) => setModelField(activeModelKey, fieldName, next)}
-                      >
-                        <SelectTrigger className="h-8 text-xs">
-                          <SelectValue placeholder="Choisir..." />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {enumOptions.map((opt) => (
-                            <SelectItem key={`${activeModelKey}-${fieldName}-${opt}`} value={String(opt)}>
-                              {String(opt)}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    ) : isEnumOrNullSelect ? (
-                      <Select value={enumOrNullValue} onValueChange={handleEnumOrNull}>
-                        <SelectTrigger className="h-8 text-xs">
-                          <SelectValue placeholder="Choisir..." />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="null">
-                            <span className="text-muted-foreground italic">null — désactivé</span>
-                          </SelectItem>
-                          {enumOptions.map((opt) => (
-                            <SelectItem key={`${activeModelKey}-${fieldName}-${opt}`} value={String(opt)}>
-                              {String(opt)}
-                              {String(opt) === String(fieldSchema.default) && (
-                                <span className="ml-1.5 text-[10px] text-muted-foreground">(défaut)</span>
-                              )}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    ) : (
-                      <Input
-                        type={fieldType === "int" || fieldType === "float" ? "number" : "text"}
-                        value={displayValue}
-                        onChange={(e) =>
-                          setModelField(
-                            activeModelKey,
-                            fieldName,
-                            parseFieldValue(e.target.value, fieldSchema, isSearchActive)
-                          )
-                        }
-                        className="h-8 text-xs"
-                        placeholder={isSearchActive ? "ex: 100,200" : `ex: ${String(fieldSchema.default ?? "")}`}
-                      />
-                    )}
-
-                    {!!fieldSchema.help && <p className="text-[11px] text-muted-foreground">{fieldSchema.help}</p>}
+              return (
+                <div key={`${activeModelKey}-${fieldName}`} className="space-y-1">
+                  <div className="flex items-center justify-between gap-3">
+                    <Label className="text-xs font-medium">{fieldName}</Label>
+                    <span className="text-[11px] text-muted-foreground">
+                      Défaut : {String(fieldSchema.default ?? "null")}
+                    </span>
                   </div>
-                );
-              })}
-            </div>
-          )}
-        </DialogContent>
-      </Dialog>
+
+                  {isEnumSelect ? (
+                    <Select
+                      value={String((rawModelValue as ModelHyperparamScalar) ?? fieldSchema.default ?? "")}
+                      onValueChange={(next) => setModelField(activeModelKey, fieldName, next)}
+                    >
+                      <SelectTrigger className="h-8 text-xs">
+                        <SelectValue placeholder="Choisir..." />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {enumOptions.map((opt) => (
+                          <SelectItem key={`${activeModelKey}-${fieldName}-${opt}`} value={String(opt)}>
+                            {String(opt)}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  ) : isEnumOrNullSelect ? (
+                    <Select value={enumOrNullValue} onValueChange={handleEnumOrNull}>
+                      <SelectTrigger className="h-8 text-xs">
+                        <SelectValue placeholder="Choisir..." />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="null">
+                          <span className="text-muted-foreground italic">null — désactivé</span>
+                        </SelectItem>
+                        {enumOptions.map((opt) => (
+                          <SelectItem key={`${activeModelKey}-${fieldName}-${opt}`} value={String(opt)}>
+                            {String(opt)}
+                            {String(opt) === String(fieldSchema.default) && (
+                              <span className="ml-1.5 text-[10px] text-muted-foreground">(défaut)</span>
+                            )}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  ) : (
+                    <Input
+                      type={fieldType === "int" || fieldType === "float" ? "number" : "text"}
+                      value={displayValue}
+                      onChange={(e) =>
+                        setModelField(
+                          activeModelKey,
+                          fieldName,
+                          parseFieldValue(e.target.value, fieldSchema, isSearchActive)
+                        )
+                      }
+                      className="h-8 text-xs"
+                      placeholder={isSearchActive ? "ex: 100, 200" : `ex: ${String(fieldSchema.default ?? "")}`}
+                    />
+                  )}
+
+                  {!!fieldSchema.help && <p className="text-[11px] text-muted-foreground">{fieldSchema.help}</p>}
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </Modal>
 
       <Card className="glass-premium shadow-card">
           <CardHeader className="pb-3">
@@ -424,7 +419,7 @@ export function Step4Models({ projectId, config, onConfigChange }: Step4Props) {
               <div className="p-2 rounded-xl bg-primary/10">
                 <Grid3X3 className="h-4 w-4 text-primary" />
               </div>
-              Optimisation des hyperparametres
+              Optimisation des hyperparamètres
               {(config.searchType ?? "none") !== "none" && (
                 <Badge variant="secondary" className="ml-auto text-xs">
                   {config.gridCvFolds} folds
@@ -434,7 +429,7 @@ export function Step4Models({ projectId, config, onConfigChange }: Step4Props) {
           </CardHeader>
           <CardContent className="pt-0 space-y-4">
             <div className="space-y-1">
-              <Label htmlFor="search-type" className="text-xs text-muted-foreground">Methode de recherche</Label>
+              <Label htmlFor="search-type" className="text-xs text-muted-foreground">Méthode de recherche</Label>
               <Select
                 value={config.searchType ?? "none"}
                 onValueChange={(v) => onConfigChange({
@@ -448,7 +443,7 @@ export function Step4Models({ projectId, config, onConfigChange }: Step4Props) {
                 <SelectContent>
                   <SelectItem value="none">
                     <span>Aucune</span>
-                    <span className="ml-2 text-[10px] text-muted-foreground">Parametres fixes uniquement</span>
+                    <span className="ml-2 text-[10px] text-muted-foreground">Paramètres fixes uniquement</span>
                   </SelectItem>
                   <SelectItem value="grid">
                     <span>GridSearch</span>
@@ -475,7 +470,7 @@ export function Step4Models({ projectId, config, onConfigChange }: Step4Props) {
                   <div className="space-y-4 pt-2 border-t border-border/40">
                     {config.searchType === "random" && (
                       <div className="space-y-1">
-                        <Label htmlFor="n-iter" className="text-xs text-muted-foreground">Nombre d'iterations</Label>
+                        <Label htmlFor="n-iter" className="text-xs text-muted-foreground">Nombre d'itérations</Label>
                         <Input
                           id="n-iter"
                           type="number"
@@ -490,12 +485,12 @@ export function Step4Models({ projectId, config, onConfigChange }: Step4Props) {
                           }}
                           className="w-24 h-8 text-xs"
                         />
-                        <p className="text-[11px] text-muted-foreground">Entre 5 et 300 (defaut: 40)</p>
+                        <p className="text-[11px] text-muted-foreground">Entre 5 et 300 (défaut : 40)</p>
                       </div>
                     )}
 
                     <div className="space-y-1">
-                      <Label htmlFor="cv-folds" className="text-xs text-muted-foreground">CV Folds</Label>
+                      <Label htmlFor="cv-folds" className="text-xs text-muted-foreground">Plis de validation croisée</Label>
                       <Input
                         id="cv-folds"
                         type="number"
@@ -508,7 +503,7 @@ export function Step4Models({ projectId, config, onConfigChange }: Step4Props) {
                       {cvFoldsError ? (
                         <p className="text-[11px] text-destructive">{cvFoldsError}</p>
                       ) : (
-                        <p className="text-[11px] text-muted-foreground">Entre 2 et 10 (defaut: 3)</p>
+                        <p className="text-[11px] text-muted-foreground">Entre 2 et 10 (défaut : 3)</p>
                       )}
                     </div>
 
@@ -537,9 +532,9 @@ export function Step4Models({ projectId, config, onConfigChange }: Step4Props) {
                         <AlertTriangle className="h-3.5 w-3.5 shrink-0 mt-0.5" />
                         <span>
                           {config.searchType === "random"
-                            ? `RandomizedSearch avec ${config.models.length} modeles × ${config.nIterRandomSearch ?? 40} iterations`
-                            : `GridSearch avec ${config.models.length} modeles × ${config.gridCvFolds} folds`}{" "}
-                          peut significativement allonger le temps d'entrainement.
+                            ? `RandomizedSearch avec ${config.models.length} modèles × ${config.nIterRandomSearch ?? 40} itérations`
+                            : `GridSearch avec ${config.models.length} modèles × ${config.gridCvFolds} plis`}{" "}
+                          peut significativement allonger le temps d'entraînement.
                         </span>
                       </div>
                     )}

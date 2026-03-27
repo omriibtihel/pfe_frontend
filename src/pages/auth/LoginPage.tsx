@@ -80,7 +80,7 @@ export function LoginPage() {
           <div className="mb-6 space-y-2">
             <span className="ai-chip">
               <Sparkles className="h-3.5 w-3.5" />
-              Secure login
+              Connexion sécurisée
             </span>
             <h1 className="text-2xl font-bold tracking-tight">Connexion a votre espace</h1>
             <p className="text-sm text-muted-foreground">Accedez a votre environnement de modelisation IA medicale.</p>

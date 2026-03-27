@@ -1,7 +1,19 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { motion } from "framer-motion";
-import { GitBranch, Search, Trash2, Target, Calendar, FileText, Info, Layers } from "lucide-react";
+import {
+  GitBranch,
+  Search,
+  Trash2,
+  Target,
+  Calendar,
+  FileText,
+  Layers,
+  Pencil,
+  Check,
+  X,
+  HardDrive,
+} from "lucide-react";
 
 import { AppLayout } from "@/layouts/AppLayout";
 import { Button } from "@/components/ui/button";
@@ -16,13 +28,95 @@ import datasetService, { DatasetOut as DatasetListItem } from "@/services/datase
 import dataService, { VersionUI } from "@/services/dataService";
 import { staggerContainer, staggerItem } from "@/components/ui/page-transition";
 
-// helpers
+// ── Label maps ────────────────────────────────────────────────────────────────
+
+const OP_LABELS: Record<string, string> = {
+  drop_columns: "Suppression colonnes",
+  rename_columns: "Renommage colonnes",
+  drop_duplicates: "Doublons supprimés",
+  fill_missing: "Valeurs manquantes",
+  standard_scaling: "Normalisation std",
+  minmax_scaling: "Normalisation minmax",
+  robust_scaling: "Normalisation robuste",
+  label_encoding: "Encodage labels",
+  onehot_encoding: "One-hot encoding",
+  drop_outliers: "Outliers supprimés",
+  clip_outliers: "Outliers clipés",
+  set_target: "Cible définie",
+};
+
+function opLabel(op: string): string {
+  return OP_LABELS[op] ?? op.replace(/_/g, " ");
+}
+
+// ── Size formatter ─────────────────────────────────────────────────────────────
+
+function formatBytes(bytes: number | null | undefined): string | null {
+  if (!bytes || bytes <= 0) return null;
+  if (bytes < 1024) return `${bytes} o`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} Ko`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} Mo`;
+}
+
 function formatDateFR(iso: string | null | undefined) {
   if (!iso) return "—";
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return "—";
   return d.toLocaleDateString("fr-FR");
 }
+
+// ── Inline rename input ───────────────────────────────────────────────────────
+
+interface InlineRenameProps {
+  initialValue: string;
+  onConfirm: (value: string) => void;
+  onCancel: () => void;
+}
+
+function InlineRename({ initialValue, onConfirm, onCancel }: InlineRenameProps) {
+  const [value, setValue] = useState(initialValue);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    inputRef.current?.select();
+  }, []);
+
+  const confirm = () => {
+    const trimmed = value.trim();
+    if (trimmed && trimmed !== initialValue) onConfirm(trimmed);
+    else onCancel();
+  };
+
+  return (
+    <div className="flex items-center gap-1 min-w-0 flex-1">
+      <input
+        ref={inputRef}
+        className="min-w-0 flex-1 rounded border border-border bg-background px-2 py-0.5 text-sm font-medium focus:outline-none focus:ring-1 focus:ring-ring"
+        value={value}
+        onChange={(e) => setValue(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") confirm();
+          if (e.key === "Escape") onCancel();
+        }}
+        onBlur={confirm}
+      />
+      <button
+        className="shrink-0 rounded p-0.5 text-green-600 hover:bg-green-50 dark:hover:bg-green-950"
+        onMouseDown={(e) => { e.preventDefault(); confirm(); }}
+      >
+        <Check className="h-3.5 w-3.5" />
+      </button>
+      <button
+        className="shrink-0 rounded p-0.5 text-muted-foreground hover:bg-muted"
+        onMouseDown={(e) => { e.preventDefault(); onCancel(); }}
+      >
+        <X className="h-3.5 w-3.5" />
+      </button>
+    </div>
+  );
+}
+
+// ── Main page ─────────────────────────────────────────────────────────────────
 
 export function VersionsPage() {
   const { id } = useParams();
@@ -39,30 +133,21 @@ export function VersionsPage() {
 
   const [isLoading, setIsLoading] = useState(true);
   const [deleteVersion, setDeleteVersion] = useState<VersionUI | null>(null);
+  const [renamingVersionId, setRenamingVersionId] = useState<number | null>(null);
 
   useEffect(() => {
     let mounted = true;
-
-    const load = async () => {
-      setIsLoading(true);
-      try {
-        const [ds, vs] = await Promise.all([datasetService.list(projectId), dataService.getVersions(projectId)]);
+    setIsLoading(true);
+    Promise.all([datasetService.list(projectId), dataService.getVersions(projectId)])
+      .then(([ds, vs]) => {
         if (!mounted) return;
-
         setDatasets(ds ?? []);
         setVersions(vs ?? []);
-      } catch (e) {
-        toast({ title: "Erreur", description: (e as Error).message, variant: "destructive" });
-      } finally {
-        if (mounted) setIsLoading(false);
-      }
-    };
-
-    load();
-    return () => {
-      mounted = false;
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+      })
+      .catch((e) => toast({ title: "Erreur", description: (e as Error).message, variant: "destructive" }))
+      .finally(() => { if (mounted) setIsLoading(false); });
+    return () => { mounted = false; };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [projectId]);
 
   const handleDelete = async () => {
@@ -78,36 +163,40 @@ export function VersionsPage() {
     }
   };
 
+  const handleRename = async (versionId: number, newName: string) => {
+    const previous = versions.find((v) => v.id === versionId)?.name;
+    setVersions((prev) =>
+      prev.map((v) => (v.id === versionId ? { ...v, name: newName } : v)),
+    );
+    setRenamingVersionId(null);
+    try {
+      await dataService.renameVersion(projectId, versionId, newName);
+    } catch (e) {
+      // rollback
+      setVersions((prev) =>
+        prev.map((v) => (v.id === versionId ? { ...v, name: previous ?? v.name } : v)),
+      );
+      toast({ title: "Erreur", description: "Impossible de renommer la version.", variant: "destructive" });
+    }
+  };
+
   const filteredVersions = useMemo(() => {
     const q = search.trim().toLowerCase();
-
     return (versions ?? [])
       .filter((v) => (filter === "predictable" ? Boolean(v.canPredict) : true))
-      .filter((v) => {
-        if (!q) return true;
-        return String(v.name ?? "").toLowerCase().includes(q);
-      })
-      .sort((a, b) => {
-        const da = new Date(a.createdAt ?? 0).getTime();
-        const db = new Date(b.createdAt ?? 0).getTime();
-        return db - da;
-      });
+      .filter((v) => (q ? String(v.name ?? "").toLowerCase().includes(q) : true))
+      .sort((a, b) => new Date(b.createdAt ?? 0).getTime() - new Date(a.createdAt ?? 0).getTime());
   }, [versions, search, filter]);
 
   const versionsByDataset = useMemo(() => {
     const map = new Map<number, VersionUI[]>();
     const unknown: VersionUI[] = [];
-
     for (const v of filteredVersions) {
-      if (!v.sourceDatasetId) {
-        unknown.push(v);
-        continue;
-      }
+      if (!v.sourceDatasetId) { unknown.push(v); continue; }
       const arr = map.get(v.sourceDatasetId) ?? [];
       arr.push(v);
       map.set(v.sourceDatasetId, arr);
     }
-
     return { map, unknown };
   }, [filteredVersions]);
 
@@ -118,8 +207,12 @@ export function VersionsPage() {
     return (versionsByDataset.map.get(did) ?? []).length;
   }, [datasetFilter, filteredVersions.length, versionsByDataset.map]);
 
+  // ── Version card ─────────────────────────────────────────────────────────────
+
   const renderVersionCard = (v: VersionUI, index: number) => {
     const canPredict = Boolean(v.canPredict);
+    const isRenaming = renamingVersionId === v.id;
+    const sizeLabel = formatBytes(v.sizeBytes);
 
     return (
       <motion.div
@@ -130,60 +223,94 @@ export function VersionsPage() {
       >
         <Card className="card-hover h-full">
           <CardHeader className="pb-3">
-            <div className="flex items-start justify-between gap-3">
-              <CardTitle className="text-lg flex items-center gap-2 min-w-0">
-                <FileText className="h-5 w-5 text-primary shrink-0" />
-                <span className="truncate">{v.name}</span>
+            <div className="flex items-start justify-between gap-2">
+              <CardTitle className="flex min-w-0 flex-1 items-center gap-2 text-base">
+                <FileText className="h-4 w-4 shrink-0 text-primary" />
+                {isRenaming ? (
+                  <InlineRename
+                    initialValue={v.name}
+                    onConfirm={(name) => handleRename(v.id, name)}
+                    onCancel={() => setRenamingVersionId(null)}
+                  />
+                ) : (
+                  <span className="truncate">{v.name}</span>
+                )}
               </CardTitle>
-              {canPredict && <Badge className="bg-success text-success-foreground">Prêt</Badge>}
+
+              <div className="flex shrink-0 items-center gap-1">
+                {canPredict && (
+                  <Badge className="bg-success text-success-foreground text-[10px]">Prêt</Badge>
+                )}
+                {!isRenaming && (
+                  <button
+                    className="rounded p-1 text-muted-foreground hover:bg-muted hover:text-foreground"
+                    onClick={() => setRenamingVersionId(v.id)}
+                    title="Renommer"
+                  >
+                    <Pencil className="h-3.5 w-3.5" />
+                  </button>
+                )}
+              </div>
             </div>
           </CardHeader>
 
-          <CardContent className="space-y-4">
-            <div className="flex items-center gap-2 text-sm text-muted-foreground">
-              <Calendar className="h-4 w-4" />
-              {formatDateFR(v.createdAt)}
+          <CardContent className="space-y-3">
+            {/* Meta row */}
+            <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted-foreground">
+              <span className="flex items-center gap-1">
+                <Calendar className="h-3.5 w-3.5" />
+                {formatDateFR(v.createdAt)}
+              </span>
+              {sizeLabel && (
+                <span className="flex items-center gap-1">
+                  <HardDrive className="h-3.5 w-3.5" />
+                  {sizeLabel}
+                </span>
+              )}
+              {v.targetColumn && (
+                <span className="flex items-center gap-1 font-medium text-foreground">
+                  <Target className="h-3.5 w-3.5 text-primary" />
+                  {v.targetColumn}
+                </span>
+              )}
             </div>
 
+            {/* Operations */}
             {v.operations.length > 0 && (
-              <div className="space-y-2">
-                <p className="text-sm font-medium">Opérations :</p>
-                <div className="flex flex-wrap gap-1">
-                  {v.operations.slice(0, 3).map((op, i) => (
-                    <Badge key={i} variant="outline" className="text-xs">
-                      {op}
-                    </Badge>
-                  ))}
-                  {v.operations.length > 3 && (
-                    <Badge variant="outline" className="text-xs">
-                      +{v.operations.length - 3}
-                    </Badge>
-                  )}
-                </div>
+              <div className="flex flex-wrap gap-1">
+                {v.operations.slice(0, 4).map((op, i) => (
+                  <Badge key={i} variant="outline" className="text-[10px]">
+                    {opLabel(op)}
+                  </Badge>
+                ))}
+                {v.operations.length > 4 && (
+                  <Badge variant="outline" className="text-[10px]">
+                    +{v.operations.length - 4}
+                  </Badge>
+                )}
               </div>
             )}
 
-            <div className="flex gap-2 pt-2">
-              {/* ✅ On garde seulement EDIT / workspace */}
+            {/* Actions */}
+            <div className="flex gap-2 pt-1">
               <Button
                 size="sm"
                 className="flex-1 bg-gradient-to-r from-primary to-secondary"
                 onClick={() => navigate(`/projects/${projectId}/nettoyage?version=${v.id}&mode=edit`)}
               >
-                <Target className="h-4 w-4 mr-1" />
+                <Target className="mr-1 h-3.5 w-3.5" />
                 Prétraiter
               </Button>
 
-              {/* ✅ Entraîner */}
               <Button
                 size="sm"
                 variant="secondary"
                 className="flex-1"
                 disabled={!canPredict}
+                title={canPredict ? undefined : "Définis une target pour pouvoir entraîner"}
                 onClick={() => navigate(`/projects/${projectId}/versions/${v.id}/training`)}
-                title={!canPredict ? "Définis une target + assure-toi que la version est prête" : "Lancer l'entraînement"}
               >
-                <GitBranch className="h-4 w-4 mr-1" />
+                <GitBranch className="mr-1 h-3.5 w-3.5" />
                 Entraîner
               </Button>
 
@@ -197,20 +324,21 @@ export function VersionsPage() {
     );
   };
 
+  // ── Dataset section ───────────────────────────────────────────────────────────
+
   const renderDatasetSection = (ds: DatasetListItem) => {
     if (datasetFilter !== "all" && datasetFilter !== String(ds.id)) return null;
-
     const list = versionsByDataset.map.get(ds.id) ?? [];
 
     return (
       <div key={ds.id} className="space-y-3">
         <div className="flex items-center justify-between gap-2">
           <div className="min-w-0">
-            <h2 className="text-base font-semibold truncate">{ds.original_name}</h2>
+            <h2 className="truncate text-base font-semibold">{ds.original_name}</h2>
             <p className="text-xs text-muted-foreground">Dataset importé #{ds.id}</p>
           </div>
           <Badge variant="secondary">
-            <GitBranch className="h-3 w-3 mr-1" />
+            <GitBranch className="mr-1 h-3 w-3" />
             {list.length} version{list.length > 1 ? "s" : ""}
           </Badge>
         </div>
@@ -222,7 +350,7 @@ export function VersionsPage() {
             </CardContent>
           </Card>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
             {list.map((v, idx) => renderVersionCard(v, idx))}
           </div>
         )}
@@ -236,95 +364,72 @@ export function VersionsPage() {
   return (
     <AppLayout>
       <motion.div className="space-y-6" initial="initial" animate="animate" variants={staggerContainer}>
-        <motion.div variants={staggerItem} className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+
+        {/* Header */}
+        <motion.div variants={staggerItem} className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
           <div>
             <h1 className="text-3xl font-bold text-foreground">Historique des versions</h1>
-            <p className="text-muted-foreground mt-1">
-              Les versions prétraitées sont stockées séparément des datasets importés, et reliées à leur dataset source.
+            <p className="mt-1 text-muted-foreground">
+              Versions prétraitées groupées par dataset source.
             </p>
           </div>
-
           <Badge variant="secondary" className="self-start md:self-auto">
-            <GitBranch className="h-3 w-3 mr-1" />
-            {visibleCount} versions visibles
+            <GitBranch className="mr-1 h-3 w-3" />
+            {visibleCount} version{visibleCount > 1 ? "s" : ""}
           </Badge>
         </motion.div>
 
-        {/* Filters row */}
-        <motion.div variants={staggerItem} className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-          <Card className="lg:col-span-1">
-            <CardHeader className="pb-3">
-              <CardTitle className="text-base flex items-center gap-2">
-                <Layers className="h-4 w-4 text-primary" />
-                Dataset (source)
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <Select value={datasetFilter} onValueChange={setDatasetFilter} disabled={isLoading || datasets.length === 0}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Tous les datasets" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">Tous les datasets</SelectItem>
-                  {datasets.map((ds) => (
-                    <SelectItem key={ds.id} value={String(ds.id)}>
-                      {ds.original_name} (#{ds.id})
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </CardContent>
-          </Card>
-
-          <Card className="lg:col-span-2">
-            <CardHeader className="pb-3">
-              <CardTitle className="text-base">Recherche & filtres</CardTitle>
-            </CardHeader>
-            <CardContent className="flex flex-col sm:flex-row gap-4">
-              <div className="relative flex-1">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                <Input
-                  placeholder="Rechercher une version..."
-                  value={search}
-                  onChange={(e) => setSearch(e.target.value)}
-                  className="pl-10"
-                  disabled={isLoading}
-                />
-              </div>
-
-              <Select value={filter} onValueChange={(v) => setFilter(v as any)} disabled={isLoading}>
-                <SelectTrigger className="w-56">
-                  <SelectValue placeholder="Filtrer" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">Toutes les versions</SelectItem>
-                  <SelectItem value="predictable">Prêtes à prédire</SelectItem>
-                </SelectContent>
-              </Select>
-            </CardContent>
-          </Card>
-        </motion.div>
-
-        {/* Info Banner */}
+        {/* Compact filters bar */}
         <motion.div variants={staggerItem}>
-          <Card className="bg-gradient-to-r from-primary/5 to-secondary/5 border-primary/20">
-            <CardContent className="flex items-start gap-3 py-4">
-              <Info className="h-5 w-5 text-primary mt-0.5" />
-              <div>
-                <p className="font-medium">Organisation</p>
-                <p className="text-sm text-muted-foreground">
-                  Un dataset importé peut avoir plusieurs versions prétraitées (dataset_versions) listées ici.
-                </p>
-              </div>
-            </CardContent>
-          </Card>
+          <div className="flex flex-wrap items-center gap-3">
+            {/* Search */}
+            <div className="relative min-w-[200px] flex-1">
+              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+              <Input
+                placeholder="Rechercher une version..."
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                className="pl-9"
+                disabled={isLoading}
+              />
+            </div>
+
+            {/* Dataset filter */}
+            <Select value={datasetFilter} onValueChange={setDatasetFilter} disabled={isLoading || datasets.length === 0}>
+              <SelectTrigger className="w-52">
+                <Layers className="mr-2 h-4 w-4 text-muted-foreground" />
+                <SelectValue placeholder="Tous les datasets" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Tous les datasets</SelectItem>
+                {datasets.map((ds) => (
+                  <SelectItem key={ds.id} value={String(ds.id)}>
+                    {ds.original_name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+
+            {/* Status filter */}
+            <Select value={filter} onValueChange={(v) => setFilter(v as "all" | "predictable")} disabled={isLoading}>
+              <SelectTrigger className="w-48">
+                <SelectValue placeholder="Statut" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Toutes les versions</SelectItem>
+                <SelectItem value="predictable">Prêtes à prédire</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
         </motion.div>
 
         {/* Content */}
         <motion.div variants={staggerItem} className="space-y-8">
           {isLoading ? (
             <Card>
-              <CardContent className="py-12 text-center text-sm text-muted-foreground">Chargement...</CardContent>
+              <CardContent className="py-12 text-center text-sm text-muted-foreground">
+                Chargement...
+              </CardContent>
             </Card>
           ) : datasets.length === 0 ? (
             <Card>
@@ -339,19 +444,18 @@ export function VersionsPage() {
               {showUnknown && (
                 <div className="space-y-3">
                   <div className="flex items-center justify-between gap-2">
-                    <div className="min-w-0">
-                      <h2 className="text-base font-semibold truncate">Autres versions (parent non détecté)</h2>
+                    <div>
+                      <h2 className="text-base font-semibold">Versions sans dataset source</h2>
                       <p className="text-xs text-muted-foreground">
-                        Ajoute `source_dataset_id` (ou équivalent) côté backend pour les relier proprement.
+                        Non rattachées à un dataset importé.
                       </p>
                     </div>
                     <Badge variant="secondary">
-                      <GitBranch className="h-3 w-3 mr-1" />
+                      <GitBranch className="mr-1 h-3 w-3" />
                       {unknown.length}
                     </Badge>
                   </div>
-
-                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                  <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
                     {unknown.map((v, idx) => renderVersionCard(v, idx))}
                   </div>
                 </div>

@@ -35,14 +35,7 @@ import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
 import adminService, { AdminStats } from "@/services/adminService";
 import { User } from "@/types";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
+import { Modal } from "@/components/ui/modal";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 
@@ -663,38 +656,22 @@ export default function AdminDashboardPage() {
         </Card>
       </motion.div>
 
-      <Dialog open={rejectOpen} onOpenChange={setRejectOpen}>
-        <DialogContent className="glass-premium sm:max-w-lg">
-          <DialogHeader>
-            <DialogTitle>Rejeter l&apos;utilisateur</DialogTitle>
-            <DialogDescription>
-              {rejectTarget ? (
-                <>
-                  Vous allez rejeter <strong>{rejectTarget.fullName}</strong>. Vous pouvez
-                  preciser une raison (optionnel).
-                </>
-              ) : (
-                "Vous pouvez preciser une raison (optionnel)."
-              )}
-            </DialogDescription>
-          </DialogHeader>
-
-          <div className="space-y-2">
-            <Label htmlFor="rejectReason">Raison</Label>
-            <Textarea
-              id="rejectReason"
-              className="min-h-[120px] resize-none rounded-xl"
-              placeholder="Ex: informations manquantes, email invalide, etc."
-              value={rejectReason}
-              onChange={(event) => setRejectReason(event.target.value)}
-              rows={4}
-            />
-          </div>
-
-          <DialogFooter className="gap-2 sm:gap-0">
+      <Modal
+        isOpen={rejectOpen}
+        onClose={() => setRejectOpen(false)}
+        onOpenChange={setRejectOpen}
+        title="Rejeter l'utilisateur"
+        description={
+          rejectTarget
+            ? `Vous allez rejeter ${rejectTarget.fullName}. Vous pouvez préciser une raison (optionnel).`
+            : "Vous pouvez préciser une raison (optionnel)."
+        }
+        size="lg"
+        footer={
+          <div className="flex justify-end gap-2">
             <Button
               variant="outline"
-              className="rounded-lg"
+              size="sm"
               onClick={() => setRejectOpen(false)}
               disabled={actionLoadingId === rejectTarget?.id}
             >
@@ -702,16 +679,28 @@ export default function AdminDashboardPage() {
             </Button>
             <Button
               variant="destructive"
-              className="rounded-lg"
+              size="sm"
               onClick={confirmReject}
               disabled={!rejectTarget || actionLoadingId === rejectTarget?.id}
             >
               <XCircle className="mr-2 h-4 w-4" />
               Confirmer
             </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+          </div>
+        }
+      >
+        <div className="space-y-2">
+          <Label htmlFor="rejectReason">Raison</Label>
+          <Textarea
+            id="rejectReason"
+            className="min-h-[120px] resize-none rounded-xl"
+            placeholder="Ex : informations manquantes, email invalide, etc."
+            value={rejectReason}
+            onChange={(event) => setRejectReason(event.target.value)}
+            rows={4}
+          />
+        </div>
+      </Modal>
     </AdminLayout>
   );
 }

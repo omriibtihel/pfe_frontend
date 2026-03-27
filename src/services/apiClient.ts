@@ -157,6 +157,18 @@ class ApiClient {
     }
   }
 
+  async patch<T>(url: string, body: unknown, opts?: RequestOptions): Promise<T> {
+    try {
+      const res = await this.axios.patch<T>(url, body, {
+        headers: { "Content-Type": "application/json" },
+        ...this.cfg(opts),
+      });
+      return res.data;
+    } catch (err) {
+      throw new Error(extractErrorMessage(err));
+    }
+  }
+
   async delete<T>(url: string, opts?: RequestOptions): Promise<T> {
     try {
       const res = await this.axios.delete<T>(url, this.cfg(opts));

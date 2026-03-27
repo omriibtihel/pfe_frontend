@@ -379,11 +379,11 @@ export function InspectorModal({
           {tab === "overview" && inspectorProfile ? (
             <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
               <RatioPill label="Total (preview)" value={inspectorProfile.total} total={inspectorProfile.total} />
-              <RatioPill label="Missing (preview)" value={inspectorProfile.missing} total={inspectorProfile.total} />
-              <RatioPill label="Unique (preview)" value={inspectorProfile.unique} total={Math.max(1, inspectorProfile.nonMissing)} />
+              <RatioPill label="Manquants (aperçu)" value={inspectorProfile.missing} total={inspectorProfile.total} />
+              <RatioPill label="Uniques (aperçu)" value={inspectorProfile.unique} total={Math.max(1, inspectorProfile.nonMissing)} />
 
               <div className="md:col-span-3 rounded-xl border border-border bg-muted/20 p-3">
-                <p className="text-sm font-semibold">Exemples (non-missing)</p>
+                <p className="text-sm font-semibold">Exemples (non manquants)</p>
                 <p className="text-xs text-muted-foreground mt-1">Les 20 premières valeurs observées sur la page.</p>
 
                 <div className="mt-3 flex flex-wrap gap-2">
@@ -394,14 +394,14 @@ export function InspectorModal({
                       </Badge>
                     ))
                   ) : (
-                    <span className="text-xs text-muted-foreground">Aucune valeur non-missing dans l’aperçu.</span>
+                    <span className="text-xs text-muted-foreground">Aucune valeur non manquante dans l’aperçu.</span>
                   )}
                 </div>
               </div>
 
               {inspectorProfile.isNumericLike && inspectorProfile.summary ? (
                 <div className="md:col-span-3 rounded-xl border border-border bg-muted/20 p-3">
-                  <p className="text-sm font-semibold">Résumé numérique (preview)</p>
+                  <p className="text-sm font-semibold">Résumé numérique (aperçu)</p>
                   <div className="mt-3 grid grid-cols-2 md:grid-cols-5 gap-2">
                     <div className="rounded-lg border border-border bg-background p-2">
                       <p className="text-[11px] text-muted-foreground">min</p>
@@ -437,8 +437,8 @@ export function InspectorModal({
           {tab === "distribution" && inspectorProfile ? (
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
               <div className="rounded-xl border border-border bg-muted/20 p-3">
-                <p className="text-sm font-semibold">Top valeurs (preview)</p>
-                <p className="text-xs text-muted-foreground mt-1">Top 10 par fréquence (missing ignoré).</p>
+                <p className="text-sm font-semibold">Valeurs fréquentes (aperçu)</p>
+                <p className="text-xs text-muted-foreground mt-1">Top 10 par fréquence (manquants ignorés).</p>
                 <div className="mt-3">
                   {inspectorProfile.top.length ? <BarsChart items={inspectorProfile.top} /> : <p className="text-xs text-muted-foreground">Aucune valeur.</p>}
                 </div>

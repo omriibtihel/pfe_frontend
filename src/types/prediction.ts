@@ -62,12 +62,19 @@ export interface PredictionSummary {
   std?: number;
 }
 
+export interface DriftWarning {
+  column: string;
+  type: 'mean_shift' | 'std_shift' | 'new_categories';
+  severity: 'warning' | 'critical';
+  detail: string;
+}
+
 /** Full prediction response returned by the API. */
 export interface PredictionResponse {
   modelId: number;
   sessionId: number;
   modelType: string;
-  taskType: string;
+  taskType: 'classification' | 'regression';
   timestamp: string;
   nRows: number;
   featureCountReceived: number;
@@ -76,6 +83,8 @@ export interface PredictionResponse {
   thresholdUsed: number;
   rows: PredictionRow[];
   summary: PredictionSummary;
+  /** Data drift warnings detected at prediction time (empty = no drift). */
+  driftWarnings?: DriftWarning[];
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

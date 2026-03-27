@@ -188,7 +188,7 @@ export function ColumnSelector({
                 <SelectItem value="missing">
                   <div className="flex items-center gap-2">
                     <ArrowDownWideNarrow className="h-4 w-4" />
-                    Missing
+                    Manquants
                   </div>
                 </SelectItem>
                 <SelectItem value="unique">
@@ -225,12 +225,12 @@ export function ColumnSelector({
           <div className="flex items-center justify-between gap-3">
             <label className="flex items-center gap-2 text-xs text-muted-foreground">
               <Checkbox checked={missingOnly} onCheckedChange={(v) => setMissingOnly(Boolean(v))} className="h-3.5 w-3.5" />
-              Missing only
+              Manquants seul.
             </label>
 
             <label className="flex items-center gap-2 text-xs text-muted-foreground">
               <Checkbox checked={selectedOnly} onCheckedChange={(v) => setSelectedOnly(Boolean(v))} className="h-3.5 w-3.5" />
-              Selected only
+              Sélectionnés seul.
             </label>
 
             <span className="text-xs text-muted-foreground ml-auto">

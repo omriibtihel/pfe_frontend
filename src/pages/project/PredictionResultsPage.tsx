@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { Target, Download, BarChart3, Activity, ArrowLeft, Loader2 } from 'lucide-react';
+import { Target, Download, BarChart3, Activity, ArrowLeft, Loader2, AlertTriangle } from 'lucide-react';
 import { AppLayout } from '@/layouts/AppLayout';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -164,6 +164,24 @@ export function PredictionResultsPage() {
             Exporter CSV
           </Button>
         </div>
+
+        {/* Drift warnings */}
+        {result.driftWarnings && result.driftWarnings.length > 0 && (
+          <div className="rounded-xl border border-amber-300 bg-amber-50 dark:bg-amber-950/30 dark:border-amber-800 p-4 space-y-2">
+            <div className="flex items-center gap-2 font-medium text-amber-800 dark:text-amber-300">
+              <AlertTriangle className="h-4 w-4 shrink-0" />
+              Dérive de données détectée ({result.driftWarnings.length} avertissement{result.driftWarnings.length > 1 ? 's' : ''})
+            </div>
+            <ul className="space-y-1">
+              {result.driftWarnings.map((w, i) => (
+                <li key={i} className={`text-xs flex items-start gap-2 ${w.severity === 'critical' ? 'text-red-700 dark:text-red-400' : 'text-amber-700 dark:text-amber-400'}`}>
+                  <span className="font-semibold shrink-0">[{w.column}]</span>
+                  <span>{w.detail}</span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
 
         {/* KPIs */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">

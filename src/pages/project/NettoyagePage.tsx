@@ -15,6 +15,7 @@ import {
   AlertTriangle,
   Info,
   RefreshCw,
+  BookmarkPlus,
 } from "lucide-react";
 
 import { AppLayout } from "@/layouts/AppLayout";
@@ -35,8 +36,9 @@ import apiClient from "@/services/apiClient";
 import type { ProcessingOperation } from "@/types";
 
 import { ColumnSelector } from "@/components/nettoyage/ColumnSelector";
-import { AlertsModal } from "@/components/nettoyage/AlertsModal";
+import { AlertsModal, countVisibleAlerts } from "@/components/nettoyage/AlertsModal";
 import { InspectorModal } from "@/components/nettoyage/InspectorModal";
+import { buildOpSummaryChips } from "@/components/nettoyage/OpSummaryChips";
 
 /* -------------------------------------------------------
    Small utils
@@ -264,6 +266,8 @@ export function NettoyagePage() {
 
   const [isDownloading, setIsDownloading] = useState(false);
   const [isSavingProcessed, setIsSavingProcessed] = useState(false);
+  const [showSaveNameModal, setShowSaveNameModal] = useState(false);
+  const [saveVersionName, setSaveVersionName] = useState("");
 
   // Schema state (persisted)
   const [kindOverrides, setKindOverrides] = useState<Record<string, ColumnKind>>({});
@@ -675,60 +679,77 @@ export function NettoyagePage() {
     }
   };
 
-const handleSave = async () => {
+const handleSave = () => {
   if (!effectiveDatasetId) return;
 
+  // Mode édition de version existante : pas de choix de nom, on commit directement
+  if (isEditingVersion && versionId) {
+    commitVersion();
+    return;
+  }
+
+  // Mode normal : ouvrir le modal de nommage
+  const activeDataset = datasets.find((d) => d.id === activeDatasetId);
+  const stem = activeDataset?.original_name?.replace(/\.[^.]+$/, "") ?? `dataset_${activeDatasetId ?? 0}`;
+  setSaveVersionName(`${stem}_cleaned`);
+  setShowSaveNameModal(true);
+};
+
+const commitVersion = async () => {
+  if (!effectiveDatasetId || !versionId) return;
   setIsSavingProcessed(true);
   try {
-    if (isEditingVersion && versionId) {
-      if (!workspaceDatasetId) {
-        toast({
-          title: "Workspace introuvable",
-          description: "Impossible d’enregistrer sans workspace.",
-          variant: "destructive",
-        });
-        return;
-      }
-
-      // 1) Commit (⚠️ supprime le workspace côté backend)
-      await dataService.commitVersionWorkspace(projectId, versionId, workspaceDatasetId);
-
-      // 2) Reload meta version (optionnel mais ok)
-      await loadVersionMeta(versionId);
-
-      // 3) Recréer / récupérer un nouveau workspace pour continuer à éditer
-      const ws = await dataService.getOrCreateVersionWorkspace(projectId, versionId);
-
-      // selon comment dataService renvoie (direct JSON vs axios response)
-      const newWsId =
-        (ws as any)?.workspace_dataset_id ??
-        (ws as any)?.data?.workspace_dataset_id;
-
-      if (!newWsId) {
-        throw new Error("Impossible de récupérer un nouveau workspace après l’enregistrement.");
-      }
-
-      setWorkspaceDatasetId(newWsId);
-
-      // 4) Refresh UI sur le NOUVEAU workspace
-      await refreshProcessing(newWsId, 1);
-
+    if (!workspaceDatasetId) {
       toast({
-        title: "Version mise à jour",
-        description: `La version #${versionId} a été mise à jour avec les nouvelles données.`,
+        title: "Workspace introuvable",
+        description: "Impossible d’enregistrer sans workspace.",
+        variant: "destructive",
       });
       return;
     }
 
-    // mode normal
-    const out = await dataService.saveCleanedAsVersion(projectId, effectiveDatasetId, {});
+    await dataService.commitVersionWorkspace(projectId, versionId, workspaceDatasetId);
+    await loadVersionMeta(versionId);
+
+    const ws = await dataService.getOrCreateVersionWorkspace(projectId, versionId);
+    const newWsId =
+      (ws as any)?.workspace_dataset_id ??
+      (ws as any)?.data?.workspace_dataset_id;
+
+    if (!newWsId) {
+      throw new Error("Impossible de récupérer un nouveau workspace après l’enregistrement.");
+    }
+
+    setWorkspaceDatasetId(newWsId);
+    await refreshProcessing(newWsId, 1);
+
+    toast({
+      title: "Version mise à jour",
+      description: `La version #${versionId} a été mise à jour avec les nouvelles données.`,
+    });
+  } catch (e) {
+    toast({ title: "Erreur", description: (e as Error).message, variant: "destructive" });
+  } finally {
+    setIsSavingProcessed(false);
+  }
+};
+
+const confirmSaveVersion = async () => {
+  if (!effectiveDatasetId) return;
+  setShowSaveNameModal(false);
+  setIsSavingProcessed(true);
+  try {
+    const out = await dataService.saveCleanedAsVersion(projectId, effectiveDatasetId, {
+      name: saveVersionName.trim() || undefined,
+    });
     const newVersionId = (out as any)?.version_id ?? (out as any)?.id;
+    const savedName = (out as any)?.name ?? saveVersionName.trim();
 
     toast({
       title: "Version enregistrée",
       description: newVersionId
-        ? `Version #${newVersionId} ajoutée à l'historique.`
-        : "Version ajoutée à l'historique.",
+        ? `"${savedName}" (version #${newVersionId}) ajoutée à l’historique.`
+        : "Version ajoutée à l’historique.",
     });
   } catch (e) {
     toast({ title: "Erreur", description: (e as Error).message, variant: "destructive" });
@@ -920,22 +941,10 @@ const clearOverride = async (col: string) => {
     setShowSubstitutionModal(false);
   };
 
-  const alertCount = useMemo(() => {
-    // AlertsModal calcule visibleAlerts; ici on montre juste un badge rapide.
-    // On utilise un calcul léger: rebuild via metaMap.
-    let c = 0;
-    for (const [col, meta] of Object.entries(columnMetaMap)) {
-      const total = meta.total ?? 0;
-      const missing = meta.missing ?? 0;
-      const missingRatio = total > 0 ? missing / total : 0;
-      if (total > 0 && missingRatio > 0.2) c++;
-      const k = normalizeKind(meta.kind);
-      if (k === "categorical" && !verifiedCategorical.has(col) && !kindOverrides[col]) c++;
-    }
-    // On enlève ceux dismiss
-    // (approx ok: si tu veux exact: passe visibleAlerts depuis AlertsModal via callback)
-    return Math.max(0, c - dismissedAlertKeys.size);
-  }, [columnMetaMap, verifiedCategorical, kindOverrides, dismissedAlertKeys]);
+  const alertCount = useMemo(
+    () => countVisibleAlerts(columnMetaMap, verifiedCategorical, kindOverrides, dismissedAlertKeys),
+    [columnMetaMap, verifiedCategorical, kindOverrides, dismissedAlertKeys],
+  );
 
   /* -------------------------
      Render
@@ -958,8 +967,8 @@ const clearOverride = async (col: string) => {
           <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 p-6 rounded-2xl glass-premium">
             <div>
               <h1 className="text-3xl font-bold tracking-tight">
-                <span className="text-gradient">Prepare</span>
-                <span className="text-foreground"> — Cleaning</span>
+                <span className="text-gradient">Préparer</span>
+                <span className="text-foreground"> — Nettoyage</span>
               </h1>
               <p className="text-muted-foreground mt-2 text-sm max-w-lg">
                 {isEditingVersion
@@ -1043,7 +1052,7 @@ const clearOverride = async (col: string) => {
                 <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-primary/15 to-primary/5 flex items-center justify-center">
                   <Eraser className="h-4.5 w-4.5 text-primary" />
                 </div>
-                Cleaning
+                Nettoyage
               </CardTitle>
               <CardDescription>Opérations sûres (sans fit/stat global)</CardDescription>
             </CardHeader>
@@ -1076,7 +1085,7 @@ const clearOverride = async (col: string) => {
                 </Button>
 
                 <div className="flex items-center gap-2 px-1 sm:col-start-2 sm:row-start-2">
-                  <span className="text-xs text-muted-foreground font-medium">keep:</span>
+                  <span className="text-xs text-muted-foreground font-medium">Conserver :</span>
                   <Select
                     value={dupKeep}
                     onValueChange={(v) => setDupKeep(v === "last" ? "last" : "first")}
@@ -1086,8 +1095,8 @@ const clearOverride = async (col: string) => {
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="first">first</SelectItem>
-                      <SelectItem value="last">last</SelectItem>
+                      <SelectItem value="first">Premier</SelectItem>
+                      <SelectItem value="last">Dernier</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
@@ -1118,7 +1127,7 @@ const clearOverride = async (col: string) => {
                   }
                 >
                   <TypeIcon className="h-4 w-4 mr-2" />
-                  Strip whitespace {selectedColumns.length ? "(sélection)" : "(auto)"}
+                  Supprimer espaces {selectedColumns.length ? "(sélection)" : "(auto)"}
                 </Button>
 
                 <Button
@@ -1189,7 +1198,7 @@ const clearOverride = async (col: string) => {
                 onClick={handleSave}
               >
                 <Save className="h-4 w-4 mr-2" />
-                {isSavingProcessed ? "Enregistrement..." : isEditingVersion ? "Enregistrer (mettre à jour la version)" : "Enregistrer version cleaned"}
+                {isSavingProcessed ? "Enregistrement..." : isEditingVersion ? "Enregistrer (mettre à jour la version)" : "Enregistrer version nettoyée"}
               </Button>
 
               <p className="text-[11px] text-muted-foreground/70 leading-relaxed">
@@ -1296,8 +1305,8 @@ const clearOverride = async (col: string) => {
               ) : (
                 <div className="space-y-2">
                   {operations.map((op, i) => {
-                    const cols = (op.columns ?? []).filter(Boolean);
                     const r = getOpResult(op);
+                    const summaryChips = buildOpSummaryChips(op);
 
                     return (
                       <motion.button
@@ -1316,20 +1325,21 @@ const clearOverride = async (col: string) => {
                         <div className="min-w-0 flex-1">
                           <div className="flex items-center gap-2 min-w-0">
                             <p className="text-sm font-medium truncate">{op.description}</p>
-
                             <Badge variant="outline" className={`shrink-0 text-[10px] ${opTypeBadge(op.op_type)}`}>
                               {op.op_type}
                             </Badge>
-
-                            {r ? (
-                              <Badge variant="outline" className="shrink-0 text-[10px] bg-primary/5 border-primary/20 text-primary">
-                                détails
-                              </Badge>
-                            ) : null}
                           </div>
 
-                          <p className="text-[11px] text-muted-foreground mt-1">{new Date(op.created_at).toLocaleString("fr-FR")}</p>
-                          {cols.length > 0 && <p className="text-[11px] text-muted-foreground mt-0.5 truncate">Colonnes: {cols.join(", ")}</p>}
+                          {summaryChips.length > 0 && (
+                            <div className="mt-1.5 flex flex-wrap gap-1">
+                              {summaryChips}
+                            </div>
+                          )}
+
+                          <p className="text-[10px] text-muted-foreground/60 mt-1.5">
+                            {new Date(op.created_at).toLocaleString("fr-FR")}
+                            {r ? <span className="ml-2 text-primary/60">· cliquer pour détails</span> : null}
+                          </p>
                         </div>
 
                         <ChevronDown className="h-4 w-4 text-muted-foreground/50 shrink-0 mt-1 -rotate-90 group-hover/item:text-foreground transition-colors" />
@@ -1370,7 +1380,7 @@ const clearOverride = async (col: string) => {
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-3">
               <div className="space-y-2">
-                <p className="text-xs text-muted-foreground">From (valeur à remplacer)</p>
+                <p className="text-xs text-muted-foreground">De (valeur à remplacer)</p>
                 <Input
                   value={substFrom}
                   onChange={(e) => setSubstFrom(e.target.value)}
@@ -1379,16 +1389,16 @@ const clearOverride = async (col: string) => {
                 />
                 <label className="flex items-center gap-2 text-xs text-muted-foreground">
                   <Checkbox checked={substTreatFromAsNull} onCheckedChange={(v) => setSubstTreatFromAsNull(Boolean(v))} className="h-3.5 w-3.5" />
-                  From = null
+                  De = null
                 </label>
               </div>
 
               <div className="space-y-2">
-                <p className="text-xs text-muted-foreground">To (nouvelle valeur)</p>
+                <p className="text-xs text-muted-foreground">Par (nouvelle valeur)</p>
                 <Input value={substTo} onChange={(e) => setSubstTo(e.target.value)} placeholder='ex: "" (vide) ou 1 ou Normal' disabled={substTreatToAsNull} />
                 <label className="flex items-center gap-2 text-xs text-muted-foreground">
                   <Checkbox checked={substTreatToAsNull} onCheckedChange={(v) => setSubstTreatToAsNull(Boolean(v))} className="h-3.5 w-3.5" />
-                  To = null
+                  Par = null
                 </label>
               </div>
             </div>
@@ -1396,11 +1406,11 @@ const clearOverride = async (col: string) => {
             <div className="mt-2 flex flex-wrap items-center gap-3">
               <label className="flex items-center gap-2 text-xs text-muted-foreground">
                 <Checkbox checked={substCaseSensitive} onCheckedChange={(v) => setSubstCaseSensitive(Boolean(v))} className="h-3.5 w-3.5" />
-                Case sensitive (strings)
+                Sensible à la casse (chaînes)
               </label>
 
               <Badge variant="outline" className="text-[11px]">
-                mode: exact
+                mode : exact
               </Badge>
             </div>
           </div>
@@ -1555,7 +1565,7 @@ const clearOverride = async (col: string) => {
                         <div className="rounded-md border border-border overflow-hidden">
                           <div className="px-3 py-2 bg-muted/40">
                             <p className="text-sm font-medium">Impact par colonne</p>
-                            <p className="text-xs text-muted-foreground">filled = NaN remplis, changed = valeurs modifiées</p>
+                            <p className="text-xs text-muted-foreground">rempli = NaN comblés, modifié = valeurs changées</p>
                           </div>
 
                           <div className="p-3 overflow-x-auto">
@@ -1563,10 +1573,10 @@ const clearOverride = async (col: string) => {
                               <thead className="text-xs text-muted-foreground">
                                 <tr className="border-b border-border">
                                   <th className="text-left py-2 pr-3">Colonne</th>
-                                  <th className="text-right py-2 px-3">Missing (avant)</th>
-                                  <th className="text-right py-2 px-3">Missing (après)</th>
-                                  <th className="text-right py-2 px-3">Filled</th>
-                                  <th className="text-right py-2 pl-3">Changed</th>
+                                  <th className="text-right py-2 px-3">Manquants (avant)</th>
+                                  <th className="text-right py-2 px-3">Manquants (après)</th>
+                                  <th className="text-right py-2 px-3">Remplis</th>
+                                  <th className="text-right py-2 pl-3">Modifiés</th>
                                 </tr>
                               </thead>
                               <tbody>
@@ -1605,10 +1615,10 @@ const clearOverride = async (col: string) => {
       </Modal>
 
       {/* Target modal (inchangé) */}
-      <Modal isOpen={showTargetModal} onClose={() => setShowTargetModal(false)} title="Choisir la colonne cible (Target)" size="lg">
+      <Modal isOpen={showTargetModal} onClose={() => setShowTargetModal(false)} title="Choisir la colonne cible" size="lg">
         <div className="space-y-3">
           <p className="text-sm text-muted-foreground">
-            Choisis la colonne target pour l'entraînement (classification/régression). Tu peux la changer plus tard.
+            Choisis la colonne cible pour l'entraînement (classification/régression). Tu peux la changer plus tard.
           </p>
 
           <Select value={tempTarget || ""} onValueChange={(v) => setTempTarget(v)}>
@@ -1632,14 +1642,14 @@ const clearOverride = async (col: string) => {
               onClick={async () => {
                 if (!effectiveDatasetId) return;
                 if (!tempTarget) {
-                  toast({ title: "Target requise", description: "Sélectionne une colonne.", variant: "destructive" });
+                  toast({ title: "Cible requise", description: "Sélectionne une colonne.", variant: "destructive" });
                   return;
                 }
                 try {
                   await setTarget(effectiveDatasetId, tempTarget);
                   setTargetColumn(tempTarget);
                   setShowTargetModal(false);
-                  toast({ title: "Target enregistrée", description: `Target: ${tempTarget}` });
+                  toast({ title: "Cible enregistrée", description: `Cible : ${tempTarget}` });
                 } catch (e) {
                   toast({ title: "Erreur", description: (e as Error).message, variant: "destructive" });
                 }
@@ -1649,6 +1659,43 @@ const clearOverride = async (col: string) => {
               Enregistrer
             </Button>
           </div>
+        </div>
+      </Modal>
+
+      {/* Modal — nommer la version avant sauvegarde */}
+      <Modal
+        isOpen={showSaveNameModal}
+        onClose={() => setShowSaveNameModal(false)}
+        title="Nommer la version"
+        description="Donnez un nom à cette version nettoyée"
+        size="sm"
+        icon={<BookmarkPlus className="h-4 w-4" />}
+        footer={
+          <div className="flex justify-end gap-2.5">
+            <Button variant="outline" size="sm" onClick={() => setShowSaveNameModal(false)}>
+              Annuler
+            </Button>
+            <Button size="sm" onClick={confirmSaveVersion} disabled={!saveVersionName.trim()}>
+              <Save className="h-3.5 w-3.5 mr-1.5" />
+              Enregistrer
+            </Button>
+          </div>
+        }
+      >
+        <div className="space-y-1.5">
+          <label className="text-sm font-medium">Nom de la version</label>
+          <Input
+            value={saveVersionName}
+            onChange={(e) => setSaveVersionName(e.target.value)}
+            placeholder="ex : patients_cleaned_v2"
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && saveVersionName.trim()) confirmSaveVersion();
+            }}
+            autoFocus
+          />
+          <p className="text-[11px] text-muted-foreground">
+            Le système suggère un nom par défaut. Vous pouvez le modifier librement.
+          </p>
         </div>
       </Modal>
     </AppLayout>

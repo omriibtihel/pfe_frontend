@@ -1,4 +1,4 @@
-import { CheckCircle2, Layers, Target } from 'lucide-react';
+import { Layers, Target } from 'lucide-react';
 
 import { Badge } from '@/components/ui/badge';
 import type { CvFoldResult, CvMetricsSummary } from '@/types';
@@ -11,16 +11,7 @@ export function fmtMetric(v: number | undefined | null): string {
 
 function flattenMetrics(m: Record<string, unknown>): Record<string, number> {
   const out: Record<string, number> = {};
-  const SKIP = new Set([
-    'warnings',
-    'meta',
-    'confusion_matrix',
-    'per_class',
-    'averaged',
-    'binary',
-    'global',
-    'legacy_flat',
-  ]);
+  const SKIP = new Set(['warnings', 'meta', 'confusion_matrix', 'per_class', 'averaged', 'binary', 'global', 'legacy_flat']);
   const lf = m.legacy_flat as Record<string, unknown> | undefined;
   const gl = m.global as Record<string, unknown> | undefined;
   if (lf) Object.entries(lf).forEach(([k, v]) => { if (typeof v === 'number' && !Number.isNaN(v)) out[k] = v; });
@@ -50,15 +41,14 @@ export function CvResultsPanel({
   const meanEntries = Object.entries(cvSummary.mean ?? {}).filter(([k]) => k !== 'training_time_sec');
   const successFolds = cvFoldResults.filter((f) => f.status === 'ok');
   const failedFolds = cvFoldResults.filter((f) => f.status !== 'ok');
+  const holdoutFlat: Record<string, number> = hasHoldoutTest && cvTestMetrics
+    ? flattenMetrics(cvTestMetrics as Record<string, unknown>)
+    : {};
 
   const topMetricKeys = [...meanEntries]
     .sort(([, a], [, b]) => b - a)
     .slice(0, 4)
     .map(([k]) => k);
-
-  const testFlatEntries = cvTestMetrics
-    ? Object.entries(flattenMetrics(cvTestMetrics as Record<string, unknown>)).filter(([k]) => k !== 'training_time_sec')
-    : [];
 
   return (
     <div className="space-y-4" role="region" aria-label="Résultats de validation croisée">
@@ -84,36 +74,6 @@ export function CvResultsPanel({
         )}
       </div>
 
-      {hasHoldoutTest && testFlatEntries.length > 0 && (
-        <div className="space-y-2 rounded-lg border border-emerald-500/40 bg-emerald-50/40 p-3 dark:bg-emerald-950/20">
-          <div className="flex items-center gap-2 flex-wrap">
-            <CheckCircle2
-              className="h-4 w-4 shrink-0 text-emerald-600 dark:text-emerald-400"
-              aria-hidden="true"
-            />
-            <span className="text-sm font-medium text-emerald-800 dark:text-emerald-200">
-              Score test holdout final
-            </span>
-            <Badge variant="outline" className="border-emerald-400 text-xs text-emerald-700">
-              Évaluation indépendante
-            </Badge>
-          </div>
-          <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
-            {testFlatEntries.slice(0, 6).map(([k, v]) => (
-              <div
-                key={k}
-                className="rounded-md bg-emerald-100/60 p-2 text-center dark:bg-emerald-900/30"
-              >
-                <p className="text-base font-bold text-emerald-700 dark:text-emerald-300">
-                  {fmtMetric(v)}
-                </p>
-                <p className="text-xs text-muted-foreground">{k}</p>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
       {meanEntries.length > 0 && (
         <div>
           {hasHoldoutTest && (
@@ -129,7 +89,7 @@ export function CvResultsPanel({
                     Métrique
                   </th>
                   <th scope="col" className="px-3 py-2 text-left font-medium">
-                    Moyenne
+                    Moyenne CV
                   </th>
                   <th scope="col" className="px-3 py-2 text-left font-medium">
                     Écart-type
@@ -140,6 +100,11 @@ export function CvResultsPanel({
                   <th scope="col" className="px-3 py-2 text-left font-medium">
                     Max
                   </th>
+                  {hasHoldoutTest && (
+                    <th scope="col" className="px-3 py-2 text-left font-medium text-emerald-700 dark:text-emerald-400">
+                      Test holdout
+                    </th>
+                  )}
                 </tr>
               </thead>
               <tbody>
@@ -150,6 +115,11 @@ export function CvResultsPanel({
                     <td className="px-3 py-2 text-muted-foreground">±{fmtMetric(cvSummary.std?.[key])}</td>
                     <td className="px-3 py-2 text-muted-foreground">{fmtMetric(cvSummary.min?.[key])}</td>
                     <td className="px-3 py-2 text-muted-foreground">{fmtMetric(cvSummary.max?.[key])}</td>
+                    {hasHoldoutTest && (
+                      <td className="px-3 py-2 font-semibold text-emerald-700 dark:text-emerald-400">
+                        {fmtMetric(holdoutFlat[key])}
+                      </td>
+                    )}
                   </tr>
                 ))}
               </tbody>

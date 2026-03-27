@@ -1,9 +1,10 @@
 import { Fragment, useEffect, useMemo, useRef, useState } from "react";
-import { ChevronDown, Loader2, RefreshCcw, SlidersHorizontal } from "lucide-react";
+import { Check, ChevronDown, Loader2, RefreshCcw, Search, SlidersHorizontal, X as XIcon } from "lucide-react";
 
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Separator } from "@/components/ui/separator";
 import { useToast } from "@/hooks/use-toast";
 
@@ -11,10 +12,12 @@ import databaseService, { CorrelationOut } from "@/services/databaseService";
 
 type Props = {
   projectId: string;
-  datasetId: number;
+  datasetId: number | null;
   dtypes?: Record<string, string> | null;
   maxCols?: number;
   topPairs?: number;
+  /** When set, use version correlation endpoint instead of dataset endpoint */
+  versionId?: number | null;
   /** Called whenever new correlation data is fetched — allows parent to include it in report */
   onDataReady?: (data: CorrelationOut) => void;
 };
@@ -79,6 +82,7 @@ export default function CorrelationHeatmap({
   dtypes,
   maxCols = 20,
   topPairs = 8,
+  versionId,
   onDataReady,
 }: Props) {
   const { toast } = useToast();
@@ -95,6 +99,8 @@ export default function CorrelationHeatmap({
   const [data, setData] = useState<CorrelationOut | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [dark, setDark] = useState(false);
+  const [colOpen, setColOpen] = useState(false);
+  const [colSearch, setColSearch] = useState("");
   const wrapRef = useRef<HTMLDivElement | null>(null);
   const [wrapWidth, setWrapWidth] = useState(900);
 
@@ -118,13 +124,13 @@ export default function CorrelationHeatmap({
     return () => ro.disconnect();
   }, []);
 
-  // init / reset on dataset change
+  // init / reset when source changes
   useEffect(() => {
     const init = new Set(numericColumns.slice(0, Math.min(10, maxCols)));
     setSelected(init);
     setData(null);
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [datasetId]);
+  }, [datasetId, versionId]);
 
   const selectedArray = useMemo(
     () => numericColumns.filter((c) => selected.has(c)),
@@ -144,7 +150,9 @@ export default function CorrelationHeatmap({
   const fetchCorr = async (cols: string[]) => {
     setIsLoading(true);
     try {
-      const res = await databaseService.correlation(projectId, datasetId, cols);
+      const res = versionId
+        ? await databaseService.versionCorrelation(projectId, versionId, cols)
+        : await databaseService.correlation(projectId, datasetId!, cols);
       setData(res);
       onDataReady?.(res);
     } catch (e) {
@@ -230,49 +238,79 @@ export default function CorrelationHeatmap({
         ) : (
           <>
             {/* ── Column picker ───────────────────────────────────────── */}
-            <div className="rounded-xl border bg-muted/20 p-4 space-y-3">
-              <div className="flex items-center justify-between gap-2">
-                <p className="text-sm font-semibold">Sélectionner les colonnes</p>
-                <div className="flex items-center gap-3 text-xs text-muted-foreground">
-                  <button
-                    className="hover:text-primary transition-colors underline-offset-2 hover:underline"
-                    onClick={selectAll}
-                  >
-                    Tout sélectionner
+            <div className="flex items-center gap-3 flex-wrap">
+              <p className="text-sm font-semibold shrink-0">Colonnes</p>
+              <Popover open={colOpen} onOpenChange={setColOpen}>
+                <PopoverTrigger asChild>
+                  <button className="flex items-center gap-2 rounded-xl border bg-background px-3 py-2 text-sm hover:bg-muted/50 transition min-w-[220px] text-left">
+                    <span className="flex-1 text-xs text-muted-foreground truncate">
+                      {selectedArray.length === 0
+                        ? "Choisir colonnes"
+                        : `${selectedArray.length} colonne${selectedArray.length > 1 ? "s" : ""} sélectionnée${selectedArray.length > 1 ? "s" : ""}`}
+                    </span>
+                    <span className="text-xs text-muted-foreground tabular-nums shrink-0">{selectedArray.length}/{numericColumns.length}</span>
+                    <ChevronDown className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
                   </button>
-                  <button
-                    className="hover:text-destructive transition-colors underline-offset-2 hover:underline"
-                    onClick={clearAll}
-                  >
-                    Tout effacer
-                  </button>
-                </div>
-              </div>
-
-              <div className="flex flex-wrap gap-1.5">
-                {numericColumns.map((col) => {
-                  const active = selected.has(col);
-                  return (
-                    <button
-                      key={col}
-                      onClick={() => toggle(col)}
-                      title={col}
-                      className={`rounded-full border px-3 py-1 text-xs font-medium transition-all duration-150 max-w-[180px] truncate ${
-                        active
-                          ? "bg-primary text-primary-foreground border-primary shadow-sm"
-                          : "border-border text-muted-foreground hover:border-primary/60 hover:text-foreground bg-background"
-                      }`}
-                    >
-                      {col}
-                    </button>
-                  );
-                })}
-              </div>
-
+                </PopoverTrigger>
+                <PopoverContent align="start" className="w-72 p-0">
+                  {/* header */}
+                  <div className="flex items-center justify-between px-3 py-2 border-b">
+                    <span className="text-xs font-semibold">{selectedArray.length} / {numericColumns.length} sélectionnée{selectedArray.length > 1 ? "s" : ""}</span>
+                    <div className="flex gap-3 text-xs">
+                      <button className="text-primary hover:underline" onClick={selectAll}>Tout</button>
+                      <button className="text-muted-foreground hover:underline" onClick={clearAll}>Aucune</button>
+                    </div>
+                  </div>
+                  {/* search */}
+                  {numericColumns.length > 8 && (
+                    <div className="flex items-center gap-1.5 px-3 py-2 border-b">
+                      <Search className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                      <input
+                        className="flex-1 text-xs bg-transparent outline-none placeholder:text-muted-foreground"
+                        placeholder="Rechercher..."
+                        value={colSearch}
+                        onChange={(e) => setColSearch(e.target.value)}
+                      />
+                      {colSearch && (
+                        <button onClick={() => setColSearch("")} className="text-muted-foreground hover:text-foreground">
+                          <XIcon className="h-3 w-3" />
+                        </button>
+                      )}
+                    </div>
+                  )}
+                  {/* list */}
+                  <div className="max-h-60 overflow-y-auto p-1">
+                    {numericColumns
+                      .filter((c) => !colSearch || c.toLowerCase().includes(colSearch.toLowerCase()))
+                      .map((col) => {
+                        const isSelected = selected.has(col);
+                        return (
+                          <button
+                            key={col}
+                            onClick={() => toggle(col)}
+                            className="w-full flex items-center gap-2.5 rounded-md px-2 py-1.5 text-xs text-left hover:bg-muted/60 transition cursor-pointer"
+                          >
+                            <span
+                              className="h-4 w-4 rounded border flex items-center justify-center shrink-0 transition"
+                              style={isSelected ? { backgroundColor: "hsl(var(--primary))", borderColor: "hsl(var(--primary))" } : {}}
+                            >
+                              {isSelected && <Check className="h-2.5 w-2.5 text-white" />}
+                            </span>
+                            <span className="truncate flex-1" title={col}>{col}</span>
+                          </button>
+                        );
+                      })}
+                    {colSearch && numericColumns.filter((c) => c.toLowerCase().includes(colSearch.toLowerCase())).length === 0 && (
+                      <p className="text-xs text-center text-muted-foreground py-3">Aucune colonne</p>
+                    )}
+                  </div>
+                  <div className="px-3 py-2 border-t text-[10px] text-muted-foreground">
+                    Maximum {maxCols} colonnes
+                  </div>
+                </PopoverContent>
+              </Popover>
               {!canCompute && selectedArray.length > 0 && (
-                <p className="text-xs text-amber-600 dark:text-amber-400">
-                  Sélectionnez au moins 2 colonnes pour afficher la matrice.
-                </p>
+                <p className="text-xs text-amber-600 dark:text-amber-400">&#9888; min. 2 colonnes</p>
               )}
             </div>
 

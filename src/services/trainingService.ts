@@ -216,6 +216,9 @@ export type TrainingStartPayload = {
   valRatio: number;
   testRatio: number;
   kFolds: number;
+  shuffle?: boolean;
+  nRepeats?: number;
+  groupColumn?: string;
   metrics: string[];
   positiveLabel?: string | number | null;
   debug?: boolean;
@@ -475,6 +478,9 @@ export function toTrainingStartPayload(config: TrainingConfig): TrainingStartPay
     valRatio: Number(config.valRatio),
     testRatio: Number(config.testRatio),
     kFolds: Number(config.kFolds),
+    shuffle: config.shuffle ?? true,
+    nRepeats: config.nRepeats ?? 3,
+    groupColumn: config.groupColumn ?? undefined,
     metrics: [...(config.metrics ?? [])].map((m) => String(m).trim()).filter(Boolean),
     positiveLabel: config.positiveLabel ?? undefined,
     debug: Boolean(config.trainingDebug),
@@ -616,6 +622,14 @@ export const trainingService = {
 
   async getSessions(projectId: string): Promise<TrainingSession[]> {
     return await apiClient.get<TrainingSession[]>(`/projects/${projectId}/training/sessions`);
+  },
+
+  async deleteSession(projectId: string, sessionId: string): Promise<void> {
+    await apiClient.delete(`/projects/${projectId}/training/sessions/${sessionId}`);
+  },
+
+  async renameSession(projectId: string, sessionId: string, name: string): Promise<void> {
+    await apiClient.patch(`/projects/${projectId}/training/sessions/${sessionId}`, { name });
   },
 
   async saveModel(projectId: string, sessionId: string, modelId: string): Promise<SaveModelResponse> {

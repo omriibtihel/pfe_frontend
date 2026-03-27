@@ -126,6 +126,48 @@ export type NormalityTestOut = {
   results: NormalityColResult[];
 };
 
+// ── Private QS builders (reused by both dataset and version methods) ──────────
+
+type AggParams = {
+  x: string; y?: string; agg: AggFn;
+  top_k?: number; order?: SortOrder; dropna?: boolean;
+};
+type VcParams  = { col: string; top_k?: number; dropna?: boolean };
+type HistParams = { col: string; bins?: number; dropna?: boolean };
+type SampleParams = { cols: string[]; n?: number };
+
+function aggQs({ x, y, agg, top_k = 15, order = "desc", dropna = true }: AggParams): string {
+  const q = new URLSearchParams({ x, agg, top_k: String(top_k), order, dropna: String(dropna) });
+  if (y) q.set("y", y);
+  return q.toString();
+}
+function vcQs({ col, top_k = 15, dropna = true }: VcParams): string {
+  return new URLSearchParams({ col, top_k: String(top_k), dropna: String(dropna) }).toString();
+}
+function histQs({ col, bins = 20, dropna = true }: HistParams): string {
+  return new URLSearchParams({ col, bins: String(bins), dropna: String(dropna) }).toString();
+}
+function sampleQs({ cols, n = 400 }: SampleParams): string {
+  const q = new URLSearchParams({ n: String(n) });
+  cols.forEach((c) => q.append("cols", c));
+  return q.toString();
+}
+
+// ── Analytics types without the `dataset` field — used for both dataset and version views ──
+
+export type AnalyticsOverview = {
+  shape: { rows: number; cols: number };
+  columns: string[];
+  dtypes: Record<string, string>;
+  missing: Record<string, number>;
+  preview: Record<string, any>[];
+};
+
+export type AnalyticsProfile = {
+  shape: { rows: number; cols: number };
+  profiles: DatasetProfileOut["profiles"];
+};
+
 export const databaseService = {
   async getOverview(projectId: string | number, datasetId: number, rows = 10) {
     return typedGet<DatasetOverviewOut>(
@@ -173,68 +215,27 @@ export const databaseService = {
   // -------------------------
   // Charts endpoints
   // -------------------------
-  async aggregate(
-    projectId: string | number,
-    datasetId: number,
-    params: {
-      x: string;
-      y?: string; // ✅ optional (count)
-      agg: AggFn;
-      top_k?: number;
-      order?: SortOrder;
-      dropna?: boolean;
-    }
-  ) {
-    const { x, y, agg, top_k = 15, order = "desc", dropna = true } = params;
-    const qs = new URLSearchParams();
-    qs.set("x", x);
-    if (y) qs.set("y", y);
-    qs.set("agg", agg);
-    qs.set("top_k", String(top_k));
-    qs.set("order", order);
-    qs.set("dropna", String(dropna));
-
+  async aggregate(projectId: string | number, datasetId: number, params: AggParams) {
     return typedGet<AggregateOut>(
-      `/projects/${projectId}/datasets/${datasetId}/charts/aggregate?${qs.toString()}`
+      `/projects/${projectId}/datasets/${datasetId}/charts/aggregate?${aggQs(params)}`
     );
   },
 
-  async valueCounts(
-    projectId: string | number,
-    datasetId: number,
-    params: { col: string; top_k?: number; dropna?: boolean }
-  ) {
-    const { col, top_k = 15, dropna = true } = params;
-    const qs = new URLSearchParams();
-    qs.set("col", col);
-    qs.set("top_k", String(top_k));
-    qs.set("dropna", String(dropna));
-
+  async valueCounts(projectId: string | number, datasetId: number, params: VcParams) {
     return typedGet<ValueCountsOut>(
-      `/projects/${projectId}/datasets/${datasetId}/charts/value-counts?${qs.toString()}`
+      `/projects/${projectId}/datasets/${datasetId}/charts/value-counts?${vcQs(params)}`
     );
   },
 
-  async sample(projectId: string | number, datasetId: number, params: { cols: string[]; n?: number }) {
-    const { cols, n = 400 } = params;
-    const qs = new URLSearchParams();
-    cols.forEach((c) => qs.append("cols", c));
-    qs.set("n", String(n));
-
+  async sample(projectId: string | number, datasetId: number, params: SampleParams) {
     return typedGet<SampleOut>(
-      `/projects/${projectId}/datasets/${datasetId}/charts/sample?${qs.toString()}`
+      `/projects/${projectId}/datasets/${datasetId}/charts/sample?${sampleQs(params)}`
     );
   },
 
-  async hist(projectId: string | number, datasetId: number, params: { col: string; bins?: number; dropna?: boolean }) {
-    const { col, bins = 20, dropna = true } = params;
-    const qs = new URLSearchParams();
-    qs.set("col", col);
-    qs.set("bins", String(bins));
-    qs.set("dropna", String(dropna));
-
+  async hist(projectId: string | number, datasetId: number, params: HistParams) {
     return typedGet<HistogramOut>(
-      `/projects/${projectId}/datasets/${datasetId}/charts/hist?${qs.toString()}`
+      `/projects/${projectId}/datasets/${datasetId}/charts/hist?${histQs(params)}`
     );
   },
 
@@ -245,6 +246,57 @@ export const databaseService = {
   ) {
     return typedPostJson<NormalityTestOut>(
       `/projects/${projectId}/datasets/${datasetId}/normality-test`,
+      { columns }
+    );
+  },
+
+  // -------------------------
+  // Version analytics (mirrors dataset endpoints)
+  // -------------------------
+  async getVersionOverview(projectId: string | number, versionId: number, rows = 10) {
+    return typedGet<AnalyticsOverview>(
+      `/projects/${projectId}/versions/${versionId}/overview?rows=${rows}`
+    );
+  },
+
+  async getVersionProfile(projectId: string | number, versionId: number, topK = 5) {
+    return typedGet<AnalyticsProfile>(
+      `/projects/${projectId}/versions/${versionId}/profile?top_k=${topK}`
+    );
+  },
+
+  async versionCorrelation(projectId: string | number, versionId: number, columns: string[]) {
+    const qs = columns.map((c) => `columns=${encodeURIComponent(c)}`).join("&");
+    return typedGet<CorrelationOut>(`/projects/${projectId}/versions/${versionId}/correlation?${qs}`);
+  },
+
+  async versionAggregate(projectId: string | number, versionId: number, params: AggParams) {
+    return typedGet<AggregateOut>(
+      `/projects/${projectId}/versions/${versionId}/charts/aggregate?${aggQs(params)}`
+    );
+  },
+
+  async versionValueCounts(projectId: string | number, versionId: number, params: VcParams) {
+    return typedGet<ValueCountsOut>(
+      `/projects/${projectId}/versions/${versionId}/charts/value-counts?${vcQs(params)}`
+    );
+  },
+
+  async versionSample(projectId: string | number, versionId: number, params: SampleParams) {
+    return typedGet<SampleOut>(
+      `/projects/${projectId}/versions/${versionId}/charts/sample?${sampleQs(params)}`
+    );
+  },
+
+  async versionHist(projectId: string | number, versionId: number, params: HistParams) {
+    return typedGet<HistogramOut>(
+      `/projects/${projectId}/versions/${versionId}/charts/hist?${histQs(params)}`
+    );
+  },
+
+  async versionNormalityTest(projectId: string | number, versionId: number, columns: string[]) {
+    return typedPostJson<NormalityTestOut>(
+      `/projects/${projectId}/versions/${versionId}/normality-test`,
       { columns }
     );
   },

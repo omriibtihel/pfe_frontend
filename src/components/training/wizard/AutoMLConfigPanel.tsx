@@ -24,6 +24,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import type { AutoMLConfig, MetricType, TaskType } from "@/types";
 import { trainingService } from "@/services/trainingService";
 import type { TrainingSession } from "@/services/trainingService";
+import { loadPrepConfig } from "@/utils/prepConfig";
 
 const CLASSIFICATION_METRICS: { value: MetricType; label: string }[] = [
   { value: "roc_auc", label: "ROC AUC" },
@@ -62,9 +63,25 @@ export function AutoMLConfigPanel({
   positiveLabel,
   onSessionStarted,
 }: AutoMLConfigPanelProps) {
+  // Load prepConfig to pre-fill testRatio and detect potential confusion
+  const prepConfig = datasetVersionId
+    ? loadPrepConfig(projectId, String(datasetVersionId))
+    : null;
+
+  const prepHasCustomSettings = prepConfig != null && (
+    prepConfig.balancing?.strategy !== "none" ||
+    prepConfig.useSmote ||
+    Object.keys(prepConfig.preprocessing?.columns ?? {}).length > 0
+  );
+
+  // Pre-fill testRatio from prepConfig if available (expressed in percent)
+  const defaultTestRatio = prepConfig
+    ? Math.round(prepConfig.testRatio ?? 20)
+    : 20;
+
   const [timeBudget, setTimeBudget] = useState(60);
   const [metric, setMetric] = useState<MetricType | "auto">("auto");
-  const [testRatio, setTestRatio] = useState(20); // percent
+  const [testRatio, setTestRatio] = useState(defaultTestRatio);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -110,6 +127,19 @@ export function AutoMLConfigPanel({
           Aucune configuration manuelle requise.
         </AlertDescription>
       </Alert>
+
+      {prepHasCustomSettings && (
+        <Alert variant="default" className="border-amber-300/60 bg-amber-50/60 dark:bg-amber-950/20">
+          <Info className="h-4 w-4 text-amber-600" />
+          <AlertDescription className="text-amber-800 dark:text-amber-300 text-xs">
+            Votre configuration <strong>Préparation ML</strong> (balancing, preprocessing par colonne)
+            ne s'applique <strong>pas</strong> en mode AutoML — AutoML gère son propre pipeline automatiquement.
+            {prepConfig && (
+              <span> Le ratio de test ({Math.round(prepConfig.testRatio ?? 20)}%) a été pré-rempli depuis votre configuration.</span>
+            )}
+          </AlertDescription>
+        </Alert>
+      )}
 
       <Card>
         <CardContent className="space-y-6 pt-5">

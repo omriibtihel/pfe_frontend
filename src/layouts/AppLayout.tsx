@@ -41,7 +41,7 @@ interface AppLayoutProps {
 }
 
 const navItems = [
-  { path: "/dashboard", icon: LayoutDashboard, label: "Dashboard" },
+  { path: "/dashboard", icon: LayoutDashboard, label: "Tableau de bord" },
   { path: "/projects", icon: FolderOpen, label: "Projets" },
 ];
 
@@ -52,8 +52,8 @@ const projectNavItems = [
   { path: "nettoyage",   icon: Settings2, label: "Nettoyage" },
   { path: "versions",    icon: GitBranch, label: "Versions" },
   { path: "preparation", icon: Sliders,   label: "Préparation ML" },
-  { path: "training",    icon: Brain,     label: "Entrainement" },
-  { path: "predict",     icon: Target,    label: "Prediction" },
+  { path: "training",    icon: Brain,     label: "Entraînement" },
+  { path: "predict",     icon: Target,    label: "Prédiction" },
 ];
 
 export function AppLayout({ children }: AppLayoutProps) {
@@ -162,7 +162,7 @@ export function AppLayout({ children }: AppLayoutProps) {
             {sidebarOpen && (
               <div className="flex min-w-0 flex-col">
                 <span className="text-lg font-bold tracking-tight">MedicalVision</span>
-                <span className="text-xs font-medium text-muted-foreground">AI Medical Workspace</span>
+                <span className="text-xs font-medium text-muted-foreground">Espace IA Médical</span>
               </div>
             )}
           </Link>

@@ -18,13 +18,16 @@ type SectionDef = {
 };
 
 const SECTIONS: SectionDef[] = [
-  { key: 'generalInfo',      label: 'Informations générales',    description: 'Nom, dimensions, format, date d\'import, variable cible.' },
-  { key: 'summary',          label: 'Résumé de la qualité',      description: 'Complétude, nulls, outliers, répartition des types.' },
-  { key: 'typeDistribution', label: 'Distribution des types',    description: 'Nombre de colonnes par type (numérique, catégorielle…).' },
-  { key: 'missingValues',    label: 'Valeurs manquantes',        description: 'Tableau détaillé colonne par colonne.' },
-  { key: 'numericStats',     label: 'Statistiques numériques',   description: 'Min / P25 / Médiane / Moyenne / P75 / Max / Std.' },
-  { key: 'correlations',     label: 'Corrélations (Pearson)',    description: 'Top paires positives et négatives.', requiresCorrelation: true },
-  { key: 'observations',     label: 'Observations automatiques', description: 'Résumé rédigé automatiquement à partir de l\'analyse.' },
+  { key: 'executiveSummary', label: 'Résumé exécutif',             description: 'Synthèse narrative automatique de l\'état du dataset en 3-4 phrases.' },
+  { key: 'generalInfo',      label: 'Informations générales',      description: 'Nom, dimensions, format, date d\'import, variable cible et tâche détectée.' },
+  { key: 'dataQuality',      label: 'Qualité des données',         description: 'Complétude, types, nulls, outliers, identifiants et colonnes constantes.' },
+  { key: 'columnAnalysis',   label: 'Analyse des colonnes',        description: 'Colonnes groupées : identifiants, constantes, haute cardinalité, manquants critiques.' },
+  { key: 'missingValues',    label: 'Valeurs manquantes',          description: 'Tableau détaillé par colonne avec niveaux et actions suggérées.' },
+  { key: 'numericStats',     label: 'Statistiques numériques',     description: 'Min / P25 / Médiane / Moyenne / P75 / Max / Std + détection outliers.' },
+  { key: 'targetAnalysis',   label: 'Variable cible',              description: 'Distribution des classes, déséquilibre et recommandations.' },
+  { key: 'correlations',     label: 'Corrélations (Pearson)',      description: 'Top paires positives et négatives.', requiresCorrelation: true },
+  { key: 'recommendations',  label: 'Recommandations prioritaires', description: 'Liste d\'actions triées par priorité (haute, moyenne, basse).' },
+  { key: 'conclusion',       label: 'Conclusion',                  description: 'Bilan narratif sur la préparation du dataset pour l\'entraînement.' },
 ];
 
 // ─────────────────────────────────────────────────────────────────────────────

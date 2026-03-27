@@ -7,10 +7,10 @@ export const MODEL_LABELS: Record<ModelType, string> = {
   randomforest: 'Random Forest',
   svm: 'SVM',
   knn: 'KNN',
-  decisiontree: 'Decision Tree',
-  logreg: 'Logistic Regression',
-  logisticregression: 'Logistic Regression',
-  naivebayes: 'Naive Bayes',
+  decisiontree: 'Arbre de décision',
+  logreg: 'Rég. Logistique',
+  logisticregression: 'Rég. Logistique',
+  naivebayes: 'Naïf Bayésien',
 };
 
 export type HoldoutPreset = {

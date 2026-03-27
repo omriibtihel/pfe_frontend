@@ -73,6 +73,8 @@ interface NormalityTestPanelProps {
   projectId: string;
   activeDatasetId: number;
   columns: UiColumn[];
+  /** When set, use version analytics endpoints instead of dataset endpoints */
+  versionId?: number | null;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -86,7 +88,7 @@ const KIND_BADGE: Record<string, { label: string; cls: string }> = {
   unknown:     { label: "?",    cls: "text-muted-foreground" },
 };
 
-export function NormalityTestPanel({ projectId, activeDatasetId, columns }: NormalityTestPanelProps) {
+export function NormalityTestPanel({ projectId, activeDatasetId, columns, versionId }: NormalityTestPanelProps) {
   const { toast } = useToast();
 
   const [selectedCols, setSelectedCols] = useState<string[]>([]);
@@ -109,14 +111,16 @@ export function NormalityTestPanel({ projectId, activeDatasetId, columns }: Norm
     setQqPoints([]);
     setHistWithCurve([]);
     try {
-      const out = await databaseService.normalityTest(projectId, activeDatasetId, selectedCols);
+      const out = versionId
+        ? await databaseService.versionNormalityTest(projectId, versionId, selectedCols)
+        : await databaseService.normalityTest(projectId, activeDatasetId, selectedCols);
       setResults(out.results);
     } catch (e) {
       toast({ title: "Erreur", description: (e as Error).message, variant: "destructive" });
     } finally {
       setLoading(false);
     }
-  }, [projectId, activeDatasetId, selectedCols, toast]);
+  }, [projectId, activeDatasetId, versionId, selectedCols, toast]);
 
   // ── Load detail (Q-Q + histogram) for a specific column ─────────────────
   const loadDetail = useCallback(async (res: NormalityColResult) => {
@@ -124,8 +128,12 @@ export function NormalityTestPanel({ projectId, activeDatasetId, columns }: Norm
     setDetailLoading(true);
     try {
       const [sampleOut, histOut] = await Promise.all([
-        databaseService.sample(projectId, activeDatasetId, { cols: [res.col], n: 500 }),
-        databaseService.hist(projectId, activeDatasetId, { col: res.col, bins: 20 }),
+        versionId
+          ? databaseService.versionSample(projectId, versionId, { cols: [res.col], n: 500 })
+          : databaseService.sample(projectId, activeDatasetId, { cols: [res.col], n: 500 }),
+        versionId
+          ? databaseService.versionHist(projectId, versionId, { col: res.col, bins: 20 })
+          : databaseService.hist(projectId, activeDatasetId, { col: res.col, bins: 20 }),
       ]);
 
       // Q-Q Plot points

@@ -101,6 +101,7 @@ export type VersionUI = {
   operations: string[];
   createdAt: string | null;
   canPredict?: boolean;
+  sizeBytes?: number | null;
 
   // training convenience
   targetColumn?: string | null;
@@ -124,6 +125,7 @@ function normalizeVersion(v: DatasetVersionOut): VersionUI {
     operations: Array.isArray(v?.operations) ? (v.operations as string[]) : [],
     createdAt: (v as any)?.created_at ?? null,
     canPredict: Boolean((v as any)?.canPredict ?? (v as any)?.can_predict),
+    sizeBytes: toNum((v as any)?.size_bytes),
     targetColumn: targetColumn ? String(targetColumn) : null,
   };
 }
@@ -277,6 +279,12 @@ export const dataService = {
     await apiClient.delete<unknown>(`${versionsBase(projectId)}/${vid}`);
   },
 
+  async renameVersion(projectId: string | number, versionId: number | string, name: string): Promise<void> {
+    const vid = toNum(versionId);
+    if (!vid) throw new Error("Invalid version id");
+    await apiClient.patch<unknown>(`${versionsBase(projectId)}/${vid}`, { name });
+  },
+
   // -------------------------
   // Workspace for version edit
   // -------------------------
@@ -312,6 +320,27 @@ export const dataService = {
     const meta = await this.getVersionColumnsMeta(projectId, versionId);
     const cols = Array.isArray(meta?.columns) ? meta.columns : [];
     return cols.map(toDatasetColumn);
+  },
+
+  async getVersionColumnValues(
+    projectId: string | number,
+    versionId: number | string,
+    column: string
+  ): Promise<string[]> {
+    const res = await apiClient.get<{ column: string; values: string[]; total: number }>(
+      `${versionsBase(projectId)}/${versionId}/column-values?column=${encodeURIComponent(column)}`
+    );
+    return res.values ?? [];
+  },
+
+  async getVersionColumnDistribution(
+    projectId: string | number,
+    versionId: number | string,
+    column: string
+  ): Promise<{ type: "categorical" | "histogram"; total: number; bars: { label: string; count: number }[] }> {
+    return apiClient.get(
+      `${versionsBase(projectId)}/${versionId}/column-distribution?column=${encodeURIComponent(column)}`
+    );
   },
 };
 
