@@ -21,7 +21,7 @@ import { Bot } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import type { CvFoldResult, CvMetricsSummary, MetricType, ModelResult } from '@/types';
+import type { BootstrapCIEntry, CvFoldResult, CvMetricsSummary, LearningCurveData, MetricType, ModelResult, PermutationImportanceItem, ResidualAnalysisData, ShapGlobalData } from '@/types';
 import { CvResultsPanel } from './CvResultsPanel';
 import { GridSearchResultsPanel } from './GridSearchResultsPanel';
 import {
@@ -205,6 +205,43 @@ export function ModelResultCard({
                 </Badge>
               </div>
             )}
+
+            {/* Brier score + Bootstrap CI strip */}
+            {(() => {
+              const bs = (result.metrics as Record<string, number | undefined>)?.brier_score;
+              const ci = result.confidenceIntervals;
+              const hasBrier = typeof bs === 'number';
+              const hasCi = ci && Object.keys(ci.metrics ?? {}).length > 0;
+              if (!hasBrier && !hasCi) return null;
+              const ciEntry = (key: string): BootstrapCIEntry | undefined =>
+                ci?.metrics?.[key] as BootstrapCIEntry | undefined;
+              return (
+                <div className="mt-2 flex flex-wrap gap-1.5">
+                  {hasBrier && (
+                    <span
+                      className="rounded-full border border-blue-400/40 bg-blue-50 px-2 py-0.5 text-[11px] text-blue-700 dark:bg-blue-950/30 dark:text-blue-300"
+                      title="Brier score — mesure la qualité des probabilités prédites (0 = parfait, 1 = mauvais)"
+                    >
+                      Brier: {bs!.toFixed(3)}
+                    </span>
+                  )}
+                  {(['accuracy', 'f1', 'roc_auc'] as const).map((k) => {
+                    const e = ciEntry(k);
+                    if (!e) return null;
+                    const halfWidth = ((e.ci_high - e.ci_low) / 2 * 100).toFixed(1);
+                    return (
+                      <span
+                        key={k}
+                        className="rounded-full border border-muted-foreground/30 bg-muted/60 px-2 py-0.5 text-[11px] text-muted-foreground"
+                        title={`IC ${((ci!.ci_level) * 100).toFixed(0)}% — [${(e.ci_low * 100).toFixed(1)}%, ${(e.ci_high * 100).toFixed(1)}%]`}
+                      >
+                        {k === 'roc_auc' ? 'AUC' : k.toUpperCase()}&nbsp;±{halfWidth}%
+                      </span>
+                    );
+                  })}
+                </div>
+              );
+            })()}
           </section>
 
           {!result.isCV && (
@@ -611,9 +648,9 @@ export function ModelResultCard({
                 </section>
               )}
 
-              {result.curves && (result.curves.roc || result.curves.pr) && (
-                <section aria-label="Courbes ROC et Precision-Recall">
-                  <p className="mb-2 text-sm font-medium">Courbes ROC & Precision-Recall</p>
+              {result.curves && (result.curves.roc || result.curves.pr || result.curves.calibration) && (
+                <section aria-label="Courbes de diagnostic">
+                  <p className="mb-2 text-sm font-medium">Courbes de diagnostic</p>
                   <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                     {result.curves.roc && (
                       <div>
@@ -654,9 +691,314 @@ export function ModelResultCard({
                         </div>
                       </div>
                     )}
+                    {result.curves.calibration && (
+                      <div>
+                        <div className="mb-1 flex items-center justify-center gap-2">
+                          <p className="text-xs text-muted-foreground text-center">Courbe de calibration</p>
+                          <span
+                            className="rounded-full border border-emerald-400/50 bg-emerald-50 px-1.5 py-0.5 text-[10px] text-emerald-700 dark:bg-emerald-950/30 dark:text-emerald-300"
+                            title="Brier score — mesure la calibration (0 = parfait)"
+                          >
+                            Brier&nbsp;{result.curves.calibration.brier_score.toFixed(3)}
+                          </span>
+                        </div>
+                        <div className="rounded-lg border border-border/50 bg-muted/20 p-2" style={{ height: 180 }}>
+                          <ResponsiveContainer width="100%" height="100%">
+                            <LineChart
+                              data={result.curves.calibration.points.map(([mp, fp]) => ({ predicted: mp, actual: fp }))}
+                              margin={{ top: 4, right: 8, bottom: 16, left: 8 }}
+                            >
+                              <CartesianGrid strokeDasharray="3 3" stroke="rgba(128,128,128,0.15)" />
+                              <XAxis dataKey="predicted" type="number" domain={[0, 1]} tickCount={5} tick={{ fontSize: 10 }} label={{ value: 'Probabilité prédite', position: 'insideBottom', offset: -4, fontSize: 10 }} />
+                              <YAxis type="number" domain={[0, 1]} tickCount={5} tick={{ fontSize: 10 }} label={{ value: 'Fraction réelle', angle: -90, position: 'insideLeft', offset: 8, fontSize: 10 }} />
+                              <Tooltip formatter={(v: number) => v.toFixed(3)} labelFormatter={(v: number) => `Prédit: ${v.toFixed(3)}`} />
+                              <ReferenceLine stroke="#9ca3af" strokeDasharray="4 4" segment={[{ x: 0, y: 0 }, { x: 1, y: 1 }]} />
+                              <Line type="monotone" dataKey="actual" stroke="#10b981" dot={{ r: 3, fill: '#10b981' }} strokeWidth={2} name="Modèle" />
+                            </LineChart>
+                          </ResponsiveContainer>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 </section>
               )}
+
+              {result.learningCurves && (() => {
+                const lc: LearningCurveData = result.learningCurves!;
+                const lcData = lc.train_sizes.map((s, i) => ({
+                  samples: s,
+                  train: lc.train_mean[i],
+                  val: lc.val_mean[i],
+                }));
+                const scoringLabel = lc.scoring === 'r2' ? 'R²' : lc.scoring.replace('neg_', '-').replace('_', ' ').toUpperCase();
+                return (
+                  <section aria-label="Courbes d'apprentissage">
+                    <div className="mb-2 flex items-center gap-2">
+                      <p className="text-sm font-medium">Courbes d&apos;apprentissage</p>
+                      <span className="text-[11px] text-muted-foreground">({scoringLabel})</span>
+                    </div>
+                    <p className="mb-2 text-[11px] text-muted-foreground">
+                      Montre si le modèle bénéficierait de plus de données. Un écart important train/val indique du surapprentissage.
+                    </p>
+                    <div className="rounded-lg border border-border/50 bg-muted/20 p-2" style={{ height: 200 }}>
+                      <ResponsiveContainer width="100%" height="100%">
+                        <LineChart data={lcData} margin={{ top: 4, right: 8, bottom: 16, left: 8 }}>
+                          <CartesianGrid strokeDasharray="3 3" stroke="rgba(128,128,128,0.15)" />
+                          <XAxis dataKey="samples" tick={{ fontSize: 10 }} label={{ value: 'Échantillons', position: 'insideBottom', offset: -4, fontSize: 10 }} />
+                          <YAxis domain={['auto', 'auto']} tick={{ fontSize: 10 }} tickFormatter={(v: number) => v.toFixed(2)} />
+                          <Tooltip
+                            formatter={(v: number, name: string) => [v?.toFixed(3) ?? '—', name === 'train' ? 'Entraînement' : 'Validation']}
+                            labelFormatter={(v: number) => `${v} échantillons`}
+                          />
+                          <Line type="monotone" dataKey="train" stroke="#8b5cf6" dot={false} strokeWidth={2} name="train" />
+                          <Line type="monotone" dataKey="val" stroke="#06b6d4" dot={false} strokeWidth={2} strokeDasharray="5 3" name="val" />
+                        </LineChart>
+                      </ResponsiveContainer>
+                    </div>
+                    <div className="mt-1 flex gap-3 justify-center">
+                      <span className="flex items-center gap-1 text-[11px] text-muted-foreground">
+                        <span className="inline-block h-0.5 w-4 rounded bg-violet-500" /> Entraînement
+                      </span>
+                      <span className="flex items-center gap-1 text-[11px] text-muted-foreground">
+                        <span className="inline-block h-0.5 w-4 rounded bg-cyan-500 opacity-70 border-dashed" style={{ borderTop: '2px dashed' }} /> Validation
+                      </span>
+                    </div>
+                  </section>
+                );
+              })()}
+
+              {result.permutationImportance && result.permutationImportance.length > 0 && (() => {
+                const pi: PermutationImportanceItem[] = result.permutationImportance!;
+                const maxMean = Math.max(...pi.map((d) => Math.abs(d.mean)), 1e-9);
+                return (
+                  <section aria-label="Importance par permutation">
+                    <div className="mb-2 flex items-center justify-between">
+                      <p className="text-sm font-medium">Importance par permutation</p>
+                      <span className="rounded-full bg-muted/60 px-2 py-0.5 text-xs text-muted-foreground">
+                        Top {pi.length}
+                      </span>
+                    </div>
+                    <p className="mb-2 text-[11px] text-muted-foreground">
+                      Mesure la chute de performance quand une variable est mélangée aléatoirement (test set). Valeur négative = variable peu utile ou bruitée.
+                    </p>
+                    <div
+                      className="rounded-lg border border-border/50 bg-muted/20 p-2"
+                      style={{ height: `${Math.min(320, Math.max(160, pi.length * 28 + 40))}px` }}
+                      role="img"
+                      aria-label={`Graphique d'importance par permutation — ${pi.length} variables`}
+                    >
+                      <ResponsiveContainer width="100%" height="100%">
+                        <RechartsBarChart
+                          data={pi.map((d) => ({
+                            label: d.feature.length > 18 ? `${d.feature.slice(0, 16)}…` : d.feature,
+                            feature: d.feature,
+                            importance: d.mean,
+                            normalizedImportance: d.mean / maxMean,
+                          }))}
+                          layout="vertical"
+                          margin={{ top: 4, right: 56, left: 4, bottom: 4 }}
+                        >
+                          <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="rgba(128,128,128,0.15)" />
+                          <XAxis type="number" hide />
+                          <YAxis type="category" dataKey="label" width={116} tick={{ fontSize: 10 }} axisLine={false} tickLine={false} />
+                          <Tooltip
+                            cursor={{ fill: 'rgba(100,100,100,0.08)' }}
+                            contentStyle={{ borderRadius: '8px', fontSize: '12px', padding: '8px 12px' }}
+                            formatter={(_v: unknown, _n: string, item: { payload?: { importance?: number } }) => {
+                              const v = item?.payload?.importance;
+                              if (v == null) return ['—', 'Importance'];
+                              return [v.toFixed(4), 'Chute de score'];
+                            }}
+                            labelFormatter={(_l: unknown, payload: unknown[]) => {
+                              const p = (payload?.[0] as { payload?: { feature?: string } })?.payload;
+                              return String(p?.feature ?? '');
+                            }}
+                          />
+                          <Bar dataKey="normalizedImportance" radius={[0, 4, 4, 0]} maxBarSize={20}>
+                            {pi.map((d, idx) => (
+                              <Cell
+                                key={`pi-cell-${idx}`}
+                                fill={d.mean < 0 ? 'hsl(0,70%,55%)' : FI_PALETTE[idx % FI_PALETTE.length]}
+                              />
+                            ))}
+                            <LabelList
+                              dataKey="importance"
+                              position="right"
+                              formatter={(v: unknown) => {
+                                const n = Number(v);
+                                return Number.isFinite(n) ? n.toFixed(3) : '';
+                              }}
+                              style={{ fontSize: '10px', fontWeight: 500 }}
+                            />
+                          </Bar>
+                        </RechartsBarChart>
+                      </ResponsiveContainer>
+                    </div>
+                  </section>
+                );
+              })()}
+
+              {result.shapGlobal && result.shapGlobal.summary.length > 0 && (() => {
+                const sg: ShapGlobalData = result.shapGlobal!;
+                const maxAbs = Math.max(...sg.summary.map((d) => d.mean_abs_shap), 1e-9);
+                const explainerLabel: Record<string, string> = {
+                  tree: 'TreeSHAP',
+                  linear: 'LinearSHAP',
+                  kernel: 'KernelSHAP',
+                };
+                return (
+                  <section aria-label="SHAP — importance globale">
+                    <div className="mb-2 flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <p className="text-sm font-medium">SHAP — Importance globale</p>
+                        <span className="rounded-full border border-violet-400/40 bg-violet-50 px-2 py-0.5 text-[10px] text-violet-700 dark:bg-violet-950/30 dark:text-violet-300">
+                          {explainerLabel[sg.explainer_type] ?? sg.explainer_type}
+                        </span>
+                      </div>
+                      <span className="rounded-full bg-muted/60 px-2 py-0.5 text-xs text-muted-foreground">
+                        Top {sg.summary.length} · n={sg.n_samples}
+                      </span>
+                    </div>
+                    <p className="mb-2 text-[11px] text-muted-foreground">
+                      Contribution moyenne de chaque variable à la prédiction (valeur absolue). La couleur indique la direction&nbsp;: bleu&nbsp;=&nbsp;pousse vers le bas, orange&nbsp;=&nbsp;pousse vers le haut.
+                    </p>
+                    <div
+                      className="rounded-lg border border-border/50 bg-muted/20 p-2"
+                      style={{ height: `${Math.min(340, Math.max(180, sg.summary.length * 28 + 40))}px` }}
+                      role="img"
+                      aria-label={`SHAP global — ${sg.summary.length} variables`}
+                    >
+                      <ResponsiveContainer width="100%" height="100%">
+                        <RechartsBarChart
+                          data={sg.summary.map((d) => ({
+                            label: d.feature.length > 18 ? `${d.feature.slice(0, 16)}…` : d.feature,
+                            feature: d.feature,
+                            mean_abs_shap: d.mean_abs_shap,
+                            mean_shap: d.mean_shap,
+                            normalized: d.mean_abs_shap / maxAbs,
+                          }))}
+                          layout="vertical"
+                          margin={{ top: 4, right: 64, left: 4, bottom: 4 }}
+                        >
+                          <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="rgba(128,128,128,0.15)" />
+                          <XAxis type="number" hide />
+                          <YAxis type="category" dataKey="label" width={116} tick={{ fontSize: 10 }} axisLine={false} tickLine={false} />
+                          <Tooltip
+                            cursor={{ fill: 'rgba(100,100,100,0.08)' }}
+                            contentStyle={{ borderRadius: '8px', fontSize: '12px', padding: '8px 12px' }}
+                            formatter={(_v: unknown, _n: string, item: { payload?: { mean_abs_shap?: number; mean_shap?: number } }) => {
+                              const abs = item?.payload?.mean_abs_shap;
+                              const signed = item?.payload?.mean_shap;
+                              if (abs == null) return ['—', 'SHAP'];
+                              return [`|SHAP|=${abs.toFixed(4)}  (μ=${signed != null ? signed.toFixed(4) : '—'})`, 'Importance'];
+                            }}
+                            labelFormatter={(_l: unknown, payload: unknown[]) =>
+                              String((payload?.[0] as { payload?: { feature?: string } })?.payload?.feature ?? '')
+                            }
+                          />
+                          <Bar dataKey="normalized" radius={[0, 4, 4, 0]} maxBarSize={20}>
+                            {sg.summary.map((d, idx) => (
+                              <Cell
+                                key={`shap-cell-${idx}`}
+                                fill={d.mean_shap < 0 ? 'hsl(217,91%,60%)' : 'hsl(30,90%,55%)'}
+                              />
+                            ))}
+                            <LabelList
+                              dataKey="mean_abs_shap"
+                              position="right"
+                              formatter={(v: unknown) => {
+                                const n = Number(v);
+                                return Number.isFinite(n) ? n.toFixed(3) : '';
+                              }}
+                              style={{ fontSize: '10px', fontWeight: 500 }}
+                            />
+                          </Bar>
+                        </RechartsBarChart>
+                      </ResponsiveContainer>
+                    </div>
+                    <div className="mt-1 flex gap-3 justify-center">
+                      <span className="flex items-center gap-1 text-[11px] text-muted-foreground">
+                        <span className="inline-block h-2 w-2 rounded-sm bg-[hsl(30,90%,55%)]" /> Pousse vers le haut
+                      </span>
+                      <span className="flex items-center gap-1 text-[11px] text-muted-foreground">
+                        <span className="inline-block h-2 w-2 rounded-sm bg-[hsl(217,91%,60%)]" /> Pousse vers le bas
+                      </span>
+                    </div>
+                  </section>
+                );
+              })()}
+
+              {result.residualAnalysis && (() => {
+                const ra: ResidualAnalysisData = result.residualAnalysis!;
+                const histData = ra.histogram.counts.map((count, i) => ({
+                  x: ((ra.histogram.bin_edges[i] + ra.histogram.bin_edges[i + 1]) / 2),
+                  count,
+                }));
+                const qqData = ra.qq_points.map(([t, s]) => ({ theoretical: t, sample: s }));
+                return (
+                  <section aria-label="Analyse des résidus">
+                    <p className="mb-1 text-sm font-medium">Analyse des résidus</p>
+                    <p className="mb-2 text-[11px] text-muted-foreground">
+                      Diagnostics sur les erreurs du modèle (test set). Idéalement : distribution symétrique centrée en 0, Q-Q aligné sur la diagonale.
+                    </p>
+                    <div className="mb-2 flex flex-wrap gap-1.5 text-[11px]">
+                      <span className="rounded-full border border-border/50 bg-muted/60 px-2 py-0.5 text-muted-foreground" title="Biais moyen du modèle (idéal : ≈ 0)">
+                        Moyenne résidu&nbsp;: {ra.stats.mean.toFixed(4)}
+                      </span>
+                      <span className="rounded-full border border-border/50 bg-muted/60 px-2 py-0.5 text-muted-foreground" title="Asymétrie de la distribution des résidus (idéal : ≈ 0)">
+                        Skewness&nbsp;: {ra.stats.skewness.toFixed(3)}
+                      </span>
+                      <span
+                        className={`rounded-full border px-2 py-0.5 ${Math.abs(ra.stats.correlation_with_pred) > 0.2 ? 'border-amber-400/50 bg-amber-50 text-amber-700 dark:bg-amber-950/30 dark:text-amber-300' : 'border-border/50 bg-muted/60 text-muted-foreground'}`}
+                        title="Corrélation résidus / prédictions (idéal : ≈ 0 — sinon pattern systématique)"
+                      >
+                        Corr. pred&nbsp;: {ra.stats.correlation_with_pred.toFixed(3)}
+                      </span>
+                      <span className="rounded-full border border-border/50 bg-muted/60 px-2 py-0.5 text-muted-foreground">
+                        n&nbsp;=&nbsp;{ra.n_samples}
+                      </span>
+                    </div>
+                    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                      <div>
+                        <p className="mb-1 text-xs text-muted-foreground text-center">Distribution des résidus</p>
+                        <div className="rounded-lg border border-border/50 bg-muted/20 p-2" style={{ height: 180 }}>
+                          <ResponsiveContainer width="100%" height="100%">
+                            <RechartsBarChart data={histData} margin={{ top: 4, right: 8, bottom: 16, left: 8 }}>
+                              <CartesianGrid strokeDasharray="3 3" stroke="rgba(128,128,128,0.15)" />
+                              <XAxis dataKey="x" tick={{ fontSize: 9 }} tickFormatter={(v: number) => v.toFixed(1)} label={{ value: 'Résidu', position: 'insideBottom', offset: -4, fontSize: 10 }} />
+                              <YAxis tick={{ fontSize: 9 }} />
+                              <Tooltip formatter={(v: number) => [v, 'Effectif']} labelFormatter={(v: number) => `Centre: ${Number(v).toFixed(3)}`} />
+                              <Bar dataKey="count" fill="hsl(217,91%,60%)" radius={[2, 2, 0, 0]} maxBarSize={24} />
+                            </RechartsBarChart>
+                          </ResponsiveContainer>
+                        </div>
+                      </div>
+                      <div>
+                        <p className="mb-1 text-xs text-muted-foreground text-center">Q-Q Plot (normalité)</p>
+                        <div className="rounded-lg border border-border/50 bg-muted/20 p-2" style={{ height: 180 }}>
+                          <ResponsiveContainer width="100%" height="100%">
+                            <LineChart data={qqData} margin={{ top: 4, right: 8, bottom: 16, left: 8 }}>
+                              <CartesianGrid strokeDasharray="3 3" stroke="rgba(128,128,128,0.15)" />
+                              <XAxis dataKey="theoretical" type="number" tick={{ fontSize: 9 }} tickFormatter={(v: number) => v.toFixed(1)} label={{ value: 'Quantile théorique', position: 'insideBottom', offset: -4, fontSize: 10 }} />
+                              <YAxis type="number" tick={{ fontSize: 9 }} tickFormatter={(v: number) => v.toFixed(1)} label={{ value: 'Résidu', angle: -90, position: 'insideLeft', offset: 8, fontSize: 10 }} />
+                              <Tooltip formatter={(v: number) => v.toFixed(4)} labelFormatter={(v: number) => `Z théorique: ${Number(v).toFixed(3)}`} />
+                              <ReferenceLine
+                                stroke="#9ca3af"
+                                strokeDasharray="4 4"
+                                segment={[
+                                  { x: qqData[0]?.theoretical ?? -3, y: qqData[0]?.sample ?? -3 },
+                                  { x: qqData[qqData.length - 1]?.theoretical ?? 3, y: qqData[qqData.length - 1]?.sample ?? 3 },
+                                ]}
+                              />
+                              <Line type="monotone" dataKey="sample" stroke="#f59e0b" dot={{ r: 2, fill: '#f59e0b' }} strokeWidth={0} name="Résidus" />
+                            </LineChart>
+                          </ResponsiveContainer>
+                        </div>
+                      </div>
+                    </div>
+                  </section>
+                );
+              })()}
 
               <TechnicalDetails result={result} />
             </div>
@@ -769,7 +1111,20 @@ function TechnicalDetails({ result }: { result: ModelResult }) {
             <span className="font-medium text-foreground">Seuil :</span>{' '}
             activé={String(Boolean(result.thresholding.enabled))} · stratégie=
             {String(result.thresholding.strategy ?? '—')} · optimal=
-            {String(result.thresholding.optimal_threshold ?? '—')}
+            {typeof result.thresholding.optimal_threshold === 'number'
+              ? result.thresholding.optimal_threshold.toFixed(3)
+              : '—'}
+            {typeof result.thresholding.improvement_delta === 'number' && (
+              <> · gain F1=
+                <span className={result.thresholding.improvement_delta > 0 ? 'text-green-600 dark:text-green-400' : 'text-yellow-600 dark:text-yellow-400'}>
+                  {result.thresholding.improvement_delta > 0 ? '+' : ''}
+                  {(result.thresholding.improvement_delta * 100).toFixed(1)}%
+                </span>
+              </>
+            )}
+            {Array.isArray(result.thresholding.warnings) && result.thresholding.warnings.length > 0 && (
+              <> · <span className="text-yellow-600 dark:text-yellow-400">⚠ {result.thresholding.warnings.join(', ')}</span></>
+            )}
           </p>
         )}
         {result.smote && (

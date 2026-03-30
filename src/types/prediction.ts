@@ -39,6 +39,13 @@ export interface SavedModelSummary {
 // Prediction result structures
 // ─────────────────────────────────────────────────────────────────────────────
 
+/** One SHAP contribution for a specific feature on a specific row. */
+export interface ShapLocalItem {
+  feature: string;
+  shap_value: number;
+  data: number | string | null;
+}
+
 /** One row of prediction output. */
 export interface PredictionRow {
   rowIndex: number;
@@ -47,6 +54,8 @@ export interface PredictionRow {
   score: number | null;
   /** Original input values for this row. */
   inputData: Record<string, unknown>;
+  /** Local SHAP values — present only when /explain endpoint is used. */
+  shap?: ShapLocalItem[] | null;
 }
 
 /** Aggregate statistics across all predicted rows. */

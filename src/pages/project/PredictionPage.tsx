@@ -13,6 +13,7 @@ import {
   Layers,
   Loader2,
   Play,
+  Sparkles,
   Target,
   Trash2,
 } from 'lucide-react';
@@ -55,6 +56,7 @@ export function PredictionPage() {
 
   const [deletingModelId, setDeletingModelId] = useState<string | null>(null);
   const [mode, setMode] = useState<'manual' | 'file'>('file');
+  const [withShap, setWithShap] = useState(false);
   const [showManualModal, setShowManualModal] = useState(false);
   const [isPredicting, setIsPredicting] = useState(false);
   const [file, setFile] = useState<File | null>(null);
@@ -62,7 +64,6 @@ export function PredictionPage() {
 
   useEffect(() => {
     if (!id) return;
-
     setLoadingModels(true);
     predictionService
       .getSavedModels(id)
@@ -71,7 +72,7 @@ export function PredictionPage() {
         setNoModelError(null);
       })
       .catch((err: Error) => {
-        setNoModelError(err.message || 'Impossible de charger les modeles sauvegardes.');
+        setNoModelError(err.message || 'Impossible de charger les modèles sauvegardés.');
       })
       .finally(() => setLoadingModels(false));
   }, [id]);
@@ -126,13 +127,12 @@ export function PredictionPage() {
 
   const handlePredict = async () => {
     if (!id || !selectedModel) return;
-
     setIsPredicting(true);
     try {
       let result: PredictionResponse;
       if (mode === 'file') {
         if (!file) {
-          toast({ title: 'Veuillez selectionner un fichier', variant: 'destructive' });
+          toast({ title: 'Veuillez sélectionner un fichier', variant: 'destructive' });
           return;
         }
         result = await predictionService.predictWithSavedModel(id, selectedModel.id, file);
@@ -145,16 +145,18 @@ export function PredictionPage() {
             ]),
           ),
         ];
-        result = await predictionService.predictManualWithSavedModel(id, selectedModel.id, rows);
+        result = withShap
+          ? await predictionService.predictManualWithSavedModelExplain(id, selectedModel.id, rows)
+          : await predictionService.predictManualWithSavedModel(id, selectedModel.id, rows);
       }
 
       sessionStorage.setItem('lastPrediction', JSON.stringify(result));
       sessionStorage.setItem('lastPredictionFile', file?.name ?? 'manual');
-      toast({ title: `Prediction terminee - ${result.nRows} ligne(s)` });
+      toast({ title: `Prédiction terminée — ${result.nRows} ligne(s)` });
       navigate(`/projects/${id}/predict/results`);
     } catch (error) {
       toast({
-        title: 'Erreur de prediction',
+        title: 'Erreur de prédiction',
         description: error instanceof Error ? error.message : 'Une erreur est survenue.',
         variant: 'destructive',
       });
@@ -173,7 +175,7 @@ export function PredictionPage() {
       <div className="w-full space-y-6">
         <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
           <div>
-            <h1 className="text-3xl font-bold text-foreground">Prediction</h1>
+            <h1 className="text-3xl font-bold text-foreground">Prédiction</h1>
             <p className="mt-1 text-muted-foreground">
               Utilisez vos modèles entraînés pour faire des prédictions.
             </p>
@@ -187,7 +189,7 @@ export function PredictionPage() {
           <Card>
             <CardContent className="flex items-center gap-3 py-4">
               <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
-              <span className="text-muted-foreground">Chargement des modeles sauvegardes...</span>
+              <span className="text-muted-foreground">Chargement des modèles sauvegardés…</span>
             </CardContent>
           </Card>
         ) : noModelError || savedModels.length === 0 ? (
@@ -233,7 +235,7 @@ export function PredictionPage() {
                 </Label>
                 <Select value={selectedVersionId} onValueChange={setSelectedVersionId}>
                   <SelectTrigger id="prediction-version-select" className="w-full">
-                    <SelectValue placeholder="Choisir une version de données..." />
+                    <SelectValue placeholder="Choisir une version de données…" />
                   </SelectTrigger>
                   <SelectContent>
                     {versionGroups.map((group) => (
@@ -266,7 +268,7 @@ export function PredictionPage() {
                   <div className="flex items-center gap-2">
                     <Select value={selectedModelId} onValueChange={setSelectedModelId}>
                       <SelectTrigger className="flex-1">
-                        <SelectValue placeholder="Choisir un modèle..." />
+                        <SelectValue placeholder="Choisir un modèle…" />
                       </SelectTrigger>
                       <SelectContent>
                         {modelsForSelectedVersion.map((model) => {
@@ -375,6 +377,7 @@ export function PredictionPage() {
           </Card>
         )}
 
+        {/* Mode selection — two-card grid */}
         <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
           <Card
             className={`cursor-pointer transition-all ${
@@ -389,7 +392,7 @@ export function PredictionPage() {
               </CardTitle>
               <CardDescription>Entrez les données d'un patient manuellement</CardDescription>
             </CardHeader>
-            <CardContent>
+            <CardContent className="space-y-3">
               <Button
                 variant={mode === 'manual' ? 'default' : 'outline'}
                 className="w-full"
@@ -402,6 +405,33 @@ export function PredictionPage() {
               >
                 Remplir les champs
               </Button>
+              {/* SHAP toggle — only visible in manual mode */}
+              {mode === 'manual' && (
+                <label
+                  className="flex items-center gap-2.5 cursor-pointer select-none rounded-lg border border-border/60 bg-muted/20 px-3 py-2.5"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <div
+                    role="checkbox"
+                    aria-checked={withShap}
+                    onClick={() => setWithShap((v) => !v)}
+                    className={`relative h-5 w-9 rounded-full transition-colors ${withShap ? 'bg-primary' : 'bg-muted-foreground/30'}`}
+                  >
+                    <span
+                      className={`absolute top-0.5 left-0.5 h-4 w-4 rounded-full bg-white shadow transition-transform ${withShap ? 'translate-x-4' : ''}`}
+                    />
+                  </div>
+                  <div>
+                    <p className="text-xs font-medium flex items-center gap-1">
+                      <Sparkles className="h-3 w-3 text-violet-500" />
+                      Expliquer avec SHAP
+                    </p>
+                    <p className="text-[11px] text-muted-foreground">
+                      Affiche l'impact de chaque variable
+                    </p>
+                  </div>
+                </label>
+              )}
             </CardContent>
           </Card>
 
@@ -439,12 +469,15 @@ export function PredictionPage() {
           {isPredicting ? (
             <>
               <Loader2 className="mr-2 h-5 w-5 animate-spin" />
-              Prédiction en cours...
+              Prédiction en cours…
             </>
           ) : (
             <>
               <Play className="mr-2 h-5 w-5" />
               Prédire le diagnostic
+              {withShap && mode === 'manual' && (
+                <span className="ml-2 text-sm opacity-70">+ SHAP</span>
+              )}
             </>
           )}
         </Button>

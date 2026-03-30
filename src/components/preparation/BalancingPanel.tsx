@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { AlertTriangle, CheckCircle2 } from "lucide-react";
+import { AlertTriangle, CheckCircle2, Info } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -31,6 +31,21 @@ interface BalancingPanelProps {
   config: BalancingPanelConfig;
   onConfigChange: (updates: { balancing?: TrainingBalancingConfig; useSmote?: boolean }) => void;
 }
+
+const LEVEL_LABELS: Record<string, { label: string; color: string }> = {
+  balanced:  { label: "Équilibré",  color: "text-emerald-600 dark:text-emerald-400" },
+  mild:      { label: "Léger",      color: "text-sky-600 dark:text-sky-400" },
+  moderate:  { label: "Modéré",     color: "text-amber-600 dark:text-amber-400" },
+  severe:    { label: "Sévère",     color: "text-orange-600 dark:text-orange-400" },
+  critical:  { label: "Critique",   color: "text-red-600 dark:text-red-400" },
+};
+
+const SCALE_LABELS: Record<string, string> = {
+  tiny:   "très petit (< 200 lignes)",
+  small:  "petit (200–2 000 lignes)",
+  medium: "moyen (2 000–50 000 lignes)",
+  large:  "grand (> 50 000 lignes)",
+};
 
 const fallbackBalancingStrategies: Array<{ id: TrainingBalancingStrategy; label: string }> = [
   { id: "none", label: "Aucun rééquilibrage" },
@@ -162,27 +177,117 @@ export function BalancingPanel({ projectId, config, onConfigChange }: BalancingP
               <p className="text-xs text-warning mt-1">{balanceError}</p>
             )}
             {config.taskType === "classification" && !balanceLoading && !!balanceAnalysis && (
-              <div className="space-y-2">
-                <p className="text-xs text-muted-foreground">{balanceAnalysis.summary_message}</p>
-                <div className="flex items-center gap-2 text-[11px]">
-                  <Badge
-                    variant={balanceAnalysis.needs_balancing ? "destructive" : "outline"}
-                    className={cn(!balanceAnalysis.needs_balancing && "border-emerald-500 text-emerald-600 gap-1")}
+              <div className="space-y-3 pt-1">
+
+                {/* ── Distribution visuelle ── */}
+                <div className="space-y-2">
+                  <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+                    Distribution de la colonne cible
+                  </p>
+
+                  {/* Barre empilée */}
+                  <div
+                    className="flex rounded-full overflow-hidden h-5 w-full border border-border/30"
+                    title={`${String(balanceAnalysis.majority.label)}: ${(balanceAnalysis.majority.ratio * 100).toFixed(1)}% — ${String(balanceAnalysis.minority.label)}: ${(balanceAnalysis.minority.ratio * 100).toFixed(1)}%`}
                   >
-                    {!balanceAnalysis.needs_balancing && <CheckCircle2 className="h-3 w-3" />}
-                    {balanceAnalysis.imbalance_level}
-                  </Badge>
-                  <span className="text-muted-foreground">
-                    IR={Number(balanceAnalysis.imbalance_ratio).toFixed(2)} | minority=
-                    {(Number(balanceAnalysis.minority_ratio) * 100).toFixed(1)}%
-                  </span>
+                    <div
+                      className="bg-blue-500 dark:bg-blue-600 flex items-center justify-center text-[10px] font-semibold text-white transition-all"
+                      style={{ width: `${balanceAnalysis.majority.ratio * 100}%` }}
+                    >
+                      {balanceAnalysis.majority.ratio >= 0.15 && `${(balanceAnalysis.majority.ratio * 100).toFixed(0)}%`}
+                    </div>
+                    <div
+                      className="bg-amber-400 dark:bg-amber-500 flex items-center justify-center text-[10px] font-semibold text-white transition-all"
+                      style={{ width: `${balanceAnalysis.minority.ratio * 100}%` }}
+                    >
+                      {balanceAnalysis.minority.ratio >= 0.1 && `${(balanceAnalysis.minority.ratio * 100).toFixed(0)}%`}
+                    </div>
+                  </div>
+
+                  {/* Légende classes */}
+                  <div className="flex items-center justify-between gap-2 text-[11px]">
+                    <div className="flex items-center gap-1.5 min-w-0">
+                      <span className="w-2.5 h-2.5 rounded-sm bg-blue-500 dark:bg-blue-600 shrink-0" />
+                      <span className="font-semibold text-foreground truncate">
+                        {String(balanceAnalysis.majority.label)}
+                      </span>
+                      <span className="text-muted-foreground whitespace-nowrap">
+                        {balanceAnalysis.majority.count.toLocaleString()} ({(balanceAnalysis.majority.ratio * 100).toFixed(1)}%)
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-1.5 min-w-0 justify-end">
+                      <span className="w-2.5 h-2.5 rounded-sm bg-amber-400 dark:bg-amber-500 shrink-0" />
+                      <span className="font-semibold text-foreground truncate">
+                        {String(balanceAnalysis.minority.label)}
+                      </span>
+                      <span className="text-muted-foreground whitespace-nowrap">
+                        {balanceAnalysis.minority.count.toLocaleString()} ({(balanceAnalysis.minority.ratio * 100).toFixed(1)}%)
+                      </span>
+                    </div>
+                  </div>
                 </div>
-                {!balanceAnalysis.needs_balancing && balancing.strategy === "none" && (
-                  <div className="rounded-lg border border-emerald-500/40 bg-emerald-50/60 dark:bg-emerald-950/20 p-2.5 text-[11px] flex items-start gap-2 text-emerald-700 dark:text-emerald-400">
-                    <CheckCircle2 className="h-3.5 w-3.5 shrink-0 mt-0.5" />
-                    <span>Dataset déjà équilibré — aucun rééchantillonnage nécessaire.</span>
+
+                {/* ── Stats condensées ── */}
+                <div className="grid grid-cols-3 gap-2">
+                  {[
+                    { label: "Total",  value: balanceAnalysis.n_samples.toLocaleString() },
+                    {
+                      label: "Ratio IR",
+                      value: `${Number(balanceAnalysis.imbalance_ratio).toFixed(1)} : 1`,
+                    },
+                    {
+                      label: "Taille",
+                      value: SCALE_LABELS[balanceAnalysis.dataset_scale] ?? balanceAnalysis.dataset_scale,
+                    },
+                  ].map(({ label, value }) => (
+                    <div key={label} className="rounded-md bg-muted/40 px-2.5 py-1.5 text-center">
+                      <p className="text-[10px] text-muted-foreground">{label}</p>
+                      <p className="text-xs font-semibold text-foreground leading-tight mt-0.5 truncate" title={value}>
+                        {value}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+
+                {/* ── Niveau de déséquilibre + explication ── */}
+                <div className={cn(
+                  "rounded-lg border p-2.5 text-[11px] flex items-start gap-2",
+                  balanceAnalysis.needs_balancing
+                    ? "border-amber-300/50 bg-amber-50/50 dark:bg-amber-950/20"
+                    : "border-emerald-500/40 bg-emerald-50/60 dark:bg-emerald-950/20"
+                )}>
+                  {balanceAnalysis.needs_balancing
+                    ? <AlertTriangle className="h-3.5 w-3.5 shrink-0 mt-0.5 text-amber-600 dark:text-amber-400" />
+                    : <CheckCircle2 className="h-3.5 w-3.5 shrink-0 mt-0.5 text-emerald-600 dark:text-emerald-400" />
+                  }
+                  <div className="space-y-0.5">
+                    <p className="font-semibold">
+                      <span className={LEVEL_LABELS[balanceAnalysis.imbalance_level]?.color ?? ""}>
+                        {LEVEL_LABELS[balanceAnalysis.imbalance_level]?.label ?? balanceAnalysis.imbalance_level}
+                      </span>
+                      {" — "}
+                      {balanceAnalysis.needs_balancing
+                        ? `pour ${Number(balanceAnalysis.imbalance_ratio).toFixed(1)} exemple${Number(balanceAnalysis.imbalance_ratio) >= 2 ? "s" : ""} « ${String(balanceAnalysis.majority.label)} », il n'y a qu'un seul « ${String(balanceAnalysis.minority.label)} ».`
+                        : "les deux classes sont bien représentées."
+                      }
+                    </p>
+                    {balanceAnalysis.needs_balancing && (
+                      <p className="text-muted-foreground">
+                        Sans correction, le modèle risque d'ignorer la classe minoritaire et de n'apprendre qu'à prédire
+                        {" «"}{String(balanceAnalysis.majority.label)}{"»"}.
+                      </p>
+                    )}
+                  </div>
+                </div>
+
+                {/* ── Conseil métrique ── */}
+                {balanceAnalysis.metric_advice?.length > 0 && (
+                  <div className="flex items-start gap-2 text-[11px] text-muted-foreground">
+                    <Info className="h-3.5 w-3.5 shrink-0 mt-0.5 text-sky-500" />
+                    <span>{balanceAnalysis.metric_advice[0]}</span>
                   </div>
                 )}
+
               </div>
             )}
           </div>
@@ -204,8 +309,17 @@ export function BalancingPanel({ projectId, config, onConfigChange }: BalancingP
                     value={strategy.id}
                     disabled={"feasible" in strategy ? !strategy.feasible : false}
                   >
-                    {strategy.label}
-                    {"recommended" in strategy && strategy.recommended ? " (recommande)" : ""}
+                    <span className="flex items-center gap-2">
+                      <span>{strategy.label}</span>
+                      {"recommended" in strategy && strategy.recommended && (
+                        <span className="text-[10px] rounded-full bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-400 px-1.5 py-0.5 font-medium leading-none">
+                          recommandé
+                        </span>
+                      )}
+                      {"feasible" in strategy && !strategy.feasible && (
+                        <span className="text-[10px] text-muted-foreground">(non faisable)</span>
+                      )}
+                    </span>
                   </SelectItem>
                 ))}
               </SelectContent>

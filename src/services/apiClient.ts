@@ -259,6 +259,25 @@ class ApiClient {
       throw new Error(extractErrorMessage(err));
     }
   }
+
+  async postJsonBlob(
+    url: string,
+    body: unknown,
+    opts?: RequestOptions,
+  ): Promise<{ blob: Blob; filename?: string }> {
+    try {
+      const res = await this.axios.post(url, body, {
+        headers: { "Content-Type": "application/json" },
+        responseType: "blob",
+        ...this.cfg(opts),
+      });
+      const cd = (res.headers?.["content-disposition"] as string | undefined) ?? undefined;
+      const filename = parseFilenameFromContentDisposition(cd);
+      return { blob: res.data as Blob, filename };
+    } catch (err) {
+      throw new Error(extractErrorMessage(err));
+    }
+  }
 }
 
 export const apiClient = new ApiClient();

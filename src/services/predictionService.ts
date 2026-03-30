@@ -85,6 +85,47 @@ export const predictionService = {
   },
 
   /**
+   * Run inference with local SHAP explanations (manual rows, saved model).
+   * Each row in the response includes a "shap" key with per-feature contributions.
+   */
+  async predictManualWithSavedModelExplain(
+    projectId: string,
+    modelId: string | number,
+    rows: Record<string, unknown>[],
+  ): Promise<PredictionResponse> {
+    const raw = await apiClient.postJson<Record<string, unknown>>(
+      `${base(projectId)}/models/${encodeURIComponent(String(modelId))}/predict/json/explain`,
+      { rows },
+    );
+    return _mapPredictionResponse(raw);
+  },
+
+  /**
+   * Export already-computed prediction rows as a CSV file (server-side formatting).
+   * No re-inference: just converts the rows returned by any /predict endpoint.
+   */
+  async exportResultsCsv(
+    projectId: string,
+    modelId: string | number,
+    modelType: string,
+    rows: import('@/types').PredictionRow[],
+  ): Promise<{ blob: Blob; filename?: string }> {
+    const payload = {
+      model_type: modelType,
+      rows: rows.map((r) => ({
+        row_index: r.rowIndex,
+        prediction: r.prediction,
+        score: r.score ?? null,
+        input_data: r.inputData,
+      })),
+    };
+    return apiClient.postJsonBlob(
+      `${base(projectId)}/models/${encodeURIComponent(String(modelId))}/predict/results/export`,
+      payload,
+    );
+  },
+
+  /**
    * Run inference and download results as a CSV file.
    * Returns a Blob that can be directly passed to URL.createObjectURL().
    */
@@ -197,6 +238,7 @@ function _mapPredictionResponse(raw: Record<string, unknown>): PredictionRespons
       prediction: row['prediction'] as string | number,
       score: row['score'] != null ? (row['score'] as number) : null,
       inputData: (row['input_data'] as Record<string, unknown>) ?? {},
+      shap: row['shap'] != null ? (row['shap'] as import('@/types').ShapLocalItem[]) : undefined,
     };
   });
 

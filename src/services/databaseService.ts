@@ -106,6 +106,8 @@ export type SampleOut = {
   rows: Record<string, any>[];
 };
 
+export type PearsonOut = { x: string; y: string; r: number | null; n: number };
+
 // -------------------------
 // NORMALITY TEST
 // -------------------------
@@ -135,6 +137,7 @@ type AggParams = {
 type VcParams  = { col: string; top_k?: number; dropna?: boolean };
 type HistParams = { col: string; bins?: number; dropna?: boolean };
 type SampleParams = { cols: string[]; n?: number };
+type PearsonParams = { x: string; y: string };
 
 function aggQs({ x, y, agg, top_k = 15, order = "desc", dropna = true }: AggParams): string {
   const q = new URLSearchParams({ x, agg, top_k: String(top_k), order, dropna: String(dropna) });
@@ -250,6 +253,13 @@ export const databaseService = {
     );
   },
 
+  async pearson(projectId: string | number, datasetId: number, params: PearsonParams) {
+    const q = new URLSearchParams({ x: params.x, y: params.y });
+    return typedGet<PearsonOut>(
+      `/projects/${projectId}/datasets/${datasetId}/charts/pearson?${q}`
+    );
+  },
+
   // -------------------------
   // Version analytics (mirrors dataset endpoints)
   // -------------------------
@@ -298,6 +308,13 @@ export const databaseService = {
     return typedPostJson<NormalityTestOut>(
       `/projects/${projectId}/versions/${versionId}/normality-test`,
       { columns }
+    );
+  },
+
+  async versionPearson(projectId: string | number, versionId: number, params: PearsonParams) {
+    const q = new URLSearchParams({ x: params.x, y: params.y });
+    return typedGet<PearsonOut>(
+      `/projects/${projectId}/versions/${versionId}/charts/pearson?${q}`
     );
   },
 };

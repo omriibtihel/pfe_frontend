@@ -394,6 +394,8 @@ export interface TrainingThresholdingInfo {
   val_recall_pos?: number;
   val_f1_pos?: number;
   applied_on_test?: boolean;
+  warnings?: string[];
+  note?: string;
   [key: string]: unknown;
 }
 
@@ -410,6 +412,89 @@ export interface ModelBalancingArtifact {
   [key: string]: unknown;
 }
 
+// Sprint 1/2 — probability calibration & confidence
+export interface CalibrationCurveData {
+  /** [[mean_predicted_prob, fraction_of_positives], ...] */
+  points: [number, number][];
+  brier_score: number;
+  n_bins: number;
+}
+
+export interface BootstrapCIEntry {
+  mean: number;
+  ci_low: number;
+  ci_high: number;
+  std: number;
+}
+
+export interface BootstrapCIResult {
+  ci_level: number;
+  n_bootstrap: number;
+  n_samples: number;
+  metrics: Partial<Record<string, BootstrapCIEntry>>;
+  warning?: string;
+}
+
+// Sprint 2 — learning curves
+export interface LearningCurveData {
+  train_sizes: number[];
+  train_mean: (number | null)[];
+  train_std: (number | null)[];
+  val_mean: (number | null)[];
+  val_std: (number | null)[];
+  scoring: string;
+  n_samples: number;
+}
+
+// Sprint 2 — SHAP global
+export interface ShapSummaryItem {
+  feature: string;
+  /** Mean absolute SHAP value — primary ranking criterion. */
+  mean_abs_shap: number;
+  /** Signed mean SHAP — positive = pushes prediction up, negative = down. */
+  mean_shap: number;
+}
+
+export interface ShapGlobalData {
+  summary: ShapSummaryItem[];
+  expected_value: number | null;
+  explainer_type: 'tree' | 'linear' | 'kernel';
+  n_samples: number;
+}
+
+// Sprint 3 — permutation importance
+export interface PermutationImportanceItem {
+  feature: string;
+  /** Mean importance (drop in score when feature is shuffled). */
+  mean: number;
+  /** Standard deviation across n_repeats shuffles. */
+  std: number;
+}
+
+// Sprint 3 — residual analysis (regression only)
+export interface ResidualStats {
+  mean: number;
+  std: number;
+  min: number;
+  max: number;
+  skewness: number;
+  /** Pearson correlation between predictions and residuals (ideal: ≈ 0). */
+  correlation_with_pred: number;
+}
+
+export interface ResidualHistogram {
+  bin_edges: number[];
+  counts: number[];
+}
+
+export interface ResidualAnalysisData {
+  stats: ResidualStats;
+  histogram: ResidualHistogram;
+  /** [[theoretical_z, residual], ...] for a Q-Q plot. */
+  qq_points: [number, number][];
+  n_samples: number;
+}
+
 export interface ModelResult {
   id: string;
   modelType: ModelType;
@@ -421,7 +506,8 @@ export interface ModelResult {
       | 'recall_pos'
       | 'f1_pos'
       | 'balanced_accuracy'
-      | 'specificity',
+      | 'specificity'
+      | 'brier_score',
       number
     >
   >;
@@ -455,11 +541,22 @@ export interface ModelResult {
   /** Final holdout test metrics (only present when hasHoldoutTest=true). */
   cvTestMetrics?: Record<string, number | null | unknown> | null;
   featureImportance: { feature: string; importance: number }[];
-  /** ROC and PR curve data for binary classification (downsampled). */
+  /** ROC, PR, and calibration curve data for binary classification. */
   curves?: {
-    roc?: [number, number][];   // [[fpr, tpr], ...]
-    pr?: [number, number][];    // [[recall, precision], ...]
+    roc?: [number, number][];         // [[fpr, tpr], ...]
+    pr?: [number, number][];          // [[recall, precision], ...]
+    calibration?: CalibrationCurveData | null;
   } | null;
+  /** Bootstrap confidence intervals computed on the test set (holdout mode). */
+  confidenceIntervals?: BootstrapCIResult | null;
+  /** Learning curves: training-size vs. cross-validated performance. */
+  learningCurves?: LearningCurveData | null;
+  /** Permutation feature importance (model-agnostic, test-set based). */
+  permutationImportance?: PermutationImportanceItem[] | null;
+  /** Residual analysis diagnostics (regression only). */
+  residualAnalysis?: ResidualAnalysisData | null;
+  /** Global SHAP feature importances (test-set based). */
+  shapGlobal?: ShapGlobalData | null;
   confusionMatrix?: number[][];
   metricsDetailed?: DetailedClassificationMetrics | null;
   metricsWarnings?: string[] | null;
