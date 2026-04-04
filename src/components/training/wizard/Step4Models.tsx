@@ -36,15 +36,16 @@ type ModelCardOption = {
 };
 
 const modelCatalog: Array<{ value: ModelType; label: string; desc: string; icon: ReactNode }> = [
-  { value: "randomforest",     label: "Random Forest",    desc: "Robuste, interpretable",          icon: <Brain className="h-4 w-4" /> },
+  { value: "randomforest",     label: "Random Forest",    desc: "Robuste, interprétable",               icon: <Brain className="h-4 w-4" /> },
   { value: "extratrees",       label: "Extra Trees",      desc: "Plus rapide que RF, moins de variance", icon: <Brain className="h-4 w-4" /> },
-  { value: "xgboost",          label: "XGBoost",          desc: "Haute performance",               icon: <Sparkles className="h-4 w-4" /> },
-  { value: "lightgbm",         label: "LightGBM",         desc: "Rapide, efficace",                icon: <Zap className="h-4 w-4" /> },
-  { value: "gradientboosting", label: "Gradient Boosting",desc: "Boosting sklearn natif",          icon: <BarChart3 className="h-4 w-4" /> },
-  { value: "svm",              label: "SVM",              desc: "Bon pour petits datasets",        icon: <Brain className="h-4 w-4" /> },
-  { value: "knn",              label: "KNN",              desc: "Simple, intuitif",                icon: <Brain className="h-4 w-4" /> },
-  { value: "decisiontree",     label: "Arbre de décision", desc: "Très interprétable",             icon: <Brain className="h-4 w-4" /> },
-  { value: "logisticregression", label: "Rég. Logistique", desc: "Classification linéaire",      icon: <BarChart3 className="h-4 w-4" /> },
+  { value: "xgboost",          label: "XGBoost",          desc: "Haute performance",                    icon: <Sparkles className="h-4 w-4" /> },
+  { value: "lightgbm",         label: "LightGBM",         desc: "Rapide, efficace",                     icon: <Zap className="h-4 w-4" /> },
+  { value: "catboost",         label: "CatBoost",         desc: "Excellent sur données tabulaires",     icon: <Sparkles className="h-4 w-4" /> },
+  { value: "gradientboosting", label: "Gradient Boosting",desc: "Boosting sklearn natif",               icon: <BarChart3 className="h-4 w-4" /> },
+  { value: "svm",              label: "SVM",              desc: "Bon pour petits datasets",             icon: <Brain className="h-4 w-4" /> },
+  { value: "knn",              label: "KNN",              desc: "Simple, intuitif",                     icon: <Brain className="h-4 w-4" /> },
+  { value: "decisiontree",     label: "Arbre de décision", desc: "Très interprétable",                  icon: <Brain className="h-4 w-4" /> },
+  { value: "logisticregression", label: "Rég. Logistique", desc: "Classification linéaire",            icon: <BarChart3 className="h-4 w-4" /> },
 ];
 
 const GRID_SCORING_OPTIONS: Array<{ value: GridScoringOption; label: string; desc: string }> = [
@@ -110,6 +111,18 @@ function parseFieldValue(rawInput: string, fieldSchema: TrainingHyperparamFieldS
   return parseScalarToken(text, fieldSchema);
 }
 
+/** Convert a grid_value to a string key usable in a Select / as chip id. */
+function gridValKey(v: number | string | null): string {
+  return v === null ? "__null__" : String(v);
+}
+
+/** Convert the string key back to the typed scalar. */
+function gridValFromKey(key: string, fieldSchema: TrainingHyperparamFieldSchema): ModelHyperparamScalar {
+  if (key === "__null__") return null;
+  return parseScalarToken(key, fieldSchema);
+}
+
+
 export function Step4Models({ projectId, config, onConfigChange }: Step4Props) {
   const [availableModels, setAvailableModels] = useState<ModelCardOption[]>(
     modelCatalog.map((m) => ({ ...m, installed: true }))
@@ -117,6 +130,18 @@ export function Step4Models({ projectId, config, onConfigChange }: Step4Props) {
   const [modelHpSchema, setModelHpSchema] = useState<Record<string, Record<string, TrainingHyperparamFieldSchema>>>({});
   const [hpModalModel, setHpModalModel] = useState<string | null>(null);
   const [cvFoldsError, setCvFoldsError] = useState<string | null>(null);
+
+  const isSearchActive = (config.searchType ?? "none") !== "none";
+  const isRandomOrHalvingMode = config.searchType === "random" || config.searchType === "halving_random";
+  const searchTypeLabel =
+    config.searchType === "grid" ? "GridSearch" :
+    config.searchType === "random" ? "Random Search" : "Successive Halving";
+  const hasAnyCustomHp = useMemo(
+    () => Object.values(config.modelHyperparams ?? {}).some((hp) => Object.keys(hp ?? {}).length > 0),
+    [config.modelHyperparams]
+  );
+  const hasConflict = hasAnyCustomHp && isSearchActive;
+  const clearAllCustomHp = () => onConfigChange({ modelHyperparams: {} });
 
   const scoringOptions = useMemo(
     () =>
@@ -308,15 +333,17 @@ export function Step4Models({ projectId, config, onConfigChange }: Step4Props) {
             <Badge variant="outline" className="uppercase text-[11px] font-semibold">
               {activeModel?.label ?? activeModelKey}
             </Badge>
-            {(config.searchType ?? "none") !== "none" && (
-              <Badge variant="secondary" className="text-[10px]">
-                Listes : séparées par virgules
+            {isSearchActive && (
+              <Badge variant="outline" className="text-[10px] border-amber-300 text-amber-600 dark:text-amber-400">
+                Lecture seule — mode {searchTypeLabel}
               </Badge>
             )}
           </span>
         }
         description={
-          activeModelSelected
+          isSearchActive
+            ? `En mode ${searchTypeLabel}, les HP sont explorés automatiquement par le backend. Repassez en mode Aucune pour fixer des valeurs.`
+            : activeModelSelected
             ? "Modifiez les hyperparamètres du modèle sélectionné."
             : "Modèle non sélectionné : les valeurs seront conservées mais ignorées tant que le modèle n'est pas coché."
         }
@@ -332,9 +359,12 @@ export function Step4Models({ projectId, config, onConfigChange }: Step4Props) {
               const displayValue = toDisplayText(rawModelValue, fieldSchema.default);
               const fieldType = String(fieldSchema.type ?? "").toLowerCase();
               const enumOptions = Array.isArray(fieldSchema.enum) ? fieldSchema.enum : [];
-              const isSearchActive = (config.searchType ?? "none") !== "none";
-              const isEnumSelect = !isSearchActive && fieldType === "enum";
-              const isEnumOrNullSelect = !isSearchActive && fieldType === "enum_or_null";
+              const gridValues = Array.isArray(fieldSchema.grid_values) ? fieldSchema.grid_values : [];
+              const hasGridValues = gridValues.length > 0;
+
+              // enum / enum_or_null always use a <Select> regardless of search mode
+              const isEnumSelect = fieldType === "enum";
+              const isEnumOrNullSelect = fieldType === "enum_or_null";
 
               const enumOrNullValue =
                 rawModelValue === null || rawModelValue === undefined
@@ -344,6 +374,16 @@ export function Step4Models({ projectId, config, onConfigChange }: Step4Props) {
               const handleEnumOrNull = (next: string) => {
                 setModelField(activeModelKey, fieldName, next === "null" ? null : next);
               };
+
+              // Single-value select helpers (fixed mode + numeric/float field with grid_values)
+              const singleSelectValue = (() => {
+                if (rawModelValue === undefined || rawModelValue === null) {
+                  return gridValKey(fieldSchema.default as number | string | null);
+                }
+                return Array.isArray(rawModelValue)
+                  ? gridValKey(rawModelValue[0] as number | string | null)
+                  : gridValKey(rawModelValue as number | string | null);
+              })();
 
               return (
                 <div key={`${activeModelKey}-${fieldName}`} className="space-y-1">
@@ -355,6 +395,7 @@ export function Step4Models({ projectId, config, onConfigChange }: Step4Props) {
                   </div>
 
                   {isEnumSelect ? (
+                    // ── Enum dropdown (always single select) ────────────────
                     <Select
                       value={String((rawModelValue as ModelHyperparamScalar) ?? fieldSchema.default ?? "")}
                       onValueChange={(next) => setModelField(activeModelKey, fieldName, next)}
@@ -371,6 +412,7 @@ export function Step4Models({ projectId, config, onConfigChange }: Step4Props) {
                       </SelectContent>
                     </Select>
                   ) : isEnumOrNullSelect ? (
+                    // ── Enum-or-null dropdown ────────────────────────────────
                     <Select value={enumOrNullValue} onValueChange={handleEnumOrNull}>
                       <SelectTrigger className="h-8 text-xs">
                         <SelectValue placeholder="Choisir..." />
@@ -389,23 +431,79 @@ export function Step4Models({ projectId, config, onConfigChange }: Step4Props) {
                         ))}
                       </SelectContent>
                     </Select>
+                  ) : hasGridValues && !isSearchActive ? (
+                    // ── Numeric field — fixed mode → single-value Select ─────
+                    <Select
+                      value={singleSelectValue}
+                      onValueChange={(key) =>
+                        setModelField(activeModelKey, fieldName, gridValFromKey(key, fieldSchema))
+                      }
+                    >
+                      <SelectTrigger className="h-8 text-xs">
+                        <SelectValue placeholder="Choisir..." />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {gridValues.map((gv) => {
+                          const key = gridValKey(gv);
+                          const label = gv === null ? "null — illimité" : String(gv);
+                          const isDefault =
+                            gv === fieldSchema.default ||
+                            (gv === null && fieldSchema.default === null);
+                          return (
+                            <SelectItem key={key} value={key}>
+                              {label}
+                              {isDefault && (
+                                <span className="ml-1.5 text-[10px] text-muted-foreground">(défaut)</span>
+                              )}
+                            </SelectItem>
+                          );
+                        })}
+                      </SelectContent>
+                    </Select>
+                  ) : hasGridValues && isSearchActive ? (
+                    // ── Numeric field — tout mode search → lecture seule ─────
+                    <div className="space-y-1.5">
+                      <div className="flex flex-wrap gap-1.5">
+                        {gridValues.map((gv) => {
+                          const key = gridValKey(gv);
+                          const label = gv === null ? "∞" : String(gv);
+                          return (
+                            <span
+                              key={key}
+                              className="px-2 py-0.5 rounded border text-xs font-mono bg-muted/40 text-muted-foreground border-border/50 cursor-default select-none"
+                            >
+                              {label}
+                            </span>
+                          );
+                        })}
+                      </div>
+                      <p className="text-[10px] text-muted-foreground italic">
+                        {config.searchType === "grid"
+                          ? "Grille du backend — non modifiable en mode GridSearch"
+                          : `Distribution continue — non modifiable en mode ${config.searchType === "halving_random" ? "Successive Halving" : "Random Search"}`}
+                      </p>
+                    </div>
                   ) : (
+                    // ── Fallback: Input (champ sans grid_values) ─────────────
                     <Input
                       type={fieldType === "int" || fieldType === "float" ? "number" : "text"}
                       value={displayValue}
+                      disabled={isSearchActive}
                       onChange={(e) =>
-                        setModelField(
+                        !isSearchActive && setModelField(
                           activeModelKey,
                           fieldName,
-                          parseFieldValue(e.target.value, fieldSchema, isSearchActive)
+                          parseFieldValue(e.target.value, fieldSchema, false),
                         )
                       }
-                      className="h-8 text-xs"
-                      placeholder={isSearchActive ? "ex: 100, 200" : `ex: ${String(fieldSchema.default ?? "")}`}
+                      className={cn("h-8 text-xs", isSearchActive && "opacity-50 cursor-not-allowed")}
+                      placeholder={`ex: ${String(fieldSchema.default ?? "")}`}
                     />
                   )}
 
-                  {!!fieldSchema.help && <p className="text-[11px] text-muted-foreground">{fieldSchema.help}</p>}
+                  {!!fieldSchema.help && (
+                    <p className="text-[11px] text-muted-foreground">{fieldSchema.help}</p>
+                  )}
                 </div>
               );
             })}
@@ -453,9 +551,47 @@ export function Step4Models({ projectId, config, onConfigChange }: Step4Props) {
                     <span>RandomizedSearch</span>
                     <span className="ml-2 text-[10px] text-muted-foreground">Espace continu, plus efficace</span>
                   </SelectItem>
+                  <SelectItem value="halving_random">
+                    <span>Successive Halving</span>
+                    <span className="ml-2 text-[10px] text-muted-foreground">3–10× plus rapide, explore plus</span>
+                  </SelectItem>
                 </SelectContent>
               </Select>
             </div>
+
+            {hasConflict && (
+              <div className="rounded-lg border border-amber-300/60 bg-amber-50/60 dark:bg-amber-950/20 p-3">
+                <div className="flex items-start gap-2 text-amber-800 dark:text-amber-400">
+                  <AlertTriangle className="h-3.5 w-3.5 shrink-0 mt-0.5" />
+                  <div className="space-y-1.5">
+                    <p className="text-xs font-semibold">Configuration HP personnalisée ignorée</p>
+                    <p className="text-[11px] text-amber-700 dark:text-amber-500">
+                      Le mode <strong>{searchTypeLabel}</strong> utilise {isRandomOrHalvingMode ? "des distributions continues définies par le backend" : "la grille du backend"} — vos réglages HP personnalisés ne seront pas appliqués. Choisissez l'une des deux options :
+                    </p>
+                    <div className="flex flex-wrap gap-2 pt-0.5">
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        className="h-6 text-[11px] border-amber-400/60 text-amber-800 hover:bg-amber-100/80 dark:text-amber-400 dark:hover:bg-amber-900/30"
+                        onClick={clearAllCustomHp}
+                      >
+                        Effacer la config HP et rester en mode {searchTypeLabel}
+                      </Button>
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        className="h-6 text-[11px] border-amber-400/60 text-amber-800 hover:bg-amber-100/80 dark:text-amber-400 dark:hover:bg-amber-900/30"
+                        onClick={() => onConfigChange({ searchType: "none", useGridSearch: false })}
+                      >
+                        Revenir au mode Aucune (garder mes valeurs fixes)
+                      </Button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
 
             <AnimatePresence initial={false}>
               {(config.searchType ?? "none") !== "none" && (
@@ -468,9 +604,11 @@ export function Step4Models({ projectId, config, onConfigChange }: Step4Props) {
                   className="overflow-hidden"
                 >
                   <div className="space-y-4 pt-2 border-t border-border/40">
-                    {config.searchType === "random" && (
+                    {(config.searchType === "random" || config.searchType === "halving_random") && (
                       <div className="space-y-1">
-                        <Label htmlFor="n-iter" className="text-xs text-muted-foreground">Nombre d'itérations</Label>
+                        <Label htmlFor="n-iter" className="text-xs text-muted-foreground">
+                          {config.searchType === "halving_random" ? "Candidats initiaux" : "Nombre d'itérations"}
+                        </Label>
                         <Input
                           id="n-iter"
                           type="number"
@@ -485,7 +623,11 @@ export function Step4Models({ projectId, config, onConfigChange }: Step4Props) {
                           }}
                           className="w-24 h-8 text-xs"
                         />
-                        <p className="text-[11px] text-muted-foreground">Entre 5 et 300 (défaut : 40)</p>
+                        <p className="text-[11px] text-muted-foreground">
+                          {config.searchType === "halving_random"
+                            ? "Candidats de départ — éliminés par tiers à chaque round (défaut : 60)"
+                            : "Entre 5 et 300 (défaut : 40)"}
+                        </p>
                       </div>
                     )}
 
@@ -533,6 +675,8 @@ export function Step4Models({ projectId, config, onConfigChange }: Step4Props) {
                         <span>
                           {config.searchType === "random"
                             ? `RandomizedSearch avec ${config.models.length} modèles × ${config.nIterRandomSearch ?? 40} itérations`
+                            : config.searchType === "halving_random"
+                            ? `Successive Halving avec ${config.models.length} modèles (${config.nIterRandomSearch ?? 60} candidats initiaux)`
                             : `GridSearch avec ${config.models.length} modèles × ${config.gridCvFolds} plis`}{" "}
                           peut significativement allonger le temps d'entraînement.
                         </span>

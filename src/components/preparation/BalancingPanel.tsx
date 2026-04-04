@@ -57,8 +57,9 @@ const fallbackBalancingStrategies: Array<{ id: TrainingBalancingStrategy; label:
 ];
 
 const thresholdStrategyOptions: Array<{ id: TrainingThresholdStrategy; label: string }> = [
+  { id: "youden", label: "Index de Youden — standard médical (sensibilité + spécificité - 1)" },
   { id: "maximize_f1", label: "Maximiser F1" },
-  { id: "maximize_f2", label: "Maximiser F2 (rappel)" },
+  { id: "maximize_f2", label: "Maximiser F2 (rappel prioritaire)" },
   { id: "min_recall", label: "Rappel minimum garanti" },
   { id: "precision_recall_balance", label: "Équilibre précision/rappel" },
 ];

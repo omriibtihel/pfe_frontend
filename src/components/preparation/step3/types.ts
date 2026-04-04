@@ -2,6 +2,7 @@ import type {
   DatasetColumn,
   TrainingColumnType,
   TrainingColumnTypeSelection,
+  TrainingPreprocessingAdvancedParams,
   TrainingPreprocessingColumnConfig,
   TrainingPreprocessingDefaults,
 } from "@/types";
@@ -31,6 +32,12 @@ export type Step3ColumnRowData = {
   categoricalEncoding: TrainingPreprocessingDefaults["categoricalEncoding"];
   ordinalOrder: string[];
   hasExplicitCategoricalConfig: boolean;
+  /** Per-column advanced param overrides (undefined = uses global default) */
+  knnNeighbors: number | undefined;
+  constantFillNumeric: number | undefined;
+  constantFillCategorical: string | undefined;
+  /** Global advanced params for placeholder / fallback display */
+  globalAdvancedParams: TrainingPreprocessingAdvancedParams;
   issues: Step3Issue[];
   errorCount: number;
   warningCount: number;

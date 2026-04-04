@@ -1,4 +1,4 @@
-import { Grid3X3, Shuffle, Sparkles } from 'lucide-react';
+import { Grid3X3, Shuffle, Sparkles, Zap } from 'lucide-react';
 
 import { Badge } from '@/components/ui/badge';
 import type { ModelResult } from '@/types';
@@ -18,16 +18,28 @@ export function GridSearchResultsPanel({
   const bestScore = gridSearch.cvBestScore;
   const scoring = gridSearch.cvScoring;
   const nSplits = gridSearch.cvSplits;
-  const isRandom = gridSearch.searchType === 'random';
+  const { searchType = null } = gridSearch;
+  const isHalving = searchType === 'halving_random';
+  const isRandom = searchType === 'random' || isHalving;
   const nCandidates = gridSearch.nCandidates;
 
   const combinationCount = !isRandom && paramGrid
     ? Object.values(paramGrid).reduce<number>((acc, v) => acc * (Array.isArray(v) ? v.length : 1), 1)
     : 0;
 
-  const regionLabel = isRandom ? 'Résultats RandomizedSearch' : 'Résultats GridSearch';
-  const title = isRandom ? 'Optimisation RandomizedSearch CV' : 'Optimisation GridSearch CV';
-  const badge = isRandom ? 'RS' : 'GS';
+  const regionLabel = isHalving
+    ? 'Résultats Successive Halving'
+    : isRandom
+      ? 'Résultats RandomizedSearch'
+      : 'Résultats GridSearch';
+
+  const title = isHalving
+    ? 'Optimisation Successive Halving CV'
+    : isRandom
+      ? 'Optimisation RandomizedSearch CV'
+      : 'Optimisation GridSearch CV';
+
+  const badge = isHalving ? 'SH' : isRandom ? 'RS' : 'GS';
 
   return (
     <div
@@ -36,9 +48,11 @@ export function GridSearchResultsPanel({
       aria-label={regionLabel}
     >
       <div className="flex items-center gap-2 flex-wrap">
-        {isRandom
-          ? <Shuffle className="h-4 w-4 text-primary" aria-hidden="true" />
-          : <Grid3X3 className="h-4 w-4 text-primary" aria-hidden="true" />
+        {isHalving
+          ? <Zap className="h-4 w-4 text-primary" aria-hidden="true" />
+          : isRandom
+            ? <Shuffle className="h-4 w-4 text-primary" aria-hidden="true" />
+            : <Grid3X3 className="h-4 w-4 text-primary" aria-hidden="true" />
         }
         <span className="text-sm font-medium">{title}</span>
         <Badge variant="secondary" className="text-xs">
@@ -51,7 +65,7 @@ export function GridSearchResultsPanel({
         )}
         {isRandom && nCandidates != null && (
           <Badge variant="outline" className="text-xs">
-            {nCandidates} itérations
+            {isHalving ? `${nCandidates} candidats évalués` : `${nCandidates} itérations`}
           </Badge>
         )}
       </div>
@@ -105,6 +119,19 @@ export function GridSearchResultsPanel({
                 <span className="w-14 shrink-0 text-xs font-semibold text-primary">
                   {fmtMetric(candidate.mean_score)}
                 </span>
+                {candidate.overfit_gap != null && (
+                  <span
+                    className={`w-12 shrink-0 text-[10px] tabular-nums ${candidate.overfit_gap > 0.1 ? 'text-amber-600 dark:text-amber-400' : 'text-muted-foreground'}`}
+                    title="Écart train/val — valeur élevée = surapprentissage"
+                  >
+                    Δ{candidate.overfit_gap > 0 ? '+' : ''}{fmtMetric(candidate.overfit_gap)}
+                  </span>
+                )}
+                {isHalving && candidate.halving_iter != null && (
+                  <span className="w-8 shrink-0 text-[10px] text-muted-foreground" title="Round halving">
+                    R{candidate.halving_iter}
+                  </span>
+                )}
                 <span className="truncate font-mono text-[10px] text-muted-foreground">
                   {Object.entries(candidate.params)
                     .map(([k, v]) => `${k}=${v}`)

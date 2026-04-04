@@ -26,6 +26,10 @@ import VersionsPage from "@/pages/project/VersionsPage";
 import PreparationPage from "@/pages/project/PreparationPage";
 import TrainingPage from "@/pages/project/TrainingPage";
 import TrainingResultsPage from "@/pages/project/TrainingResultsPage";
+import ImagingImportPage from "@/pages/project/ImagingImportPage";
+import ImagingTrainingPage from "@/pages/project/ImagingTrainingPage";
+import ImagingPredictionPage from "@/pages/project/ImagingPredictionPage";
+import { ImagingResultsOverview } from "@/components/imaging/results/ImagingResultsOverview";
 import PredictionPage from "@/pages/project/PredictionPage";
 import PredictionResultsPage from "@/pages/project/PredictionResultsPage";
 
@@ -66,6 +70,10 @@ const App = () => (
             <Route path="/projects/:id/training" element={<ProtectedRoute><TrainingPage /></ProtectedRoute>} />
             <Route path="/projects/:projectId/versions/:versionId/training" element={<ProtectedRoute><TrainingPage /></ProtectedRoute>} />
             <Route path="/projects/:projectId/versions/:versionId/training/results" element={<ProtectedRoute><TrainingResultsPage /></ProtectedRoute>} />
+            <Route path="/projects/:id/imaging/import" element={<ProtectedRoute><ImagingImportPage /></ProtectedRoute>} />
+            <Route path="/projects/:id/imaging/training" element={<ProtectedRoute><ImagingTrainingPage /></ProtectedRoute>} />
+            <Route path="/projects/:id/imaging/results/:sessionId" element={<ProtectedRoute><ImagingResultsOverview /></ProtectedRoute>} />
+            <Route path="/projects/:id/imaging/predict" element={<ProtectedRoute><ImagingPredictionPage /></ProtectedRoute>} />
             <Route path="/projects/:id/predict" element={<ProtectedRoute><PredictionPage /></ProtectedRoute>} />
             <Route path="/projects/:id/predict/results" element={<ProtectedRoute><PredictionResultsPage /></ProtectedRoute>} />
 

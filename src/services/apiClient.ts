@@ -65,6 +65,8 @@ export type RequestOptions = {
    * Example: const controller = new AbortController(); apiClient.get(url, { signal: controller.signal })
    */
   signal?: AbortSignal;
+  /** Override the default 30s timeout for this request (ms). */
+  timeout?: number;
 };
 
 class ApiClient {
@@ -104,7 +106,10 @@ class ApiClient {
   }
 
   private cfg(opts?: RequestOptions): AxiosRequestConfig {
-    return opts?.signal ? { signal: opts.signal } : {};
+    const cfg: AxiosRequestConfig = {};
+    if (opts?.signal) cfg.signal = opts.signal;
+    if (opts?.timeout != null) cfg.timeout = opts.timeout;
+    return cfg;
   }
 
   async get<T>(url: string, opts?: RequestOptions): Promise<T> {

@@ -26,7 +26,7 @@ import type {
   TrainingValidationPreviewMode,
   TrainingValidationPreviewSubset,
 } from "@/types";
-import { DEFAULT_TRAINING_PREPROCESSING } from "@/types";
+import { DEFAULT_ADVANCED_PARAMS, DEFAULT_TRAINING_PREPROCESSING } from "@/types";
 import {
   createEmptyIssueBuckets,
   toServerIssueBuckets,
@@ -191,6 +191,8 @@ export function Step3ColumnPreprocessing({
     [capabilities]
   );
 
+  const globalAdvancedParams = preprocessing.advancedParams ?? DEFAULT_ADVANCED_PARAMS;
+
   const baseRows = useMemo<BaseRow[]>(
     () =>
       featureColumns.map((column) => {
@@ -213,9 +215,14 @@ export function Step3ColumnPreprocessing({
           ordinalOrder: Array.isArray(cfg.ordinalOrder) ? cfg.ordinalOrder : [],
           hasExplicitCategoricalConfig:
             typeof cfg.categoricalEncoding === "string" || typeof cfg.categoricalImputation === "string",
+          knnNeighbors: cfg.knnNeighbors,
+          constantFillNumeric: cfg.constantFillNumeric,
+          constantFillCategorical: cfg.constantFillCategorical,
+          globalAdvancedParams,
         };
       }),
-    [featureColumns, preprocessing.columns, preprocessing.defaults]
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [featureColumns, preprocessing.columns, preprocessing.defaults, globalAdvancedParams]
   );
 
   const localIssues = useMemo(() => validateLocal(toValidationRows(baseRows), capabilities), [baseRows, capabilities]);
@@ -355,6 +362,9 @@ export function Step3ColumnPreprocessing({
     key: K,
     value: TrainingPreprocessingDefaults[K]
   ) => setPreprocessing({ ...preprocessing, defaults: { ...preprocessing.defaults, [key]: value } });
+
+  const setAdvancedParams = (params: import('@/types').TrainingPreprocessingAdvancedParams) =>
+    setPreprocessing({ ...preprocessing, advancedParams: params });
 
   const updateColumnConfig = (
     columnName: string,
@@ -499,6 +509,7 @@ export function Step3ColumnPreprocessing({
         preprocessing={preprocessing}
         options={options}
         onSetDefault={setDefaultValue}
+        onSetAdvancedParams={setAdvancedParams}
       />
 
       <div className="grid grid-cols-1 xl:grid-cols-12 gap-4 items-start">
@@ -533,10 +544,12 @@ export function Step3ColumnPreprocessing({
                 <div className="flex items-start gap-2">
                   <Info className="h-4 w-4 mt-0.5" />
                   <div>
-                    <p className="font-medium text-foreground mb-1">Rappel</p>
+                    <p className="font-medium text-foreground mb-1">Comment ça marche</p>
                     <p>
-                      Aucun preprocessing n'est applique par defaut. Les defaults servent uniquement de templates
-                      reutilisables colonne par colonne.
+                      Les <strong>Defaults</strong> définissent les méthodes appliquées à toutes les colonnes
+                      qui n'ont pas de config individuelle. Si une colonne a sa propre config, elle prend
+                      la priorité. Les paramètres avancés (k KNN, fill_value, VarianceThreshold) sont
+                      visibles et configurables — rien n'est appliqué silencieusement.
                     </p>
                   </div>
                 </div>
@@ -706,6 +719,30 @@ export function Step3ColumnPreprocessing({
                               const next = new Set(prev);
                               if (next.has(row.columnName)) next.delete(row.columnName);
                               else next.add(row.columnName);
+                              return next;
+                            })
+                          }
+                          onKnnNeighborsChange={(v) =>
+                            updateColumnConfig(row.columnName, (c) => {
+                              const next = { ...c };
+                              if (v === undefined) delete next.knnNeighbors;
+                              else next.knnNeighbors = v;
+                              return next;
+                            })
+                          }
+                          onConstantFillNumericChange={(v) =>
+                            updateColumnConfig(row.columnName, (c) => {
+                              const next = { ...c };
+                              if (v === undefined) delete next.constantFillNumeric;
+                              else next.constantFillNumeric = v;
+                              return next;
+                            })
+                          }
+                          onConstantFillCategoricalChange={(v) =>
+                            updateColumnConfig(row.columnName, (c) => {
+                              const next = { ...c };
+                              if (v === undefined) delete next.constantFillCategorical;
+                              else next.constantFillCategorical = v;
                               return next;
                             })
                           }

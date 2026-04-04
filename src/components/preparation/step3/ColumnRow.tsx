@@ -25,18 +25,15 @@ interface ColumnRowProps {
   onToggleSelected: (checked: boolean) => void;
   onToggleUse: (checked: boolean) => void;
   onTypeChange: (value: TrainingColumnTypeSelection) => void;
-  onNumericImputationChange: (
-    value: TrainingPreprocessingDefaults["numericImputation"]
-  ) => void;
-  onCategoricalImputationChange: (
-    value: TrainingPreprocessingDefaults["categoricalImputation"]
-  ) => void;
+  onNumericImputationChange: (value: TrainingPreprocessingDefaults["numericImputation"]) => void;
+  onCategoricalImputationChange: (value: TrainingPreprocessingDefaults["categoricalImputation"]) => void;
   onNumericScalingChange: (value: TrainingPreprocessingDefaults["numericScaling"]) => void;
-  onCategoricalEncodingChange: (
-    value: TrainingPreprocessingDefaults["categoricalEncoding"]
-  ) => void;
+  onCategoricalEncodingChange: (value: TrainingPreprocessingDefaults["categoricalEncoding"]) => void;
   onOrdinalOrderChange: (rawInput: string) => void;
   onToggleExpanded: () => void;
+  onKnnNeighborsChange: (v: number | undefined) => void;
+  onConstantFillNumericChange: (v: number | undefined) => void;
+  onConstantFillCategoricalChange: (v: string | undefined) => void;
 }
 
 function getStatusMeta(row: Step3ColumnRowData): {
@@ -87,9 +84,13 @@ export function ColumnRow({
   onCategoricalEncodingChange,
   onOrdinalOrderChange,
   onToggleExpanded,
+  onKnnNeighborsChange,
+  onConstantFillNumericChange,
+  onConstantFillCategoricalChange,
 }: ColumnRowProps) {
   const statusMeta = getStatusMeta(row);
   const hasIssues = row.issues.length > 0;
+  const { globalAdvancedParams } = row;
 
   return (
     <Fragment>
@@ -196,43 +197,101 @@ export function ColumnRow({
           </Select>
         </TableCell>
 
+        {/* ── Imputation cell ──────────────────────────────────────────── */}
         <TableCell className="w-48">
           {row.effectiveType === "numeric" ? (
-            <Select
-              value={row.numericImputation}
-              onValueChange={(value) =>
-                onNumericImputationChange(value as TrainingPreprocessingDefaults["numericImputation"])
-              }
-            >
-              <SelectTrigger className="h-9">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {options.numericImputation.map((method) => (
-                  <SelectItem key={method} value={method}>
-                    {labelForMethod(method)}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <div className="space-y-1">
+              <Select
+                value={row.numericImputation}
+                onValueChange={(value) =>
+                  onNumericImputationChange(value as TrainingPreprocessingDefaults["numericImputation"])
+                }
+              >
+                <SelectTrigger className="h-9">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {options.numericImputation.map((method) => (
+                    <SelectItem key={method} value={method}>
+                      {labelForMethod(method)}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+
+              {/* knn: show k input */}
+              {row.numericImputation === "knn" && (
+                <div className="flex items-center gap-1">
+                  <span className="text-[10px] text-muted-foreground shrink-0">k =</span>
+                  <Input
+                    type="number"
+                    min={1}
+                    max={50}
+                    className="h-7 text-xs"
+                    placeholder={String(globalAdvancedParams.knnNeighbors)}
+                    value={row.knnNeighbors ?? ""}
+                    onChange={(e) => {
+                      const v = parseInt(e.target.value);
+                      onKnnNeighborsChange(isNaN(v) ? undefined : Math.max(1, Math.min(50, v)));
+                    }}
+                  />
+                </div>
+              )}
+
+              {/* constant: show fill_value input */}
+              {row.numericImputation === "constant" && (
+                <div className="flex items-center gap-1">
+                  <span className="text-[10px] text-muted-foreground shrink-0">fill =</span>
+                  <Input
+                    type="number"
+                    step="any"
+                    className="h-7 text-xs"
+                    placeholder={String(globalAdvancedParams.constantFillNumeric)}
+                    value={row.constantFillNumeric ?? ""}
+                    onChange={(e) => {
+                      const v = parseFloat(e.target.value);
+                      onConstantFillNumericChange(isNaN(v) ? undefined : v);
+                    }}
+                  />
+                </div>
+              )}
+            </div>
           ) : (
-            <Select
-              value={row.categoricalImputation}
-              onValueChange={(value) =>
-                onCategoricalImputationChange(value as TrainingPreprocessingDefaults["categoricalImputation"])
-              }
-            >
-              <SelectTrigger className="h-9">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {options.categoricalImputation.map((method) => (
-                  <SelectItem key={method} value={method}>
-                    {labelForMethod(method)}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <div className="space-y-1">
+              <Select
+                value={row.categoricalImputation}
+                onValueChange={(value) =>
+                  onCategoricalImputationChange(value as TrainingPreprocessingDefaults["categoricalImputation"])
+                }
+              >
+                <SelectTrigger className="h-9">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {options.categoricalImputation.map((method) => (
+                    <SelectItem key={method} value={method}>
+                      {labelForMethod(method)}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+
+              {/* constant: show fill_value input */}
+              {row.categoricalImputation === "constant" && (
+                <div className="flex items-center gap-1">
+                  <span className="text-[10px] text-muted-foreground shrink-0">fill =</span>
+                  <Input
+                    className="h-7 text-xs"
+                    placeholder={globalAdvancedParams.constantFillCategorical}
+                    value={row.constantFillCategorical ?? ""}
+                    onChange={(e) => {
+                      const v = e.target.value;
+                      onConstantFillCategoricalChange(v === "" ? undefined : v);
+                    }}
+                  />
+                </div>
+              )}
+            </div>
           )}
         </TableCell>
 

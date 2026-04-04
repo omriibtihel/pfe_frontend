@@ -12,6 +12,8 @@ import {
   Search,
   Sparkles,
   Trash2,
+  ImageIcon,
+  Database,
 } from "lucide-react";
 
 import { useAuth } from "@/contexts/AuthContext";
@@ -82,14 +84,18 @@ export function DashboardPage() {
     []
   );
 
-  const openProject = async (projectId: string) => {
-    setOpenLoadingId(projectId);
+  const openProject = async (project: Project) => {
+    setOpenLoadingId(project.id);
     try {
-      const datasets = await datasetService.list(projectId);
+      if (project.projectType === "imaging") {
+        navigate(`/projects/${project.id}/imaging/import`);
+        return;
+      }
+      const datasets = await datasetService.list(project.id);
       if (datasets.length > 0) {
-        navigate(`/projects/${projectId}/database`);
+        navigate(`/projects/${project.id}/database`);
       } else {
-        navigate(`/projects/${projectId}/import`);
+        navigate(`/projects/${project.id}/import`);
       }
     } catch (error) {
       toast({
@@ -300,7 +306,13 @@ export function DashboardPage() {
                 <Card className="ai-surface group h-full overflow-hidden border-border/60 bg-card/80">
                   <CardHeader className="pb-4">
                     <div className="flex items-start justify-between gap-3">
-                      <CardTitle className="line-clamp-2 text-lg">{project.name}</CardTitle>
+                      <div className="flex items-center gap-2 min-w-0">
+                        {project.projectType === "imaging"
+                          ? <ImageIcon className="h-4 w-4 flex-shrink-0 text-primary" />
+                          : <Database className="h-4 w-4 flex-shrink-0 text-muted-foreground" />
+                        }
+                        <CardTitle className="line-clamp-2 text-lg">{project.name}</CardTitle>
+                      </div>
                       <div className="flex flex-col items-end gap-1">
                         {project.id === lastUpdated?.id && (
                           <Badge variant="outline" className="border-accent/50 text-accent text-[10px]">
@@ -343,7 +355,7 @@ export function DashboardPage() {
                     <div className="flex gap-2">
                       <Button
                         className="flex-1"
-                        onClick={() => openProject(project.id)}
+                        onClick={() => openProject(project)}
                         disabled={openLoadingId === project.id}
                       >
                         {openLoadingId === project.id ? "Ouverture..." : "Ouvrir"}

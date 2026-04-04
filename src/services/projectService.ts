@@ -19,6 +19,7 @@ type BackendProject = {
   name: string;
   description?: string | null;
   owner_id: number;
+  project_type?: string;
   created_at?: string;
   updated_at?: string;
 };
@@ -28,13 +29,11 @@ function mapProject(p: BackendProject): Project {
     id: String(p.id),
     name: p.name,
     description: p.description ?? "",
-    // ton front utilise "userId" => owner_id
     userId: String(p.owner_id),
-    // champs du front
-    status: "active", // ton backend ne gère pas encore status -> valeur par défaut
+    status: "active",
+    projectType: (p.project_type === "imaging" ? "imaging" : "tabular") as 'tabular' | 'imaging',
     createdAt: p.created_at ?? "",
     updatedAt: p.updated_at ?? "",
-    // champs optionnels côté front (peuvent rester undefined)
     datasetName: undefined,
     targetColumn: undefined,
     accuracy: undefined,
@@ -85,11 +84,13 @@ export const projectService = {
   async createProject(data: {
     name: string;
     description?: string;
-    userId?: string; // ignoré: backend utilise current_user
+    projectType?: 'tabular' | 'imaging';
+    userId?: string;
   }): Promise<Project> {
     const payload = {
       name: data.name,
       description: data.description ?? "",
+      project_type: data.projectType ?? "tabular",
     };
 
     const created = await apiClient.postJson<BackendProject>("/projects", payload);

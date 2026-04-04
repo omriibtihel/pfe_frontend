@@ -3,6 +3,7 @@ export type ModelType =
   | 'automl'
   | 'lightgbm'
   | 'xgboost'
+  | 'catboost'
   | 'randomforest'
   | 'extratrees'
   | 'gradientboosting'
@@ -60,10 +61,11 @@ export type TrainingThresholdStrategy =
   | 'maximize_f1'
   | 'maximize_f2'
   | 'min_recall'
-  | 'precision_recall_balance';
+  | 'precision_recall_balance'
+  | 'youden';
 export type TrainingImbalanceLevel = 'balanced' | 'mild' | 'moderate' | 'severe' | 'critical';
 export type GridScoringOption = 'auto' | 'roc_auc' | 'average_precision' | 'f1_weighted' | 'r2';
-export type SearchType = 'none' | 'grid' | 'random';
+export type SearchType = 'none' | 'grid' | 'random' | 'halving_random';
 export type TrainingDatasetScale = 'tiny' | 'small' | 'medium' | 'large';
 
 export interface TrainingPreprocessingDefaults {
@@ -81,11 +83,36 @@ export interface TrainingPreprocessingColumnConfig {
   categoricalImputation?: CategoricalImputationStrategy;
   categoricalEncoding?: CategoricalEncodingStrategy;
   ordinalOrder?: string[];
+  /** Per-column override: k for KNNImputer (overrides global knnNeighbors) */
+  knnNeighbors?: number;
+  /** Per-column override: fill_value for numeric constant imputation */
+  constantFillNumeric?: number;
+  /** Per-column override: fill_value for categorical constant imputation */
+  constantFillCategorical?: string;
 }
+
+export interface TrainingPreprocessingAdvancedParams {
+  /** k for KNNImputer — default 5 */
+  knnNeighbors: number;
+  /** fill_value for numeric constant imputation — default 0 */
+  constantFillNumeric: number;
+  /** fill_value for categorical constant imputation — default "__missing__" */
+  constantFillCategorical: string;
+  /** VarianceThreshold threshold — default 0.01 (features with variance < this are dropped) */
+  varianceThreshold: number;
+}
+
+export const DEFAULT_ADVANCED_PARAMS: TrainingPreprocessingAdvancedParams = {
+  knnNeighbors: 5,
+  constantFillNumeric: 0,
+  constantFillCategorical: '__missing__',
+  varianceThreshold: 0.01,
+};
 
 export interface TrainingPreprocessingConfig {
   defaults: TrainingPreprocessingDefaults;
   columns: Record<string, TrainingPreprocessingColumnConfig>;
+  advancedParams?: TrainingPreprocessingAdvancedParams;
 }
 
 export interface TrainingBalancingConfig {
@@ -142,6 +169,8 @@ export interface TrainingHyperparamFieldSchema {
   lt?: number;
   le?: number;
   enum?: string[];
+  /** Preset values from the parameter grid — rendered as a Select (fixed mode) or toggleable chips (search mode). */
+  grid_values?: (number | string | null)[];
   /** Task types for which this field is applicable (e.g. ['classification']). */
   supported_in?: string[];
   help?: string;
@@ -507,7 +536,9 @@ export interface ModelResult {
       | 'f1_pos'
       | 'balanced_accuracy'
       | 'specificity'
-      | 'brier_score',
+      | 'brier_score'
+      | 'npv'
+      | 'mcc',
       number
     >
   >;
@@ -517,16 +548,26 @@ export interface ModelResult {
   splitInfo?: ModelSplitInfo | null;
   gridSearch?: {
     enabled?: boolean;
-    /** "grid" pour GridSearchCV, "random" pour RandomizedSearchCV. */
-    searchType?: 'grid' | 'random' | null;
+    /** "grid" | "random" | "halving_random" */
+    searchType?: 'grid' | 'random' | 'halving_random' | null;
     cvBestScore?: number | null;
     cvScoring?: string | null;
     bestParams?: Record<string, unknown> | null;
     cvSplits?: number | null;
-    /** Nombre de combinaisons testées (grid) ou d'itérations (random). */
+    /** Nombre de combinaisons testées (grid), itérations (random), ou candidats totaux (halving). */
     nCandidates?: number | null;
-    /** Top N candidats testés avec leur score CV (optionnel, produit par le backend). */
-    cvResultsSummary?: Array<{ params: Record<string, unknown>; mean_score: number }> | null;
+    /** Top N candidats testés avec leur score CV. Champs optionnels selon le mode de recherche. */
+    cvResultsSummary?: Array<{
+      params: Record<string, unknown>;
+      mean_score: number;
+      mean_train_score?: number;
+      overfit_gap?: number;
+      mean_fit_time_s?: number;
+      /** Numéro du round halving où ce candidat a été évalué (HalvingRandomSearchCV uniquement). */
+      halving_iter?: number;
+      /** Nombre de samples utilisés dans ce round halving. */
+      n_resources?: number;
+    }> | null;
   } | null;
   // Cross-validation result fields (populated when splitMethod != 'holdout')
   cvFoldResults?: CvFoldResult[] | null;

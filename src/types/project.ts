@@ -8,6 +8,7 @@ export interface Project {
   createdAt: string;
   updatedAt: string;
   userId: string;
+  projectType: 'tabular' | 'imaging';
   datasetName?: string;
   targetColumn?: string;
   accuracy?: number;

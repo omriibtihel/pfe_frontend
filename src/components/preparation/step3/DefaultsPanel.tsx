@@ -2,7 +2,13 @@ import { SlidersHorizontal } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import type { TrainingPreprocessingConfig, TrainingPreprocessingDefaults } from '@/types';
+import {
+  DEFAULT_ADVANCED_PARAMS,
+  type TrainingPreprocessingAdvancedParams,
+  type TrainingPreprocessingConfig,
+  type TrainingPreprocessingDefaults,
+} from '@/types';
+import { AdvancedPreprocessingModal } from './AdvancedPreprocessingModal';
 import { labelForMethod } from './helpers';
 import type { Step3Options } from './types';
 
@@ -10,9 +16,12 @@ interface DefaultsPanelProps {
   preprocessing: TrainingPreprocessingConfig;
   options: Step3Options;
   onSetDefault: <K extends keyof TrainingPreprocessingDefaults>(key: K, value: TrainingPreprocessingDefaults[K]) => void;
+  onSetAdvancedParams: (params: TrainingPreprocessingAdvancedParams) => void;
 }
 
-export function DefaultsPanel({ preprocessing, options, onSetDefault }: DefaultsPanelProps) {
+export function DefaultsPanel({ preprocessing, options, onSetDefault, onSetAdvancedParams }: DefaultsPanelProps) {
+  const advancedParams = preprocessing.advancedParams ?? DEFAULT_ADVANCED_PARAMS;
+
   return (
     <Card className="glass-premium shadow-card">
       <CardHeader className="pb-3">
@@ -21,9 +30,12 @@ export function DefaultsPanel({ preprocessing, options, onSetDefault }: Defaults
             <SlidersHorizontal className="h-4 w-4 text-primary" />
           </div>
           Defaults (templates)
-          <Badge variant="secondary" className="ml-auto text-xs">
+          <Badge variant="secondary" className="ml-2 text-xs">
             Aucune activation auto
           </Badge>
+          <div className="ml-auto">
+            <AdvancedPreprocessingModal params={advancedParams} onChange={onSetAdvancedParams} />
+          </div>
         </CardTitle>
       </CardHeader>
       <CardContent className="space-y-4">
@@ -44,6 +56,13 @@ export function DefaultsPanel({ preprocessing, options, onSetDefault }: Defaults
                     ))}
                   </SelectContent>
                 </Select>
+                {/* Show active advanced param when relevant */}
+                {preprocessing.defaults.numericImputation === 'knn' && (
+                  <p className="text-[10px] text-primary">k = {advancedParams.knnNeighbors}</p>
+                )}
+                {preprocessing.defaults.numericImputation === 'constant' && (
+                  <p className="text-[10px] text-primary">fill = {advancedParams.constantFillNumeric}</p>
+                )}
               </div>
               <div className="space-y-1">
                 <p className="text-xs text-muted-foreground">Scaling numerique</p>
@@ -78,6 +97,9 @@ export function DefaultsPanel({ preprocessing, options, onSetDefault }: Defaults
                     ))}
                   </SelectContent>
                 </Select>
+                {preprocessing.defaults.categoricalImputation === 'constant' && (
+                  <p className="text-[10px] text-primary">fill = "{advancedParams.constantFillCategorical}"</p>
+                )}
               </div>
               <div className="space-y-1">
                 <p className="text-xs text-muted-foreground">Encodage categoriel</p>
@@ -95,6 +117,21 @@ export function DefaultsPanel({ preprocessing, options, onSetDefault }: Defaults
               </div>
             </div>
           </div>
+        </div>
+
+        {/* VarianceThreshold badge — always visible */}
+        <div className="flex items-center gap-2 pt-1">
+          <p className="text-xs text-muted-foreground">VarianceThreshold :</p>
+          {advancedParams.varianceThreshold === 0 ? (
+            <Badge variant="secondary" className="text-xs">Désactivé (0)</Badge>
+          ) : (
+            <Badge variant="outline" className="text-xs font-mono">
+              seuil = {advancedParams.varianceThreshold}
+            </Badge>
+          )}
+          <p className="text-[10px] text-muted-foreground">
+            — features avec variance &lt; seuil supprimées après transformation
+          </p>
         </div>
       </CardContent>
     </Card>

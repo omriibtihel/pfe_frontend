@@ -1,5 +1,6 @@
 import { useRef, useState } from "react";
 import { useNavigate, Link } from "react-router-dom";
+import { motion, useReducedMotion } from "framer-motion";
 import {
   Activity,
   Mail,
@@ -11,7 +12,6 @@ import {
   Upload,
   Loader2,
   ArrowRight,
-  Sparkles,
 } from "lucide-react";
 
 import { useAuth } from "@/contexts/AuthContext";
@@ -21,6 +21,18 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import type { SignupData } from "@/types";
+
+const formVariants = {
+  hidden: {},
+  visible: { transition: { staggerChildren: 0.06, delayChildren: 0.08 } },
+};
+
+const fieldVariants = {
+  hidden: { opacity: 0, y: 10 },
+  visible: { opacity: 1, y: 0, transition: { duration: 0.32, ease: [0.22, 1, 0.36, 1] } },
+};
+
+const iconSpring = { type: "spring", stiffness: 380, damping: 22 } as const;
 
 export function SignupPage() {
   const [formData, setFormData] = useState({
@@ -36,7 +48,15 @@ export function SignupPage() {
   const [photoPreview, setPhotoPreview] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [isLoading, setIsLoading] = useState(false);
+  const [focusedField, setFocusedField] = useState<string | null>(null);
   const { signup } = useAuth();
+  const reduceMotion = useReducedMotion();
+  const animate = !reduceMotion;
+
+  const iconAnimate = (field: string) =>
+    animate
+      ? { y: "-50%", scale: focusedField === field ? 1.2 : 1 }
+      : { y: "-50%", scale: 1 };
 
   const handlePhotoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -46,6 +66,7 @@ export function SignupPage() {
     reader.onload = () => setPhotoPreview(reader.result as string);
     reader.readAsDataURL(file);
   };
+
   const navigate = useNavigate();
   const { toast } = useToast();
 
@@ -89,151 +110,214 @@ export function SignupPage() {
 
   return (
     <AuthLayout>
-      <div className="space-y-5">
+      <div className="space-y-6 sm:space-y-7">
+        {/* Mobile logo */}
         <div className="flex items-center justify-center gap-2.5 lg:hidden">
-          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-primary via-secondary to-accent">
-            <Activity className="h-5 w-5 text-white" />
+          <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-primary">
+            <Activity className="h-4 w-4 text-primary-foreground" />
           </div>
-          <span className="text-xl font-bold">MedicalVision</span>
+          <span className="text-lg font-bold">MedicalVision</span>
         </div>
 
-        <div className="ai-surface-strong p-6 sm:p-8">
-          <div className="mb-6 space-y-2">
-            <span className="ai-chip">
-              <Sparkles className="h-3.5 w-3.5" />
-              Créer un compte
-            </span>
-            <h1 className="text-2xl font-bold tracking-tight">Creer votre espace professionnel</h1>
-            <p className="text-sm text-muted-foreground">
-              Renseignez vos informations pour acceder a la plateforme IA medicale.
-            </p>
+        {/* Header */}
+        <div className="space-y-1.5">
+          <h2 className="text-2xl font-semibold tracking-tight">Créer un compte</h2>
+          <p className="text-sm text-muted-foreground">
+            Rejoignez la plateforme IA médicale.
+          </p>
+        </div>
+
+        {/* Form */}
+        <motion.form
+          onSubmit={handleSubmit}
+          className="space-y-4 sm:space-y-5"
+          initial={animate ? "hidden" : false}
+          animate="visible"
+          variants={formVariants}
+        >
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 sm:gap-4">
+            <motion.div variants={fieldVariants} className="space-y-1.5">
+              <Label htmlFor="fullName">Nom complet</Label>
+              <div className="relative">
+                <motion.span
+                  className="pointer-events-none absolute left-3 top-1/2 flex"
+                  animate={iconAnimate("fullName")}
+                  transition={iconSpring}
+                >
+                  <User className="h-4 w-4 text-muted-foreground" />
+                </motion.span>
+                <Input
+                  id="fullName"
+                  value={formData.fullName}
+                  onChange={(e) => updateField("fullName", e.target.value)}
+                  onFocus={() => setFocusedField("fullName")}
+                  onBlur={() => setFocusedField(null)}
+                  className="pl-9"
+                  placeholder="Dr. Jean Dupont"
+                  required
+                />
+              </div>
+            </motion.div>
+
+            <motion.div variants={fieldVariants} className="space-y-1.5">
+              <Label htmlFor="email">Email</Label>
+              <div className="relative">
+                <motion.span
+                  className="pointer-events-none absolute left-3 top-1/2 flex"
+                  animate={iconAnimate("email")}
+                  transition={iconSpring}
+                >
+                  <Mail className="h-4 w-4 text-muted-foreground" />
+                </motion.span>
+                <Input
+                  id="email"
+                  type="email"
+                  value={formData.email}
+                  onChange={(e) => updateField("email", e.target.value)}
+                  onFocus={() => setFocusedField("email")}
+                  onBlur={() => setFocusedField(null)}
+                  className="pl-9"
+                  placeholder="votre@email.com"
+                  required
+                />
+              </div>
+            </motion.div>
+
+            <motion.div variants={fieldVariants} className="space-y-1.5">
+              <Label htmlFor="password">Mot de passe</Label>
+              <div className="relative">
+                <motion.span
+                  className="pointer-events-none absolute left-3 top-1/2 flex"
+                  animate={iconAnimate("password")}
+                  transition={iconSpring}
+                >
+                  <Lock className="h-4 w-4 text-muted-foreground" />
+                </motion.span>
+                <Input
+                  id="password"
+                  type="password"
+                  value={formData.password}
+                  onChange={(e) => updateField("password", e.target.value)}
+                  onFocus={() => setFocusedField("password")}
+                  onBlur={() => setFocusedField(null)}
+                  className="pl-9"
+                  placeholder="••••••••"
+                  required
+                />
+              </div>
+            </motion.div>
+
+            <motion.div variants={fieldVariants} className="space-y-1.5">
+              <Label htmlFor="dateOfBirth">Date de naissance</Label>
+              <div className="relative">
+                <motion.span
+                  className="pointer-events-none absolute left-3 top-1/2 flex"
+                  animate={iconAnimate("dateOfBirth")}
+                  transition={iconSpring}
+                >
+                  <Calendar className="h-4 w-4 text-muted-foreground" />
+                </motion.span>
+                <Input
+                  id="dateOfBirth"
+                  type="date"
+                  value={formData.dateOfBirth}
+                  onChange={(e) => updateField("dateOfBirth", e.target.value)}
+                  onFocus={() => setFocusedField("dateOfBirth")}
+                  onBlur={() => setFocusedField(null)}
+                  className="pl-9"
+                />
+              </div>
+            </motion.div>
+
+            <motion.div variants={fieldVariants} className="space-y-1.5">
+              <Label htmlFor="phone">Téléphone</Label>
+              <div className="relative">
+                <motion.span
+                  className="pointer-events-none absolute left-3 top-1/2 flex"
+                  animate={iconAnimate("phone")}
+                  transition={iconSpring}
+                >
+                  <Phone className="h-4 w-4 text-muted-foreground" />
+                </motion.span>
+                <Input
+                  id="phone"
+                  value={formData.phone}
+                  onChange={(e) => updateField("phone", e.target.value)}
+                  onFocus={() => setFocusedField("phone")}
+                  onBlur={() => setFocusedField(null)}
+                  className="pl-9"
+                  placeholder="+216 ..."
+                />
+              </div>
+            </motion.div>
+
+            <motion.div variants={fieldVariants} className="space-y-1.5">
+              <Label htmlFor="address">Établissement</Label>
+              <div className="relative">
+                <motion.span
+                  className="pointer-events-none absolute left-3 top-1/2 flex"
+                  animate={iconAnimate("address")}
+                  transition={iconSpring}
+                >
+                  <MapPin className="h-4 w-4 text-muted-foreground" />
+                </motion.span>
+                <Input
+                  id="address"
+                  value={formData.address}
+                  onChange={(e) => updateField("address", e.target.value)}
+                  onFocus={() => setFocusedField("address")}
+                  onBlur={() => setFocusedField(null)}
+                  className="pl-9"
+                  placeholder="Hôpital / Clinique"
+                />
+              </div>
+            </motion.div>
           </div>
 
-          <form onSubmit={handleSubmit} className="space-y-5">
-            <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-              <div className="space-y-2">
-                <Label htmlFor="fullName">Nom complet</Label>
-                <div className="relative">
-                  <User className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                  <Input
-                    id="fullName"
-                    value={formData.fullName}
-                    onChange={(e) => updateField("fullName", e.target.value)}
-                    className="h-11 border-border/70 bg-card/70 pl-10"
-                    placeholder="Dr. Jean Dupont"
-                    required
+          {/* Photo upload */}
+          <motion.div variants={fieldVariants} className="space-y-1.5">
+            <Label>
+              Photo de profil{" "}
+              <span className="font-normal text-muted-foreground">(optionnel)</span>
+            </Label>
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/*"
+              className="hidden"
+              onChange={handlePhotoChange}
+            />
+            <button
+              type="button"
+              onClick={() => fileInputRef.current?.click()}
+              className="flex h-20 w-full cursor-pointer items-center justify-center gap-3 rounded-lg border border-dashed border-border text-sm text-muted-foreground transition-colors hover:border-primary/50 hover:bg-primary/5 hover:text-primary"
+            >
+              {photoPreview ? (
+                <>
+                  <img
+                    src={photoPreview}
+                    alt="Aperçu"
+                    className="h-11 w-11 rounded-full object-cover ring-2 ring-primary/20"
                   />
-                </div>
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="email">Adresse email</Label>
-                <div className="relative">
-                  <Mail className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                  <Input
-                    id="email"
-                    type="email"
-                    value={formData.email}
-                    onChange={(e) => updateField("email", e.target.value)}
-                    className="h-11 border-border/70 bg-card/70 pl-10"
-                    placeholder="votre@email.com"
-                    required
-                  />
-                </div>
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="password">Mot de passe</Label>
-                <div className="relative">
-                  <Lock className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                  <Input
-                    id="password"
-                    type="password"
-                    value={formData.password}
-                    onChange={(e) => updateField("password", e.target.value)}
-                    className="h-11 border-border/70 bg-card/70 pl-10"
-                    placeholder="********"
-                    required
-                  />
-                </div>
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="dateOfBirth">Date de naissance</Label>
-                <div className="relative">
-                  <Calendar className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                  <Input
-                    id="dateOfBirth"
-                    type="date"
-                    value={formData.dateOfBirth}
-                    onChange={(e) => updateField("dateOfBirth", e.target.value)}
-                    className="h-11 border-border/70 bg-card/70 pl-10"
-                  />
-                </div>
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="phone">Telephone</Label>
-                <div className="relative">
-                  <Phone className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                  <Input
-                    id="phone"
-                    value={formData.phone}
-                    onChange={(e) => updateField("phone", e.target.value)}
-                    className="h-11 border-border/70 bg-card/70 pl-10"
-                    placeholder="+216 ..."
-                  />
-                </div>
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="address">Adresse</Label>
-                <div className="relative">
-                  <MapPin className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                  <Input
-                    id="address"
-                    value={formData.address}
-                    onChange={(e) => updateField("address", e.target.value)}
-                    className="h-11 border-border/70 bg-card/70 pl-10"
-                    placeholder="Hopital / Clinique"
-                  />
-                </div>
-              </div>
-            </div>
-
-            <div className="space-y-2">
-              <Label>Photo de profil</Label>
-              <input
-                ref={fileInputRef}
-                type="file"
-                accept="image/*"
-                className="hidden"
-                onChange={handlePhotoChange}
-              />
-              <button
-                type="button"
-                onClick={() => fileInputRef.current?.click()}
-                className="flex h-24 w-full cursor-pointer items-center justify-center gap-3 rounded-xl border border-dashed border-border/70 bg-muted/20 text-sm text-muted-foreground transition-colors hover:border-primary/50 hover:bg-primary/5 hover:text-primary"
-              >
-                {photoPreview ? (
-                  <>
-                    <img
-                      src={photoPreview}
-                      alt="Aperçu"
-                      className="h-14 w-14 rounded-full object-cover ring-2 ring-primary/30"
-                    />
-                    <span className="text-xs">{profilePhoto?.name}</span>
-                  </>
-                ) : (
-                  <>
+                  <span className="max-w-[180px] truncate text-xs">{profilePhoto?.name}</span>
+                </>
+              ) : (
+                <>
+                  <motion.span
+                    whileHover={animate ? { scale: 1.2, rotate: -8 } : undefined}
+                    transition={iconSpring}
+                    className="flex"
+                  >
                     <Upload className="h-4 w-4" />
-                    Cliquez pour ajouter une photo
-                  </>
-                )}
-              </button>
-            </div>
+                  </motion.span>
+                  Ajouter une photo
+                </>
+              )}
+            </button>
+          </motion.div>
 
-            <Button type="submit" className="h-12 w-full gap-2 text-base font-semibold" disabled={isLoading}>
+          <motion.div variants={fieldVariants}>
+            <Button type="submit" className="w-full gap-2" disabled={isLoading}>
               {isLoading ? (
                 <>
                   <Loader2 className="h-4 w-4 animate-spin" />
@@ -241,17 +325,20 @@ export function SignupPage() {
                 </>
               ) : (
                 <>
-                  S'inscrire
+                  Créer mon compte
                   <ArrowRight className="h-4 w-4" />
                 </>
               )}
             </Button>
-          </form>
-        </div>
+          </motion.div>
+        </motion.form>
 
         <p className="text-center text-sm text-muted-foreground">
-          Deja inscrit ?{" "}
-          <Link to="/login" className="font-semibold text-primary transition-colors hover:text-primary/80">
+          Déjà inscrit ?{" "}
+          <Link
+            to="/login"
+            className="font-medium text-foreground underline-offset-4 hover:underline"
+          >
             Se connecter
           </Link>
         </p>

@@ -254,6 +254,8 @@ export function Step6Summary({ projectId, config, onStartTraining, onGoToResults
           ? `GridSearch (${config.gridCvFolds} folds)`
           : config.searchType === "random"
           ? `RandomizedSearch (${config.nIterRandomSearch ?? 40} iters, ${config.gridCvFolds} folds)`
+          : config.searchType === "halving_random"
+          ? `Successive Halving (${config.nIterRandomSearch ?? 60} candidats, ${config.gridCvFolds} folds)`
           : "Desactivee",
     },
   ];

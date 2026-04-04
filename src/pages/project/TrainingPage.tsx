@@ -195,6 +195,7 @@ export function TrainingPage() {
   const navigate = useNavigate();
   const { toast } = useToast();
 
+  // ── Hooks du wizard tabulaire ──────────────────────────────────────────────
   const [trainingMode, setTrainingMode] = useState<TrainingMode | null>(null);
   const [showModeDialog, setShowModeDialog] = useState(false);
   const [pastSessions, setPastSessions] = useState<TrainingSession[]>([]);

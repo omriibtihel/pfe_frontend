@@ -20,6 +20,7 @@ import {
   BarChart3,
   Moon,
   Sun,
+  ImageIcon,
 } from "lucide-react";
 
 import { useAuth } from "@/contexts/AuthContext";
@@ -56,6 +57,12 @@ const projectNavItems = [
   { path: "predict",     icon: Target,    label: "Prédiction" },
 ];
 
+const imagingNavItems = [
+  { path: "imaging/import",    icon: Upload,    label: "Import images" },
+  { path: "imaging/training",  icon: Brain,     label: "Entraînement" },
+  { path: "imaging/predict",   icon: Target,    label: "Prédiction" },
+];
+
 export function AppLayout({ children }: AppLayoutProps) {
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
@@ -79,6 +86,7 @@ export function AppLayout({ children }: AppLayoutProps) {
   const pathSegments = location.pathname.split("/").filter(Boolean);
   const isProjectPage = pathSegments[0] === "projects" && Boolean(pathSegments[1]);
   const projectId = isProjectPage ? pathSegments[1] : null;
+  const isImagingProject = isProjectPage && pathSegments[2] === "imaging";
 
   const handleLogout = async () => {
     await logout();
@@ -200,15 +208,19 @@ export function AppLayout({ children }: AppLayoutProps) {
             <>
               <div className={cn("pb-3 pt-6", sidebarOpen ? "px-4" : "flex justify-center px-0")}>
                 {sidebarOpen ? (
-                  <span className="text-xs font-bold uppercase tracking-[0.2em] text-muted-foreground">Projet</span>
+                  <span className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-[0.2em] text-muted-foreground">
+                    {isImagingProject && <ImageIcon className="h-3 w-3" />}
+                    Projet
+                  </span>
                 ) : (
                   <div className="h-0.5 w-8 rounded-full bg-border" />
                 )}
               </div>
 
-              {projectNavItems.map((item) => {
+              {(isImagingProject ? imagingNavItems : projectNavItems).map((item) => {
                 const fullPath = `/projects/${projectId}/${item.path}`;
-                const isActive = isProjectNavActive(item.path);
+                const isActive = location.pathname.startsWith(fullPath) ||
+                  (item.path === "imaging/training" && location.pathname.startsWith(`/projects/${projectId}/imaging/results`));
                 return (
                   <Link
                     key={item.path}
