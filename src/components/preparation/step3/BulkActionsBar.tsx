@@ -45,9 +45,9 @@ export function BulkActionsBar({
     <div className="rounded-xl border border-border/70 bg-background/80 p-3 space-y-3">
       <div className="flex flex-wrap items-start gap-2">
         <div className="space-y-0.5">
-          <p className="text-xs font-medium text-foreground">Actions en lot</p>
+          <p className="text-xs font-medium text-foreground">Actions groupées</p>
           <p className="text-[11px] text-muted-foreground">
-            Selectionnez des colonnes puis appliquez des changements groupés.
+            Sélectionnez des colonnes dans le tableau, puis appliquez des modifications en masse.
           </p>
         </div>
         <Badge variant="secondary" className="ml-auto">
@@ -63,10 +63,10 @@ export function BulkActionsBar({
           onClick={onSelectAllFiltered}
           disabled={filteredCount === 0}
         >
-          Select all filtered
+          Tout sélectionner
         </Button>
         <Button type="button" size="sm" variant="ghost" onClick={onClearSelection} disabled={!hasSelection}>
-          Clear selection
+          Désélectionner tout
         </Button>
         <Button
           type="button"
@@ -77,13 +77,13 @@ export function BulkActionsBar({
           className="gap-1 ml-auto"
         >
           <Undo2 className="h-3.5 w-3.5" />
-          Undo last bulk change
+          Annuler
         </Button>
       </div>
 
       <div className="grid grid-cols-1 xl:grid-cols-3 gap-2">
         <div className="rounded-lg border border-border/60 bg-muted/20 p-2 space-y-2">
-          <p className="text-[11px] font-medium text-muted-foreground uppercase tracking-wide">Templates</p>
+          <p className="text-[11px] font-medium text-muted-foreground uppercase tracking-wide">Préréglages</p>
           <Button
             type="button"
             size="sm"
@@ -92,7 +92,7 @@ export function BulkActionsBar({
             disabled={!hasSelection}
             className="w-full justify-start"
           >
-            Apply defaults to selected columns
+            Appliquer les defaults
           </Button>
           <Button
             type="button"
@@ -103,12 +103,12 @@ export function BulkActionsBar({
             className="w-full justify-start gap-1"
           >
             <RotateCcw className="h-3.5 w-3.5" />
-            Reset selected columns
+            Réinitialiser
           </Button>
         </div>
 
         <div className="rounded-lg border border-border/60 bg-muted/20 p-2 space-y-2">
-          <p className="text-[11px] font-medium text-muted-foreground uppercase tracking-wide">Usage / Type</p>
+          <p className="text-[11px] font-medium text-muted-foreground uppercase tracking-wide">Inclure / Type</p>
           <div className="flex flex-wrap items-center gap-2">
             <Button
               type="button"
@@ -117,7 +117,7 @@ export function BulkActionsBar({
               disabled={!hasSelection}
               onClick={() => onSetUse(true)}
             >
-              Set use=true
+              Inclure
             </Button>
             <Button
               type="button"
@@ -126,7 +126,7 @@ export function BulkActionsBar({
               disabled={!hasSelection}
               onClick={() => onSetUse(false)}
             >
-              Set use=false
+              Exclure
             </Button>
           </div>
           <div className="flex flex-wrap items-center gap-2">
@@ -151,13 +151,13 @@ export function BulkActionsBar({
               disabled={!hasSelection}
               onClick={() => onSetType(bulkType)}
             >
-              Apply type
+              Appliquer
             </Button>
           </div>
         </div>
 
         <div className="rounded-lg border border-border/60 bg-muted/20 p-2 space-y-2">
-          <p className="text-[11px] font-medium text-muted-foreground uppercase tracking-wide">Encoding</p>
+          <p className="text-[11px] font-medium text-muted-foreground uppercase tracking-wide">Encodage</p>
           <div className="flex flex-wrap items-center gap-2">
             <Select
               value={bulkEncoding}
@@ -182,7 +182,7 @@ export function BulkActionsBar({
               disabled={!hasSelection}
               onClick={() => onSetEncoding(bulkEncoding)}
             >
-              Apply encoding
+              Appliquer
             </Button>
           </div>
         </div>

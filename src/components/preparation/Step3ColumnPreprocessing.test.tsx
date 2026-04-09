@@ -11,15 +11,18 @@ const {
   columns,
   getCapabilitiesMock,
   getColumnsMock,
+  profileDatasetMock,
   validateTrainingMock,
 } = vi.hoisted(() => {
   const caps = {
     numericImputation: ["none", "median", "mean", "most_frequent", "constant", "knn"],
+    numericPowerTransform: ["none", "yeo_johnson", "box_cox"],
     numericScaling: ["none", "standard", "minmax", "robust", "maxabs"],
     categoricalImputation: ["none", "most_frequent", "constant"],
     categoricalEncoding: ["none", "onehot", "ordinal", "label"],
     defaults: {
       numericImputation: "none",
+      numericPowerTransform: "none",
       numericScaling: "none",
       categoricalImputation: "none",
       categoricalEncoding: "none",
@@ -32,11 +35,45 @@ const {
     { name: "city", type: "categorical", nullCount: 0, uniqueCount: 3, sampleValues: ["A", "B"] },
     { name: "Outcome", type: "categorical", nullCount: 0, uniqueCount: 2, sampleValues: [0, 1] },
   ];
+  const datasetProfile = {
+    n_samples: 100,
+    n_features: 2,
+    n_classes: 2,
+    task_type: "classification",
+    imbalance_ratio: null,
+    minority_ratio: null,
+    has_missing_values: false,
+    missing_ratio: 0,
+    feature_types: { numeric: 1, categorical: 1, text: 0 },
+    dimensionality_ratio: 0.02,
+    dataset_size_category: "small",
+    estimated_training_speed: "fast",
+    recommended_cv_strategy: "holdout",
+    recommended_resampling: null,
+    recommended_metric: "accuracy",
+    meta_features: {},
+    non_normal_ratio: 1,
+    avg_skewness: 1.2,
+    highly_skewed_count: 1,
+    column_distribution: {
+      age: {
+        is_normal: false,
+        skewness: 1.2,
+        abs_skewness: 1.2,
+        n: 100,
+        test_used: "shapiro",
+        p_value: 0.01,
+        has_missing: false,
+        has_negative: false,
+      },
+    },
+  };
   return {
     capabilities: caps,
     columns: cols,
     getCapabilitiesMock: vi.fn(async () => ({ preprocessingCapabilities: caps })),
     getColumnsMock: vi.fn(async () => cols),
+    profileDatasetMock: vi.fn(async () => datasetProfile),
     validateTrainingMock: vi.fn(async () => ({
       normalized_config: {},
       effective_preprocessing_by_column: {},
@@ -66,6 +103,7 @@ vi.mock("@/services/trainingService", () => ({
   FALLBACK_PREPROCESSING_CAPABILITIES: capabilities,
   trainingService: {
     getCapabilities: getCapabilitiesMock,
+    profileDataset: profileDatasetMock,
     validateTraining: validateTrainingMock,
   },
 }));
@@ -114,7 +152,41 @@ describe("Step3ColumnPreprocessing", () => {
   beforeEach(() => {
     getCapabilitiesMock.mockClear();
     getColumnsMock.mockClear();
+    profileDatasetMock.mockClear();
     validateTrainingMock.mockClear();
+    profileDatasetMock.mockResolvedValue({
+      n_samples: 100,
+      n_features: 2,
+      n_classes: 2,
+      task_type: "classification",
+      imbalance_ratio: null,
+      minority_ratio: null,
+      has_missing_values: false,
+      missing_ratio: 0,
+      feature_types: { numeric: 1, categorical: 1, text: 0 },
+      dimensionality_ratio: 0.02,
+      dataset_size_category: "small",
+      estimated_training_speed: "fast",
+      recommended_cv_strategy: "holdout",
+      recommended_resampling: null,
+      recommended_metric: "accuracy",
+      meta_features: {},
+      non_normal_ratio: 1,
+      avg_skewness: 1.2,
+      highly_skewed_count: 1,
+      column_distribution: {
+        age: {
+          is_normal: false,
+          skewness: 1.2,
+          abs_skewness: 1.2,
+          n: 100,
+          test_used: "shapiro",
+          p_value: 0.01,
+          has_missing: false,
+          has_negative: false,
+        },
+      },
+    });
     validateTrainingMock.mockResolvedValue({
       normalized_config: {},
       effective_preprocessing_by_column: {},
@@ -168,6 +240,7 @@ describe("Step3ColumnPreprocessing", () => {
         config={makeConfig({
           defaults: {
             numericImputation: "median",
+            numericPowerTransform: "yeo_johnson",
             numericScaling: "standard",
             categoricalImputation: "most_frequent",
             categoricalEncoding: "onehot",
@@ -181,7 +254,7 @@ describe("Step3ColumnPreprocessing", () => {
     await waitFor(() => expect(screen.getByTestId("column-row-age")).toBeInTheDocument());
 
     fireEvent.click(screen.getByLabelText("select-age"));
-    fireEvent.click(screen.getByRole("button", { name: /apply defaults to selected columns/i }));
+    fireEvent.click(screen.getByRole("button", { name: /appliquer les defaults/i }));
 
     const payloads = onConfigChange.mock.calls.map((call) => call[0]).filter((payload) => payload?.preprocessing);
     const latest = payloads[payloads.length - 1];
@@ -189,12 +262,52 @@ describe("Step3ColumnPreprocessing", () => {
     expect(latest.preprocessing.columns.age).toEqual(
       expect.objectContaining({
         numericImputation: "median",
+        numericPowerTransform: "yeo_johnson",
         numericScaling: "standard",
         categoricalImputation: "most_frequent",
         categoricalEncoding: "onehot",
       })
     );
     expect(latest.preprocessing.columns.city).toBeUndefined();
+  });
+
+  it("apply defaults resets an explicit numericPowerTransform override on selected rows", async () => {
+    const onConfigChange = vi.fn();
+    render(
+      <Step3ColumnPreprocessing
+        projectId="123"
+        config={makeConfig({
+          defaults: {
+            numericImputation: "median",
+            numericPowerTransform: "yeo_johnson",
+            numericScaling: "standard",
+            categoricalImputation: "most_frequent",
+            categoricalEncoding: "onehot",
+          },
+          columns: {
+            age: {
+              type: "numeric",
+              numericPowerTransform: "box_cox",
+            },
+          },
+        })}
+        onConfigChange={onConfigChange}
+      />
+    );
+
+    await waitFor(() => expect(screen.getByTestId("column-row-age")).toBeInTheDocument());
+
+    fireEvent.click(screen.getByLabelText("select-age"));
+    fireEvent.click(screen.getByRole("button", { name: /appliquer les defaults/i }));
+
+    const payloads = onConfigChange.mock.calls.map((call) => call[0]).filter((payload) => payload?.preprocessing);
+    const latest = payloads[payloads.length - 1];
+
+    expect(latest.preprocessing.columns.age).toEqual(
+      expect.objectContaining({
+        numericPowerTransform: "yeo_johnson",
+      })
+    );
   });
 
   it("shows inline local error for categorical column with encoding none", async () => {
@@ -213,6 +326,7 @@ describe("Step3ColumnPreprocessing", () => {
         config={makeConfig({
           defaults: {
             numericImputation: "none",
+            numericPowerTransform: "none",
             numericScaling: "none",
             categoricalImputation: "most_frequent",
             categoricalEncoding: "ordinal",
@@ -256,6 +370,7 @@ describe("Step3ColumnPreprocessing", () => {
         config={makeConfig({
           defaults: {
             numericImputation: "none",
+            numericPowerTransform: "none",
             numericScaling: "none",
             categoricalImputation: "most_frequent",
             categoricalEncoding: "onehot",

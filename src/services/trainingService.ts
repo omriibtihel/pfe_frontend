@@ -10,6 +10,7 @@ import type {
   ModelHyperparams,
   ModelResult,
   NumericImputationStrategy,
+  NumericPowerTransformStrategy,
   NumericScalingStrategy,
   TrainingThresholdStrategy,
   TrainingHyperparamFieldSchema,
@@ -106,6 +107,7 @@ function _toSavedModelSummary(raw: RawRecord): SavedModelSummary {
 
 export type TrainingPreprocessingCapabilities = {
   numericImputation: NumericImputationStrategy[];
+  numericPowerTransform: NumericPowerTransformStrategy[];
   numericScaling: NumericScalingStrategy[];
   categoricalImputation: CategoricalImputationStrategy[];
   categoricalEncoding: CategoricalEncodingStrategy[];
@@ -235,6 +237,7 @@ export type AnalyzeBalancePayload = {
 
 export const FALLBACK_PREPROCESSING_CAPABILITIES: TrainingPreprocessingCapabilities = {
   numericImputation: ["none", "median", "mean", "most_frequent", "constant", "knn"],
+  numericPowerTransform: ["none", "yeo_johnson", "box_cox"],
   numericScaling: ["none", "standard", "minmax", "robust", "maxabs"],
   categoricalImputation: ["none", "most_frequent", "constant"],
   categoricalEncoding: ["none", "onehot", "ordinal", "label"],
@@ -270,7 +273,7 @@ function sanitizeColumnTypes(values: string[]): TrainingColumnType[] {
   return sanitizeEnumList(values, ["numeric", "categorical", "ordinal"]);
 }
 
-function toPreprocessingCapabilities(raw: unknown): TrainingPreprocessingCapabilities {
+export function toPreprocessingCapabilities(raw: unknown): TrainingPreprocessingCapabilities {
   const fallback = FALLBACK_PREPROCESSING_CAPABILITIES;
   const src = (raw ?? {}) as Record<string, unknown>;
 
@@ -285,6 +288,10 @@ function toPreprocessingCapabilities(raw: unknown): TrainingPreprocessingCapabil
     const numericImputation = sanitizeEnumList(
       toUniqueStringList(src.numericImputation),
       fallback.numericImputation
+    );
+    const numericPowerTransform = sanitizeEnumList(
+      toUniqueStringList(src.numericPowerTransform),
+      fallback.numericPowerTransform
     );
     const numericScaling = sanitizeEnumList(toUniqueStringList(src.numericScaling), fallback.numericScaling);
     const categoricalImputation = sanitizeEnumList(
@@ -301,6 +308,7 @@ function toPreprocessingCapabilities(raw: unknown): TrainingPreprocessingCapabil
 
     return {
       numericImputation: numericImputation.length ? numericImputation : fallback.numericImputation,
+      numericPowerTransform: numericPowerTransform.length ? numericPowerTransform : fallback.numericPowerTransform,
       numericScaling: numericScaling.length ? numericScaling : fallback.numericScaling,
       categoricalImputation: categoricalImputation.length
         ? categoricalImputation
@@ -312,6 +320,11 @@ function toPreprocessingCapabilities(raw: unknown): TrainingPreprocessingCapabil
         )
           ? (defaultsRawTyped.numericImputation as TrainingPreprocessingDefaults["numericImputation"])
           : fallback.defaults.numericImputation,
+        numericPowerTransform: fallback.numericPowerTransform.includes(
+          defaultsRawTyped.numericPowerTransform as TrainingPreprocessingDefaults["numericPowerTransform"]
+        )
+          ? (defaultsRawTyped.numericPowerTransform as TrainingPreprocessingDefaults["numericPowerTransform"])
+          : fallback.defaults.numericPowerTransform,
         numericScaling: fallback.numericScaling.includes(
           defaultsRawTyped.numericScaling as TrainingPreprocessingDefaults["numericScaling"]
         )
@@ -339,16 +352,23 @@ function toPreprocessingCapabilities(raw: unknown): TrainingPreprocessingCapabil
     imputation?: { numeric?: unknown; categorical?: unknown };
     encoding?: { categorical?: unknown };
     scaling?: { numeric?: unknown };
+    normalization?: { numeric?: unknown };
   };
   const impNum = toUniqueStringList(legacy.imputation?.numeric);
   const impCat = toUniqueStringList(legacy.imputation?.categorical);
   const encCat = toUniqueStringList(legacy.encoding?.categorical);
   const sclNum = toUniqueStringList(legacy.scaling?.numeric);
+  const powerNum = "numericPowerTransform" in src
+    ? toUniqueStringList(src.numericPowerTransform)
+    : toUniqueStringList(legacy.normalization?.numeric);
 
   return {
     numericImputation: sanitizeEnumList(impNum, fallback.numericImputation).length
       ? sanitizeEnumList(impNum, fallback.numericImputation)
       : fallback.numericImputation,
+    numericPowerTransform: sanitizeEnumList(powerNum, fallback.numericPowerTransform).length
+      ? sanitizeEnumList(powerNum, fallback.numericPowerTransform)
+      : fallback.numericPowerTransform,
     numericScaling: sanitizeEnumList(sclNum, fallback.numericScaling).length
       ? sanitizeEnumList(sclNum, fallback.numericScaling)
       : fallback.numericScaling,

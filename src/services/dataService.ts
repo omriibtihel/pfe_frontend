@@ -56,6 +56,12 @@ export type ColumnMeta = {
   unique: number;
   total: number;
   sample: string[];
+
+  // Numeric-only stats (null for non-numeric columns)
+  skewness?: number | null;
+  outlier_count?: number | null;
+  outlier_ratio?: number | null;
+  has_negative?: boolean | null;
 };
 
 export type ColumnsMetaOut = {

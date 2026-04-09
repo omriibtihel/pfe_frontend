@@ -15,6 +15,7 @@ import {
   ImageIcon,
   Database,
 } from "lucide-react";
+import { useTranslation } from "react-i18next";
 
 import { useAuth } from "@/contexts/AuthContext";
 import { AppLayout } from "@/layouts/AppLayout";
@@ -30,36 +31,19 @@ import { useToast } from "@/hooks/use-toast";
 import { staggerContainer, staggerItem, fadeInUp } from "@/components/ui/page-transition";
 import datasetService from "@/services/datasetService";
 
-const AI_TIPS = [
-  "La validation croisée K-Fold donne une estimation plus fiable de la généralisation que le simple holdout.",
-  "Normalisez toujours vos features numériques avant d'entraîner un SVM ou un réseau de neurones.",
-  "Un dataset déséquilibré peut fausser vos métriques — vérifiez le F1-score en plus de l'accuracy.",
-  "SMOTE génère des exemples synthétiques de la classe minoritaire plutôt que de simplement dupliquer.",
-  "L'importance des features (Random Forest) aide à identifier les variables redondantes avant le training.",
-  "Un modèle simple bien calibré surpasse souvent un modèle complexe sur-ajusté.",
-  "Consultez toujours la matrice de confusion : l'accuracy seule cache les faux négatifs critiques en médecine.",
-  "Le GridSearch exhaustif peut être remplacé par RandomSearch pour gagner 80% du gain en 20% du temps.",
-  "Séparez vos données en train/validation/test dès le début — ne touchez au test qu'une seule fois.",
-  "LightGBM et XGBoost convergent souvent plus vite que Random Forest sur des données tabulaires médicales.",
-];
-
-function getDailyTip(): string {
-  const dayOfYear = Math.floor((Date.now() - new Date(new Date().getFullYear(), 0, 0).getTime()) / 86_400_000);
-  return AI_TIPS[dayOfYear % AI_TIPS.length];
-}
-
-function timeAgo(dateStr: string): string {
+function timeAgo(dateStr: string, t: (key: string, opts?: Record<string, unknown>) => string): string {
   if (!dateStr) return "—";
   const diff = Date.now() - new Date(dateStr).getTime();
   const days = Math.floor(diff / 86_400_000);
-  if (days === 0) return "Aujourd'hui";
-  if (days === 1) return "Hier";
-  if (days < 7) return `Il y a ${days} jours`;
-  if (days < 30) return `Il y a ${Math.floor(days / 7)} sem.`;
-  return `Il y a ${Math.floor(days / 30)} mois`;
+  if (days === 0) return t("dashboard.today");
+  if (days === 1) return t("dashboard.yesterday");
+  if (days < 7) return t("dashboard.daysAgo", { n: days });
+  if (days < 30) return t("dashboard.weeksAgo", { n: Math.floor(days / 7) });
+  return t("dashboard.monthsAgo", { n: Math.floor(days / 30) });
 }
 
 export function DashboardPage() {
+  const { t, i18n } = useTranslation();
   const { user } = useAuth();
   const navigate = useNavigate();
   const { toast } = useToast();
@@ -71,17 +55,23 @@ export function DashboardPage() {
   const [isDeleting, setIsDeleting] = useState(false);
   const [openLoadingId, setOpenLoadingId] = useState<string | null>(null);
 
-  const dailyTip = useMemo(() => getDailyTip(), []);
+  const tips = t("dashboard.tips", { returnObjects: true }) as string[];
+
+  const dailyTip = useMemo(() => {
+    const dayOfYear = Math.floor((Date.now() - new Date(new Date().getFullYear(), 0, 0).getTime()) / 86_400_000);
+    return tips[dayOfYear % tips.length];
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [i18n.language]);
 
   const dayLabel = useMemo(
     () =>
-      new Intl.DateTimeFormat("fr-FR", {
+      new Intl.DateTimeFormat(i18n.language === "en" ? "en-US" : "fr-FR", {
         weekday: "long",
         day: "numeric",
         month: "long",
         year: "numeric",
       }).format(new Date()),
-    []
+    [i18n.language]
   );
 
   const openProject = async (project: Project) => {
@@ -99,8 +89,8 @@ export function DashboardPage() {
       }
     } catch (error) {
       toast({
-        title: "Erreur",
-        description: (error as Error).message || "Impossible d'ouvrir le projet",
+        title: t("common.error"),
+        description: (error as Error).message || t("dashboard.openingError"),
         variant: "destructive",
       });
     } finally {
@@ -117,8 +107,8 @@ export function DashboardPage() {
         setProjects(projectsData);
       } catch {
         toast({
-          title: "Erreur",
-          description: "Impossible de charger les donnees",
+          title: t("common.error"),
+          description: t("dashboard.loadError"),
           variant: "destructive",
         });
       } finally {
@@ -127,7 +117,7 @@ export function DashboardPage() {
     };
 
     loadData();
-  }, [user, toast]);
+  }, [user, toast, t]);
 
   const handleDelete = async () => {
     if (!deleteProject || isDeleting) return;
@@ -137,9 +127,9 @@ export function DashboardPage() {
       await projectService.deleteProject(deleteProject.id);
       setProjects((prev) => prev.filter((p) => p.id !== deleteProject.id));
       setDeleteProject(null);
-      toast({ title: "Projet supprime" });
+      toast({ title: t("dashboard.deletedSuccess") });
     } catch {
-      toast({ title: "Erreur", variant: "destructive" });
+      toast({ title: t("common.error"), variant: "destructive" });
     } finally {
       setIsDeleting(false);
     }
@@ -177,12 +167,12 @@ export function DashboardPage() {
             <div className="space-y-3">
               <span className="ai-chip">
                 <Sparkles className="h-3.5 w-3.5" />
-                AI Command Center
+                {t("dashboard.chip")}
               </span>
               <div>
-                <h1 className="text-3xl font-bold tracking-tight sm:text-4xl">Votre espace medical intelligent</h1>
+                <h1 className="text-3xl font-bold tracking-tight sm:text-4xl">{t("dashboard.title")}</h1>
                 <p className="mt-2 max-w-2xl text-sm text-muted-foreground sm:text-base">
-                  Pilotez vos projets, vos datasets et vos modeles depuis une interface unique orientee IA.
+                  {t("dashboard.subtitle")}
                 </p>
               </div>
               <div className="inline-flex items-center gap-2 text-xs font-medium text-muted-foreground">
@@ -194,11 +184,11 @@ export function DashboardPage() {
             <div className="flex w-full flex-col gap-3 sm:w-auto sm:flex-row">
               <Button variant="outline" className="gap-2" onClick={() => navigate("/projects")}>
                 <FolderOpen className="h-4 w-4" />
-                Voir les projets
+                {t("dashboard.viewProjects")}
               </Button>
               <Button className="gap-2" onClick={() => navigate("/projects/new")}>
                 <Plus className="h-4 w-4" />
-                Nouveau projet
+                {t("dashboard.newProject")}
               </Button>
             </div>
           </div>
@@ -211,7 +201,7 @@ export function DashboardPage() {
               <Layers className="h-6 w-6 text-primary" />
             </div>
             <div>
-              <p className="text-xs font-medium text-muted-foreground">Total projets</p>
+              <p className="text-xs font-medium text-muted-foreground">{t("dashboard.totalProjects")}</p>
               <p className="text-3xl font-bold tracking-tight">{projects.length}</p>
             </div>
           </div>
@@ -222,9 +212,9 @@ export function DashboardPage() {
               <CalendarDays className="h-6 w-6 text-secondary" />
             </div>
             <div>
-              <p className="text-xs font-medium text-muted-foreground">Créés ce mois</p>
+              <p className="text-xs font-medium text-muted-foreground">{t("dashboard.createdThisMonth")}</p>
               <p className="text-3xl font-bold tracking-tight">{thisMonthCount}</p>
-              <p className="text-xs text-muted-foreground">sur les 30 derniers jours</p>
+              <p className="text-xs text-muted-foreground">{t("dashboard.createdThisMonthSub")}</p>
             </div>
           </div>
 
@@ -234,11 +224,11 @@ export function DashboardPage() {
               <Clock className="h-6 w-6 text-accent" />
             </div>
             <div className="min-w-0">
-              <p className="text-xs font-medium text-muted-foreground">Dernière activité</p>
+              <p className="text-xs font-medium text-muted-foreground">{t("dashboard.lastActivity")}</p>
               {lastUpdated ? (
                 <>
                   <p className="truncate text-sm font-bold">{lastUpdated.name}</p>
-                  <p className="text-xs text-muted-foreground">{timeAgo(lastUpdated.updatedAt)}</p>
+                  <p className="text-xs text-muted-foreground">{timeAgo(lastUpdated.updatedAt, t)}</p>
                 </>
               ) : (
                 <p className="text-sm text-muted-foreground">—</p>
@@ -255,9 +245,9 @@ export function DashboardPage() {
               </div>
               <div className="flex-1">
                 <div className="flex items-center gap-2">
-                  <p className="font-semibold">Conseil IA du jour</p>
+                  <p className="font-semibold">{t("dashboard.tipTitle")}</p>
                   <span className="rounded-full bg-primary/15 px-2 py-0.5 text-[10px] font-semibold text-primary">
-                    {new Date().toLocaleDateString("fr-FR", { day: "numeric", month: "short" })}
+                    {new Date().toLocaleDateString(i18n.language === "en" ? "en-US" : "fr-FR", { day: "numeric", month: "short" })}
                   </span>
                 </div>
                 <p className="mt-0.5 text-sm text-muted-foreground">{dailyTip}</p>
@@ -269,13 +259,13 @@ export function DashboardPage() {
         <motion.section variants={staggerItem} className="space-y-5">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
             <div>
-              <h2 className="text-2xl font-semibold tracking-tight">Vos projets</h2>
-              <p className="text-sm text-muted-foreground">Accedez rapidement a vos espaces de travail IA.</p>
+              <h2 className="text-2xl font-semibold tracking-tight">{t("dashboard.yourProjects")}</h2>
+              <p className="text-sm text-muted-foreground">{t("dashboard.yourProjectsSub")}</p>
             </div>
             <div className="relative w-full sm:w-72">
               <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
               <Input
-                placeholder="Rechercher un projet..."
+                placeholder={t("dashboard.searchPlaceholder")}
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
                 className="h-11 border-border/70 bg-card/70 pl-10"
@@ -287,9 +277,9 @@ export function DashboardPage() {
             <Card className="ai-surface border-dashed">
               <CardContent className="flex flex-col items-center justify-center gap-3 py-12 text-center">
                 <FolderOpen className="h-8 w-8 text-muted-foreground" />
-                <p className="font-medium">Aucun projet trouve</p>
+                <p className="font-medium">{t("dashboard.noProjectFound")}</p>
                 <p className="max-w-sm text-sm text-muted-foreground">
-                  Creez un nouveau projet ou ajustez votre recherche pour afficher vos travaux existants.
+                  {t("dashboard.noProjectFoundSub")}
                 </p>
               </CardContent>
             </Card>
@@ -316,12 +306,12 @@ export function DashboardPage() {
                       <div className="flex flex-col items-end gap-1">
                         {project.id === lastUpdated?.id && (
                           <Badge variant="outline" className="border-accent/50 text-accent text-[10px]">
-                            Récent
+                            {t("dashboard.recentBadge")}
                           </Badge>
                         )}
                         {thisMonthCount > 0 && new Date(project.createdAt).getTime() > now - 30 * 86_400_000 && project.id !== lastUpdated?.id && (
                           <Badge variant="outline" className="border-secondary/50 text-secondary text-[10px]">
-                            Nouveau
+                            {t("dashboard.newBadge")}
                           </Badge>
                         )}
                       </div>
@@ -329,13 +319,13 @@ export function DashboardPage() {
                   </CardHeader>
                   <CardContent className="space-y-5">
                     <p className="line-clamp-3 text-sm text-muted-foreground">
-                      {project.description || "Projet IA medical sans description."}
+                      {project.description || t("dashboard.noDescription")}
                     </p>
 
                     {project.accuracy != null && (
                       <div className="space-y-2">
                         <div className="flex items-center justify-between text-xs text-muted-foreground">
-                          <span>Précision du modèle</span>
+                          <span>{t("dashboard.modelAccuracy")}</span>
                           <span className="font-semibold text-foreground">{project.accuracy}%</span>
                         </div>
                         <div className="h-2 overflow-hidden rounded-full bg-muted">
@@ -349,7 +339,7 @@ export function DashboardPage() {
 
                     <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
                       <Clock3 className="h-3 w-3" />
-                      <span>{timeAgo(project.updatedAt)}</span>
+                      <span>{timeAgo(project.updatedAt, t)}</span>
                     </div>
 
                     <div className="flex gap-2">
@@ -358,7 +348,7 @@ export function DashboardPage() {
                         onClick={() => openProject(project)}
                         disabled={openLoadingId === project.id}
                       >
-                        {openLoadingId === project.id ? "Ouverture..." : "Ouvrir"}
+                        {openLoadingId === project.id ? t("common.opening") : t("common.open")}
                       </Button>
                       <Button variant="ghost" size="icon" onClick={() => setDeleteProject(project)}>
                         <Trash2 className="h-4 w-4 text-destructive" />
@@ -376,10 +366,10 @@ export function DashboardPage() {
         isOpen={!!deleteProject}
         onClose={() => setDeleteProject(null)}
         onConfirm={handleDelete}
-        title="Supprimer le projet"
-        description={`Voulez-vous supprimer "${deleteProject?.name}" ?`}
+        title={t("dashboard.deleteTitle")}
+        description={`${t("dashboard.deleteDesc")} "${deleteProject?.name}" ?`}
         variant="destructive"
-        confirmText="Supprimer"
+        confirmText={t("common.delete")}
         isLoading={isDeleting}
       />
     </AppLayout>

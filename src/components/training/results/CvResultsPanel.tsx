@@ -3,6 +3,17 @@ import { Layers, Target } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import type { CvFoldResult, CvMetricsSummary } from '@/types';
 
+const METRIC_TOOLTIPS: Record<string, string> = {
+  roc_auc: 'Aire sous la courbe ROC. Mesure la capacité à distinguer les classes (1 = parfait, 0.5 = aléatoire).',
+  pr_auc: 'Aire sous la courbe Précision-Rappel. Plus fiable que la ROC sur des données très déséquilibrées.',
+  npv: 'Valeur Prédictive Négative. Parmi les cas prédits négatifs, proportion qui sont réellement négatifs.',
+  specificity: 'Taux de vrais négatifs (TNR). Proportion de cas négatifs correctement identifiés comme tels.',
+  accuracy: 'Proportion globale de prédictions correctes sur le jeu de validation.',
+  f1: 'Moyenne harmonique de la précision et du rappel. Équilibre les deux.',
+  precision: 'Parmi les cas prédits positifs, proportion qui sont réellement positifs.',
+  recall: 'Parmi tous les cas positifs, proportion correctement détectée (sensibilité).',
+};
+
 // eslint-disable-next-line react-refresh/only-export-components
 export function fmtMetric(v: number | undefined | null): string {
   if (v == null || Number.isNaN(Number(v))) return '—';
@@ -75,17 +86,22 @@ export function CvResultsPanel({
         )}
       </div>
 
-      {/* Tableau transposé : stats en lignes, métriques en colonnes */}
-      {metricKeys.length > 0 && (
+      {/* Tableau transposé : stats en lignes, top métriques en colonnes */}
+      {topMetricKeys.length > 0 && (
         <div className="overflow-x-auto rounded-lg border border-border/60">
           <table className="w-full text-xs" aria-label="Statistiques CV par métrique">
             <thead className="bg-muted/60">
               <tr>
-                <th scope="col" className="px-2 py-1.5 text-left font-medium text-muted-foreground w-16 shrink-0">
+                <th scope="col" className="px-3 py-2 text-left font-medium text-muted-foreground w-20 shrink-0">
                   Stat
                 </th>
-                {metricKeys.map((k) => (
-                  <th key={k} scope="col" className="px-2 py-1.5 text-center font-medium">
+                {topMetricKeys.map((k) => (
+                  <th
+                    key={k}
+                    scope="col"
+                    className={`px-3 py-2 text-center font-medium ${METRIC_TOOLTIPS[k] ? 'cursor-help underline decoration-dotted decoration-muted-foreground/40 underline-offset-2' : ''}`}
+                    title={METRIC_TOOLTIPS[k]}
+                  >
                     {k}
                   </th>
                 ))}
@@ -95,13 +111,13 @@ export function CvResultsPanel({
               {/* Ligne Moyenne */}
               <tr className="border-t border-border/60 bg-background">
                 <td
-                  className="px-2 py-1.5 font-medium text-muted-foreground cursor-help underline decoration-dotted decoration-muted-foreground/50 underline-offset-2"
+                  className="px-3 py-2 font-medium text-muted-foreground cursor-help underline decoration-dotted decoration-muted-foreground/50 underline-offset-2"
                   title="Moyenne des scores obtenus sur chaque fold de validation. C'est l'estimation principale de la performance du modèle sur des données non vues."
                 >
                   Moy. CV
                 </td>
-                {metricKeys.map((k) => (
-                  <td key={k} className="px-2 py-1.5 text-center font-semibold text-primary">
+                {topMetricKeys.map((k) => (
+                  <td key={k} className="px-3 py-2 text-center font-semibold text-primary">
                     {fmtMetric(cvSummary.mean?.[k])}
                   </td>
                 ))}
@@ -109,13 +125,13 @@ export function CvResultsPanel({
               {/* Ligne Écart-type */}
               <tr className="border-t border-border/50">
                 <td
-                  className="px-2 py-1.5 font-medium text-muted-foreground cursor-help underline decoration-dotted decoration-muted-foreground/50 underline-offset-2"
+                  className="px-3 py-2 font-medium text-muted-foreground cursor-help underline decoration-dotted decoration-muted-foreground/50 underline-offset-2"
                   title="Écart-type entre les folds. Une valeur faible indique que le modèle est stable et que la performance ne varie pas beaucoup d'un fold à l'autre."
                 >
                   ±σ
                 </td>
-                {metricKeys.map((k) => (
-                  <td key={k} className="px-2 py-1.5 text-center text-muted-foreground">
+                {topMetricKeys.map((k) => (
+                  <td key={k} className="px-3 py-2 text-center text-muted-foreground">
                     {fmtMetric(cvSummary.std?.[k])}
                   </td>
                 ))}
@@ -123,16 +139,16 @@ export function CvResultsPanel({
               {/* Ligne Étendue Min–Max combinée */}
               <tr className="border-t border-border/50">
                 <td
-                  className="px-2 py-1.5 font-medium text-muted-foreground cursor-help underline decoration-dotted decoration-muted-foreground/50 underline-offset-2"
+                  className="px-3 py-2 font-medium text-muted-foreground cursor-help underline decoration-dotted decoration-muted-foreground/50 underline-offset-2"
                   title="Score minimum et maximum observés parmi tous les folds. Un écart important (Min ↔ Max) signale une instabilité : certains sous-ensembles de données pénalisent plus le modèle que d'autres."
                 >
                   Étendue
                 </td>
-                {metricKeys.map((k) => {
+                {topMetricKeys.map((k) => {
                   const mn = cvSummary.min?.[k];
                   const mx = cvSummary.max?.[k];
                   return (
-                    <td key={k} className="px-2 py-1.5 text-center text-muted-foreground">
+                    <td key={k} className="px-3 py-2 text-center text-muted-foreground">
                       {mn != null && mx != null
                         ? `${fmtMetric(mn)}–${fmtMetric(mx)}`
                         : '—'}
@@ -144,13 +160,13 @@ export function CvResultsPanel({
               {hasHoldoutTest && (
                 <tr className="border-t border-border/60 bg-emerald-50/40 dark:bg-emerald-950/20">
                   <td
-                    className="px-2 py-1.5 font-medium text-emerald-700 dark:text-emerald-400 cursor-help underline decoration-dotted decoration-emerald-600/50 underline-offset-2"
+                    className="px-3 py-2 font-medium text-emerald-700 dark:text-emerald-400 cursor-help underline decoration-dotted decoration-emerald-600/50 underline-offset-2"
                     title="Score mesuré sur le jeu de test holdout, totalement isolé pendant l'entraînement et la validation croisée. C'est l'évaluation finale la plus fiable de la capacité du modèle à généraliser."
                   >
                     Holdout
                   </td>
-                  {metricKeys.map((k) => (
-                    <td key={k} className="px-2 py-1.5 text-center font-semibold text-emerald-700 dark:text-emerald-400">
+                  {topMetricKeys.map((k) => (
+                    <td key={k} className="px-3 py-2 text-center font-semibold text-emerald-700 dark:text-emerald-400">
                       {fmtMetric(holdoutFlat[k])}
                     </td>
                   ))}
@@ -159,6 +175,13 @@ export function CvResultsPanel({
             </tbody>
           </table>
         </div>
+      )}
+
+      {/* Note si des métriques supplémentaires existent */}
+      {metricKeys.length > topMetricKeys.length && (
+        <p className="text-[10px] text-muted-foreground">
+          +&nbsp;{metricKeys.length - topMetricKeys.length} autre{metricKeys.length - topMetricKeys.length > 1 ? 's métriques' : ' métrique'} visible{metricKeys.length - topMetricKeys.length > 1 ? 's' : ''} dans les détails par fold.
+        </p>
       )}
 
       {/* Détails par fold — collapsible */}
@@ -177,7 +200,14 @@ export function CvResultsPanel({
                   <th scope="col" className="px-2 py-1.5 text-left font-medium">Val</th>
                   <th scope="col" className="px-2 py-1.5 text-left font-medium">Balancing</th>
                   {topMetricKeys.map((k) => (
-                    <th key={k} scope="col" className="px-2 py-1.5 text-left font-medium">{k}</th>
+                    <th
+                      key={k}
+                      scope="col"
+                      className={`px-2 py-1.5 text-left font-medium ${METRIC_TOOLTIPS[k] ? 'cursor-help underline decoration-dotted decoration-muted-foreground/40 underline-offset-2' : ''}`}
+                      title={METRIC_TOOLTIPS[k]}
+                    >
+                      {k}
+                    </th>
                   ))}
                 </tr>
               </thead>

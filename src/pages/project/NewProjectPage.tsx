@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
 import { Plus, FolderOpen, Loader2, Database, ImageIcon } from "lucide-react";
+import { useTranslation } from "react-i18next";
 
 import { AppLayout } from "@/layouts/AppLayout";
 import { Button } from "@/components/ui/button";
@@ -16,6 +17,7 @@ import { fadeInUp } from "@/components/ui/page-transition";
 import { cn } from "@/lib/utils";
 
 export function NewProjectPage() {
+  const { t } = useTranslation();
   const navigate = useNavigate();
   const { toast } = useToast();
   const { user } = useAuth();
@@ -29,8 +31,8 @@ export function NewProjectPage() {
     e.preventDefault();
     if (!user) {
       toast({
-        title: "Session expirée",
-        description: "Veuillez vous reconnecter.",
+        title: t("newProject.sessionExpired"),
+        description: t("newProject.reconnect"),
         variant: "destructive",
       });
       navigate("/login");
@@ -46,10 +48,10 @@ export function NewProjectPage() {
       });
 
       toast({
-        title: "Projet créé",
+        title: t("newProject.successTitle"),
         description: projectType === "imaging"
-          ? "Vous pouvez maintenant importer vos images."
-          : "Vous pouvez maintenant importer vos données.",
+          ? t("newProject.successImaging")
+          : t("newProject.successTabular"),
       });
 
       if (projectType === "imaging") {
@@ -59,8 +61,8 @@ export function NewProjectPage() {
       }
     } catch (error) {
       toast({
-        title: "Erreur",
-        description: (error as Error).message || "Impossible de créer le projet",
+        title: t("newProject.errorTitle"),
+        description: (error as Error).message || t("newProject.errorCreate"),
         variant: "destructive",
       });
     } finally {
@@ -77,47 +79,45 @@ export function NewProjectPage() {
         variants={fadeInUp}
       >
         <div>
-          <h1 className="text-3xl font-bold text-foreground">Nouveau projet</h1>
-          <p className="text-muted-foreground mt-1">
-            Créez un nouveau projet d'analyse médicale
-          </p>
+          <h1 className="text-3xl font-bold text-foreground">{t("newProject.title")}</h1>
+          <p className="text-muted-foreground mt-1">{t("newProject.subtitle")}</p>
         </div>
 
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <FolderOpen className="h-5 w-5 text-primary" />
-              Informations du projet
+              {t("newProject.typeLabel")}
             </CardTitle>
           </CardHeader>
           <CardContent>
             <form onSubmit={handleCreate} className="space-y-6">
               <div className="space-y-2">
-                <Label htmlFor="name">Nom du projet</Label>
+                <Label htmlFor="name">{t("newProject.nameLabel")}</Label>
                 <Input
                   id="name"
                   value={name}
                   onChange={(e) => setName(e.target.value)}
-                  placeholder="Ex: Diagnostic Cardiaque"
+                  placeholder={t("newProject.namePlaceholder")}
                   required
                   disabled={isCreating}
                 />
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="description">Description</Label>
+                <Label htmlFor="description">{t("newProject.descriptionLabel")}</Label>
                 <Textarea
                   id="description"
                   value={description}
                   onChange={(e) => setDescription(e.target.value)}
-                  placeholder="Décrivez l'objectif de ce projet d'analyse..."
+                  placeholder={t("newProject.descriptionPlaceholder")}
                   rows={3}
                   disabled={isCreating}
                 />
               </div>
 
               <div className="space-y-2">
-                <Label>Type de données</Label>
+                <Label>{t("newProject.typeLabel")}</Label>
                 <div className="grid grid-cols-2 gap-3">
                   <button
                     type="button"
@@ -132,8 +132,8 @@ export function NewProjectPage() {
                   >
                     <Database className={cn("h-5 w-5", projectType === "tabular" ? "text-primary" : "text-muted-foreground")} />
                     <div>
-                      <p className="font-semibold text-sm">Tabulaire</p>
-                      <p className="text-xs text-muted-foreground mt-0.5">CSV / Excel — sklearn, XGBoost…</p>
+                      <p className="font-semibold text-sm">{t("newProject.tabularTitle")}</p>
+                      <p className="text-xs text-muted-foreground mt-0.5">{t("newProject.tabularDesc")}</p>
                     </div>
                   </button>
                   <button
@@ -149,8 +149,8 @@ export function NewProjectPage() {
                   >
                     <ImageIcon className={cn("h-5 w-5", projectType === "imaging" ? "text-primary" : "text-muted-foreground")} />
                     <div>
-                      <p className="font-semibold text-sm">Imagerie</p>
-                      <p className="text-xs text-muted-foreground mt-0.5">JPG / PNG — ResNet, EfficientNet…</p>
+                      <p className="font-semibold text-sm">{t("newProject.imagingTitle")}</p>
+                      <p className="text-xs text-muted-foreground mt-0.5">{t("newProject.imagingDesc")}</p>
                     </div>
                   </button>
                 </div>
@@ -164,7 +164,7 @@ export function NewProjectPage() {
                   className="flex-1"
                   disabled={isCreating}
                 >
-                  Annuler
+                  {t("common.cancel")}
                 </Button>
 
                 <Button
@@ -177,7 +177,7 @@ export function NewProjectPage() {
                   ) : (
                     <Plus className="h-4 w-4 mr-2" />
                   )}
-                  Créer le projet
+                  {isCreating ? t("newProject.submitting") : t("newProject.submit")}
                 </Button>
               </div>
             </form>

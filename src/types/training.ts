@@ -48,6 +48,7 @@ export type NumericImputationStrategy = 'none' | 'mean' | 'median' | 'most_frequ
 export type CategoricalImputationStrategy = 'none' | 'most_frequent' | 'constant';
 export type CategoricalEncodingStrategy = 'none' | 'onehot' | 'ordinal' | 'label';
 export type NumericScalingStrategy = 'none' | 'standard' | 'minmax' | 'robust' | 'maxabs';
+export type NumericPowerTransformStrategy = 'none' | 'yeo_johnson' | 'box_cox';
 export type TrainingColumnType = 'numeric' | 'categorical' | 'ordinal';
 export type TrainingColumnTypeSelection = 'auto' | TrainingColumnType;
 export type TrainingBalancingStrategy =
@@ -70,6 +71,7 @@ export type TrainingDatasetScale = 'tiny' | 'small' | 'medium' | 'large';
 
 export interface TrainingPreprocessingDefaults {
   numericImputation: NumericImputationStrategy;
+  numericPowerTransform: NumericPowerTransformStrategy;
   numericScaling: NumericScalingStrategy;
   categoricalImputation: CategoricalImputationStrategy;
   categoricalEncoding: CategoricalEncodingStrategy;
@@ -79,6 +81,7 @@ export interface TrainingPreprocessingColumnConfig {
   use?: boolean;
   type?: TrainingColumnType;
   numericImputation?: NumericImputationStrategy;
+  numericPowerTransform?: NumericPowerTransformStrategy;
   numericScaling?: NumericScalingStrategy;
   categoricalImputation?: CategoricalImputationStrategy;
   categoricalEncoding?: CategoricalEncodingStrategy;
@@ -186,6 +189,7 @@ export interface ClassWeightModelCapability {
 
 export const DEFAULT_TRAINING_PREPROCESSING_DEFAULTS: TrainingPreprocessingDefaults = {
   numericImputation: 'median',
+  numericPowerTransform: 'none',
   numericScaling: 'standard',
   categoricalImputation: 'most_frequent',
   categoricalEncoding: 'onehot',
@@ -293,6 +297,23 @@ export interface DatasetProfile {
   recommended_resampling: string | null;
   recommended_metric: string;
   meta_features: Record<string, unknown>;
+  // Distribution analysis
+  non_normal_ratio: number;
+  avg_skewness: number;
+  highly_skewed_count: number;
+  // Per-column stats: {colName: {is_normal, skewness, abs_skewness, n, test_used, p_value, has_missing}}
+  column_distribution: Record<string, ColumnDistributionStat>;
+}
+
+export interface ColumnDistributionStat {
+  is_normal: boolean;
+  skewness: number;
+  abs_skewness: number;
+  n: number;
+  test_used: 'shapiro' | 'dagostino';
+  p_value: number;
+  has_missing: boolean;
+  has_negative: boolean;
 }
 
 export interface TrainingRecommendation {
@@ -310,6 +331,10 @@ export interface TrainingRecommendation {
   recommended_split: { trainRatio: number; valRatio: number; testRatio: number };
   reasoning: Record<string, string>;
   training_config_payload: Record<string, unknown>;
+  recommended_power_transform: string;
+  recommended_scaling: string;
+  recommended_preprocessing: Record<string, unknown>;
+  recommended_column_configs: Record<string, { numericPowerTransform?: string; numericScaling?: string; numericImputation?: string }>;
   warnings: string[];
   profile: DatasetProfile;
 }

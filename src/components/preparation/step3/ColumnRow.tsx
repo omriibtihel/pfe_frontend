@@ -27,6 +27,7 @@ interface ColumnRowProps {
   onTypeChange: (value: TrainingColumnTypeSelection) => void;
   onNumericImputationChange: (value: TrainingPreprocessingDefaults["numericImputation"]) => void;
   onCategoricalImputationChange: (value: TrainingPreprocessingDefaults["categoricalImputation"]) => void;
+  onNumericPowerTransformChange: (value: TrainingPreprocessingDefaults["numericPowerTransform"]) => void;
   onNumericScalingChange: (value: TrainingPreprocessingDefaults["numericScaling"]) => void;
   onCategoricalEncodingChange: (value: TrainingPreprocessingDefaults["categoricalEncoding"]) => void;
   onOrdinalOrderChange: (rawInput: string) => void;
@@ -80,6 +81,7 @@ export function ColumnRow({
   onTypeChange,
   onNumericImputationChange,
   onCategoricalImputationChange,
+  onNumericPowerTransformChange,
   onNumericScalingChange,
   onCategoricalEncodingChange,
   onOrdinalOrderChange,
@@ -295,7 +297,40 @@ export function ColumnRow({
           )}
         </TableCell>
 
-        <TableCell className="w-48">
+        {/* ── Power transform cell (numeric only) ─────────────────────── */}
+        <TableCell className="w-44">
+          {row.effectiveType === "numeric" ? (
+            <div className="space-y-1">
+              <Select
+                value={row.numericPowerTransform}
+                onValueChange={(value) =>
+                  onNumericPowerTransformChange(value as TrainingPreprocessingDefaults["numericPowerTransform"])
+                }
+              >
+                <SelectTrigger className="h-9">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {options.numericPowerTransform.map((method) => (
+                    <SelectItem key={method} value={method}>
+                      {labelForMethod(method)}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {row.numericPowerTransform !== "none" && row.numericScaling === "none" && (
+                <p className="text-[10px] text-amber-600">
+                  z-score implicite (standardize=True)
+                </p>
+              )}
+            </div>
+          ) : (
+            <span className="text-xs text-muted-foreground">N/A</span>
+          )}
+        </TableCell>
+
+        {/* ── Scaling / encoding cell ──────────────────────────────────── */}
+        <TableCell className="w-44">
           {row.effectiveType === "numeric" ? (
             <Select
               value={row.numericScaling}
@@ -350,7 +385,7 @@ export function ColumnRow({
 
       {hasIssues && isExpanded && (
         <TableRow className="bg-muted/20">
-          <TableCell colSpan={8}>
+          <TableCell colSpan={9}>
             <div className="space-y-1 pl-1">
               {row.issues.map((issue) => (
                 <p

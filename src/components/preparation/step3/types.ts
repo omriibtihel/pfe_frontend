@@ -13,6 +13,7 @@ export type Step3TypeFilter = "all" | "numeric" | "categorical" | "ordinal" | "a
 
 export type Step3Options = {
   numericImputation: TrainingPreprocessingDefaults["numericImputation"][];
+  numericPowerTransform: TrainingPreprocessingDefaults["numericPowerTransform"][];
   numericScaling: TrainingPreprocessingDefaults["numericScaling"][];
   categoricalImputation: TrainingPreprocessingDefaults["categoricalImputation"][];
   categoricalEncoding: TrainingPreprocessingDefaults["categoricalEncoding"][];
@@ -27,7 +28,10 @@ export type Step3ColumnRowData = {
   effectiveType: TrainingColumnType;
   use: boolean;
   numericImputation: TrainingPreprocessingDefaults["numericImputation"];
+  numericPowerTransform: TrainingPreprocessingDefaults["numericPowerTransform"];
   numericScaling: TrainingPreprocessingDefaults["numericScaling"];
+  /** True when the column has at least one negative value — used to warn against Box-Cox */
+  hasNegativeValues: boolean;
   categoricalImputation: TrainingPreprocessingDefaults["categoricalImputation"];
   categoricalEncoding: TrainingPreprocessingDefaults["categoricalEncoding"];
   ordinalOrder: string[];

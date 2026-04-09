@@ -1,6 +1,8 @@
 import { ReactNode } from "react";
 import { motion, useReducedMotion, type Variants } from "framer-motion";
 import { Activity, ShieldCheck, Brain, Workflow, type LucideIcon } from "lucide-react";
+import { useTranslation } from "react-i18next";
+import { LanguageSwitcher } from "@/components/LanguageSwitcher";
 
 interface AuthLayoutProps {
   children: ReactNode;
@@ -8,26 +10,14 @@ interface AuthLayoutProps {
 
 interface Feature {
   icon: LucideIcon;
-  title: string;
-  text: string;
+  titleKey: string;
+  textKey: string;
 }
 
-const features: Feature[] = [
-  {
-    icon: ShieldCheck,
-    title: "Données sécurisées",
-    text: "Protection renforcée des données médicales sensibles.",
-  },
-  {
-    icon: Brain,
-    title: "Modèles IA avancés",
-    text: "Pipeline d'entraînement interprétable et robuste.",
-  },
-  {
-    icon: Workflow,
-    title: "Workflow sans friction",
-    text: "Du dataset brut à la prédiction, en quelques clics.",
-  },
+const FEATURES: Feature[] = [
+  { icon: ShieldCheck, titleKey: "auth.layout.feature1Title", textKey: "auth.layout.feature1Text" },
+  { icon: Brain,       titleKey: "auth.layout.feature2Title", textKey: "auth.layout.feature2Text" },
+  { icon: Workflow,    titleKey: "auth.layout.feature3Title", textKey: "auth.layout.feature3Text" },
 ];
 
 const fadeUp: Variants = {
@@ -41,6 +31,7 @@ const stagger: Variants = {
 };
 
 export function AuthLayout({ children }: AuthLayoutProps) {
+  const { t } = useTranslation();
   const reduceMotion = useReducedMotion();
   const animate = !reduceMotion;
 
@@ -48,6 +39,11 @@ export function AuthLayout({ children }: AuthLayoutProps) {
     <div className="min-h-screen [min-height:100svh] bg-background text-foreground">
       {/* Subtle top gradient only */}
       <div className="pointer-events-none fixed inset-0 bg-[radial-gradient(ellipse_70%_40%_at_50%_-5%,hsl(var(--primary)/0.07),transparent)]" />
+
+      {/* Language switcher — top right, always visible */}
+      <div className="fixed right-4 top-4 z-50 sm:right-6">
+        <LanguageSwitcher variant="badge" />
+      </div>
 
       <div className="relative z-10 mx-auto flex min-h-screen [min-height:100svh] max-w-screen-xl px-4 sm:px-6 lg:items-center lg:px-12">
 
@@ -74,32 +70,31 @@ export function AuthLayout({ children }: AuthLayoutProps) {
           {/* Headline */}
           <motion.div variants={fadeUp} className="space-y-4">
             <h1 className="text-4xl font-semibold leading-[1.18] tracking-tight xl:text-[2.6rem]">
-              L'IA médicale,{" "}
-              <span className="text-primary">à portée de données.</span>
+              {t("auth.layout.tagline")}{" "}
+              <span className="text-primary">{t("auth.layout.taglineAccent")}</span>
             </h1>
             <p className="text-[15px] leading-relaxed text-muted-foreground">
-              Connectez vos datasets, entraînez vos modèles et déployez vos prédictions dans un environnement
-              sécurisé et structuré.
+              {t("auth.layout.subtitle")}
             </p>
           </motion.div>
 
           {/* Feature list */}
           <motion.ul variants={stagger} className="space-y-5">
-            {features.map((f) => (
-              <motion.li key={f.title} variants={fadeUp} className="flex items-start gap-4">
+            {FEATURES.map((f) => (
+              <motion.li key={f.titleKey} variants={fadeUp} className="flex items-start gap-4">
                 <div className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-primary/10">
                   <f.icon className="h-3.5 w-3.5 text-primary" />
                 </div>
                 <div>
-                  <p className="text-sm font-semibold leading-none">{f.title}</p>
-                  <p className="mt-1 text-sm text-muted-foreground">{f.text}</p>
+                  <p className="text-sm font-semibold leading-none">{t(f.titleKey)}</p>
+                  <p className="mt-1 text-sm text-muted-foreground">{t(f.textKey)}</p>
                 </div>
               </motion.li>
             ))}
           </motion.ul>
 
           <motion.p variants={fadeUp} className="text-xs text-muted-foreground/60">
-            © 2025 MedicalVision — Environnement professionnel sécurisé
+            {t("common.copyright")}
           </motion.p>
         </motion.aside>
 

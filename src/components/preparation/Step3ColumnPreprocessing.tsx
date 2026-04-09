@@ -1,8 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { motion } from "framer-motion";
-import { AlertTriangle, CheckCircle2, Columns3, Info, SlidersHorizontal, XCircle } from "lucide-react";
+import { Columns3, XCircle } from "lucide-react";
 
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -18,13 +16,12 @@ import { useColumnIssues } from "@/hooks/useColumnIssues";
 import { useDebouncedValidation } from "@/hooks/useDebouncedValidation";
 import type {
   DatasetColumn,
+  DatasetProfile,
   TrainingColumnTypeSelection,
   TrainingConfig,
   TrainingPreprocessingColumnConfig,
   TrainingPreprocessingConfig,
   TrainingPreprocessingDefaults,
-  TrainingValidationPreviewMode,
-  TrainingValidationPreviewSubset,
 } from "@/types";
 import { DEFAULT_ADVANCED_PARAMS, DEFAULT_TRAINING_PREPROCESSING } from "@/types";
 import {
@@ -37,8 +34,8 @@ import { BulkActionsBar } from "./step3/BulkActionsBar";
 import { ColumnFilterBar } from "./step3/ColumnFilterBar";
 import { ColumnRow } from "./step3/ColumnRow";
 import { DefaultsPanel } from "./step3/DefaultsPanel";
+import { DistributionInsightBanner } from "./step3/DistributionInsightBanner";
 import { IssuesPanel } from "./step3/IssuesPanel";
-import { PreviewPanel } from "./step3/PreviewPanel";
 import {
   cleanColumnConfig,
   clonePreprocessingConfig,
@@ -73,7 +70,6 @@ export type Step3ValidationState = {
 const AUTO_TYPE = "auto" as const;
 const PAGE_SIZE = 80;
 const SERVER_VALIDATION_DEBOUNCE_MS = 500;
-const PREVIEW_RANDOM_SEED = 42;
 
 type BaseRow = Omit<Step3ColumnRowData, "issues" | "errorCount" | "warningCount" | "status">;
 
@@ -85,11 +81,13 @@ function toValidationRows(rows: BaseRow[]): Step3ColumnValidationState[] {
     selectedType: row.selectedType,
     effectiveType: row.effectiveType,
     numericImputation: row.numericImputation,
+    numericPowerTransform: row.numericPowerTransform,
     numericScaling: row.numericScaling,
     categoricalImputation: row.categoricalImputation,
     categoricalEncoding: row.categoricalEncoding,
     ordinalOrder: row.ordinalOrder,
     hasExplicitCategoricalConfig: row.hasExplicitCategoricalConfig,
+    hasNegativeValues: row.hasNegativeValues,
   }));
 }
 
@@ -105,15 +103,13 @@ export function Step3ColumnPreprocessing({
   );
   const [columns, setColumns] = useState<DatasetColumn[]>([]);
   const [loadingColumns, setLoadingColumns] = useState(false);
+  const [columnProfile, setColumnProfile] = useState<DatasetProfile | null>(null);
   const [selectedColumns, setSelectedColumns] = useState<Set<string>>(new Set());
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<Step3StatusFilter>("all");
   const [typeFilter, setTypeFilter] = useState<Step3TypeFilter>("all");
   const [currentPage, setCurrentPage] = useState(1);
   const [expandedIssueRows, setExpandedIssueRows] = useState<Set<string>>(new Set());
-  const [previewSubset, setPreviewSubset] = useState<TrainingValidationPreviewSubset>("train");
-  const [previewMode, setPreviewMode] = useState<TrainingValidationPreviewMode>("head");
-  const [previewN, setPreviewN] = useState<number>(100);
 
   const rowRefs = useRef<Record<string, HTMLTableRowElement | null>>({});
   const lastBulkSnapshotRef = useRef<TrainingPreprocessingConfig | null>(null);
@@ -184,6 +180,7 @@ export function Step3ColumnPreprocessing({
   const options: Step3Options = useMemo(
     () => ({
       numericImputation: withNoneFirst(capabilities.numericImputation),
+      numericPowerTransform: withNoneFirst(capabilities.numericPowerTransform),
       numericScaling: withNoneFirst(capabilities.numericScaling),
       categoricalImputation: withNoneFirst(capabilities.categoricalImputation),
       categoricalEncoding: withNoneFirst(capabilities.categoricalEncoding),
@@ -209,6 +206,7 @@ export function Step3ColumnPreprocessing({
           effectiveType,
           use: cfg.use ?? true,
           numericImputation: cfg.numericImputation ?? preprocessing.defaults.numericImputation,
+          numericPowerTransform: cfg.numericPowerTransform ?? preprocessing.defaults.numericPowerTransform,
           numericScaling: cfg.numericScaling ?? preprocessing.defaults.numericScaling,
           categoricalImputation: cfg.categoricalImputation ?? preprocessing.defaults.categoricalImputation,
           categoricalEncoding: cfg.categoricalEncoding ?? preprocessing.defaults.categoricalEncoding,
@@ -219,28 +217,14 @@ export function Step3ColumnPreprocessing({
           constantFillNumeric: cfg.constantFillNumeric,
           constantFillCategorical: cfg.constantFillCategorical,
           globalAdvancedParams,
+          hasNegativeValues: columnProfile?.column_distribution?.[column.name]?.has_negative ?? false,
         };
       }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [featureColumns, preprocessing.columns, preprocessing.defaults, globalAdvancedParams]
+    [featureColumns, preprocessing.columns, preprocessing.defaults, globalAdvancedParams, columnProfile]
   );
 
   const localIssues = useMemo(() => validateLocal(toValidationRows(baseRows), capabilities), [baseRows, capabilities]);
-  const valSubsetAvailable = Number(config.valRatio ?? 0) > 0;
-  const testSubsetAvailable = Number(config.testRatio ?? 0) > 0;
-
-  useEffect(() => {
-    if (previewSubset === "val" && !valSubsetAvailable) { setPreviewSubset("train"); return; }
-    if (previewSubset === "test" && !testSubsetAvailable) setPreviewSubset("train");
-  }, [previewSubset, testSubsetAvailable, valSubsetAvailable]);
-
-  const validateOptions = useMemo(
-    () => ({
-      include: { preview: true },
-      preview: { subset: previewSubset, mode: previewMode, n: previewN, seed: PREVIEW_RANDOM_SEED },
-    }),
-    [previewMode, previewN, previewSubset]
-  );
 
   const { serverResult, isValidating, lastValidatedAt, validationError } = useDebouncedValidation({
     projectId,
@@ -252,7 +236,6 @@ export function Step3ColumnPreprocessing({
       Boolean(String(config.targetColumn ?? "").trim()) &&
       featureColumns.length > 0,
     delayMs: SERVER_VALIDATION_DEBOUNCE_MS,
-    validateOptions,
   });
 
   const serverIssues = useMemo(() => {
@@ -272,24 +255,6 @@ export function Step3ColumnPreprocessing({
     ];
     return out;
   }, [baseRows, serverResult, validationError]);
-
-  const previewColumns = useMemo(() => {
-    const columnsRaw = serverResult?.previewTransformed?.columns;
-    if (!Array.isArray(columnsRaw)) return [];
-    return columnsRaw.map((v) => String(v ?? ""));
-  }, [serverResult]);
-
-  const previewRows = useMemo(() => {
-    const rowsRaw = serverResult?.previewTransformed?.rows;
-    if (!Array.isArray(rowsRaw)) return [];
-    return rowsRaw
-      .filter((row) => Array.isArray(row))
-      .map((row) =>
-        (row as unknown[]).slice(0, previewColumns.length).concat(
-          Array.from({ length: Math.max(0, previewColumns.length - (row as unknown[]).length) }).map(() => null)
-        )
-      );
-  }, [previewColumns.length, serverResult]);
 
   const { mergedIssues, counts, columnCounts, issuesList } = useColumnIssues(localIssues, serverIssues);
 
@@ -392,6 +357,7 @@ export function Step3ColumnPreprocessing({
         ...current,
         use: current.use ?? true,
         numericImputation: preprocessing.defaults.numericImputation,
+        numericPowerTransform: preprocessing.defaults.numericPowerTransform,
         numericScaling: preprocessing.defaults.numericScaling,
         categoricalImputation: preprocessing.defaults.categoricalImputation,
         categoricalEncoding: preprocessing.defaults.categoricalEncoding,
@@ -453,8 +419,6 @@ export function Step3ColumnPreprocessing({
   const filteredSelectedCount = filteredRows.filter((row) => selectedColumns.has(row.columnName)).length;
   const activeRowsCount = rows.filter((row) => row.use).length;
   const droppedRowsCount = rows.length - activeRowsCount;
-  const autoTypeRowsCount = rows.filter((row) => row.selectedType === AUTO_TYPE).length;
-  const manualTypeRowsCount = rows.length - autoTypeRowsCount;
   const hasActiveFilters = Boolean(searchQuery.trim()) || statusFilter !== "all" || typeFilter !== "all";
   const statusFilterCounts = {
     all: rows.length,
@@ -466,44 +430,28 @@ export function Step3ColumnPreprocessing({
 
   return (
     <div className="space-y-6">
-      <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}>
-        <Card className="gradient-subtle border-primary/20">
-          <CardContent className="py-5 space-y-4">
-            <div className="flex flex-wrap items-start gap-4">
-              <div className="space-y-1">
-                <p className="inline-flex items-center gap-2 text-sm font-semibold text-foreground">
-                  <span className="rounded-lg bg-primary/10 p-2">
-                    <SlidersHorizontal className="h-4 w-4 text-primary" />
-                  </span>
-                  Configuration preprocessing
-                </p>
-                <p className="text-xs text-muted-foreground max-w-2xl">
-                  Definissez d'abord les defaults puis ajustez rapidement les colonnes problematiques via filtres et
-                  actions en lot.
-                </p>
-              </div>
-              <Badge variant={counts.errors > 0 ? "destructive" : "secondary"} className="ml-auto text-xs">
-                {counts.errors > 0 ? "Correction requise" : "Configuration exploitable"}
-              </Badge>
-            </div>
-
-            <div className="grid grid-cols-2 md:grid-cols-5 gap-2">
-              {[
-                { label: "Variables", value: rows.length, className: "" },
-                { label: "Actives", value: activeRowsCount, className: "text-emerald-700" },
-                { label: "Supprimées", value: droppedRowsCount, className: "text-amber-700" },
-                { label: "Types auto", value: autoTypeRowsCount, className: "" },
-                { label: "Types forcés", value: manualTypeRowsCount, className: "" },
-              ].map(({ label, value, className }) => (
-                <div key={label} className="rounded-lg border border-border/60 bg-background/70 p-2">
-                  <p className="text-[11px] text-muted-foreground">{label}</p>
-                  <p className={`text-sm font-semibold ${className}`}>{value}</p>
-                </div>
-              ))}
-            </div>
-          </CardContent>
-        </Card>
-      </motion.div>
+      <DistributionInsightBanner
+        projectId={projectId}
+        versionId={config.datasetVersionId}
+        targetColumn={config.targetColumn}
+        currentDefaults={preprocessing.defaults}
+        currentColumns={preprocessing.columns}
+        onProfileLoaded={setColumnProfile}
+        onApplyGlobalDefaults={(powerTransform, scaling, imputation) => {
+          setDefaultValue('numericPowerTransform', powerTransform);
+          setDefaultValue('numericScaling', scaling);
+          setDefaultValue('numericImputation', imputation);
+        }}
+        onApplyPerColumn={(configs) => {
+          const nextColumns = { ...preprocessing.columns };
+          for (const [name, cfg] of Object.entries(configs)) {
+            const updated = cleanColumnConfig({ ...(nextColumns[name] ?? {}), ...cfg });
+            if (updated) nextColumns[name] = updated;
+            else delete nextColumns[name];
+          }
+          setPreprocessing({ ...preprocessing, columns: nextColumns });
+        }}
+      />
 
       <DefaultsPanel
         preprocessing={preprocessing}
@@ -512,52 +460,27 @@ export function Step3ColumnPreprocessing({
         onSetAdvancedParams={setAdvancedParams}
       />
 
-      <div className="grid grid-cols-1 xl:grid-cols-12 gap-4 items-start">
-        <div className="xl:col-span-8">
-          <IssuesPanel
-            counts={counts}
-            issues={issuesList}
-            isValidating={isValidating}
-            lastValidatedAt={lastValidatedAt}
-            validationError={validationError}
-            onIssueClick={(columnName) => {
-              if (!filteredRows.some((r) => r.columnName === columnName)) {
-                setSearchQuery("");
-                setStatusFilter("all");
-                setTypeFilter("all");
-              }
-              const rowIndex = rows.findIndex((r) => r.columnName === columnName);
-              if (rowIndex >= 0 && rows.length > 200) setCurrentPage(Math.floor(rowIndex / PAGE_SIZE) + 1);
-              setExpandedIssueRows((prev) => new Set(prev).add(columnName));
-              window.setTimeout(
-                () => rowRefs.current[columnName]?.scrollIntoView({ behavior: "smooth", block: "center" }),
-                40
-              );
-            }}
-          />
-        </div>
-
-        <div className="xl:col-span-4">
-          <motion.div initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }}>
-            <Card className="border-dashed border-border/70">
-              <CardContent className="py-4 text-xs text-muted-foreground">
-                <div className="flex items-start gap-2">
-                  <Info className="h-4 w-4 mt-0.5" />
-                  <div>
-                    <p className="font-medium text-foreground mb-1">Comment ça marche</p>
-                    <p>
-                      Les <strong>Defaults</strong> définissent les méthodes appliquées à toutes les colonnes
-                      qui n'ont pas de config individuelle. Si une colonne a sa propre config, elle prend
-                      la priorité. Les paramètres avancés (k KNN, fill_value, VarianceThreshold) sont
-                      visibles et configurables — rien n'est appliqué silencieusement.
-                    </p>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          </motion.div>
-        </div>
-      </div>
+      <IssuesPanel
+        counts={counts}
+        issues={issuesList}
+        isValidating={isValidating}
+        lastValidatedAt={lastValidatedAt}
+        validationError={validationError}
+        onIssueClick={(columnName) => {
+          if (!filteredRows.some((r) => r.columnName === columnName)) {
+            setSearchQuery("");
+            setStatusFilter("all");
+            setTypeFilter("all");
+          }
+          const rowIndex = rows.findIndex((r) => r.columnName === columnName);
+          if (rowIndex >= 0 && rows.length > 200) setCurrentPage(Math.floor(rowIndex / PAGE_SIZE) + 1);
+          setExpandedIssueRows((prev) => new Set(prev).add(columnName));
+          window.setTimeout(
+            () => rowRefs.current[columnName]?.scrollIntoView({ behavior: "smooth", block: "center" }),
+            40
+          );
+        }}
+      />
 
       <Card className="glass-premium shadow-card">
         <CardHeader className="pb-2">
@@ -565,15 +488,14 @@ export function Step3ColumnPreprocessing({
             <div className="p-2 rounded-xl bg-secondary/10">
               <Columns3 className="h-4 w-4 text-secondary" />
             </div>
-            Preprocessing par colonne
-            <Badge variant="outline" className="ml-auto text-xs">use=false (drop)</Badge>
+            Colonnes
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
           {counts.errors > 0 && (
             <div className="rounded-lg border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive flex items-start gap-2">
               <XCircle className="h-4 w-4 mt-0.5" />
-              <span>Configuration invalide: corrigez les erreurs avant de continuer.</span>
+              <span>Configuration invalide : corrigez les erreurs avant de continuer.</span>
             </div>
           )}
 
@@ -649,11 +571,11 @@ export function Step3ColumnPreprocessing({
                   <Table>
                     <TableHeader>
                       <TableRow>
-                        {["Status", "Sel.", "Colonne", "Use", "Type", "Imputation", "Scaling / Encoding", "Ordinal order"].map((header, i) => (
+                        {["État", "Sél.", "Colonne", "Inclure", "Type", "Valeurs manquantes", "Transformation", "Normalisation / Encodage", "Ordre ordinal"].map((header, i) => (
                           <TableHead
                             key={header}
                             className={`sticky top-0 z-20 bg-background/95 backdrop-blur ${
-                              i === 0 ? "w-20" : i === 1 ? "w-12" : i === 3 ? "w-24" : i === 4 ? "w-44" : i === 5 ? "w-48" : i === 6 ? "w-48" : i === 7 ? "w-56" : ""
+                              i === 0 ? "w-20" : i === 1 ? "w-12" : i === 3 ? "w-24" : i === 4 ? "w-44" : i === 5 ? "w-48" : i === 6 ? "w-44" : i === 7 ? "w-44" : i === 8 ? "w-56" : ""
                             }`}
                           >
                             {header}
@@ -697,6 +619,9 @@ export function Step3ColumnPreprocessing({
                           }
                           onCategoricalImputationChange={(value) =>
                             updateColumnConfig(row.columnName, (c) => ({ ...c, categoricalImputation: value }))
+                          }
+                          onNumericPowerTransformChange={(value) =>
+                            updateColumnConfig(row.columnName, (c) => ({ ...c, numericPowerTransform: value }))
                           }
                           onNumericScalingChange={(value) =>
                             updateColumnConfig(row.columnName, (c) => ({ ...c, numericScaling: value }))
@@ -759,7 +684,7 @@ export function Step3ColumnPreprocessing({
                     disabled={currentPage <= 1}
                     onClick={() => setCurrentPage((prev) => Math.max(1, prev - 1))}
                   >
-                    Previous
+                    Précédent
                   </Button>
                   <span className="text-xs text-muted-foreground">Page {currentPage} / {totalPages}</span>
                   <Button
@@ -767,7 +692,7 @@ export function Step3ColumnPreprocessing({
                     disabled={currentPage >= totalPages}
                     onClick={() => setCurrentPage((prev) => Math.min(totalPages, prev + 1))}
                   >
-                    Next
+                    Suivant
                   </Button>
                 </div>
               )}
@@ -776,21 +701,6 @@ export function Step3ColumnPreprocessing({
         </CardContent>
       </Card>
 
-      <PreviewPanel
-        previewColumns={previewColumns}
-        previewRows={previewRows}
-        previewMeta={serverResult?.previewMeta as Record<string, unknown> | null | undefined}
-        isValidating={isValidating}
-        validationError={validationError}
-        previewSubset={previewSubset}
-        previewMode={previewMode}
-        previewN={previewN}
-        valSubsetAvailable={valSubsetAvailable}
-        testSubsetAvailable={testSubsetAvailable}
-        onPreviewSubsetChange={setPreviewSubset}
-        onPreviewModeChange={setPreviewMode}
-        onPreviewNChange={setPreviewN}
-      />
     </div>
   );
 }

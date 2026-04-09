@@ -1,4 +1,4 @@
-import { AlertTriangle, CheckCircle2, Search } from 'lucide-react';
+import { Search } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -6,11 +6,11 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import type { Step3StatusFilter, Step3TypeFilter } from './types';
 
 const STATUS_FILTERS: Array<{ value: Step3StatusFilter; label: string }> = [
-  { value: 'all', label: 'All' },
-  { value: 'active', label: 'Active' },
-  { value: 'dropped', label: 'Dropped' },
-  { value: 'errors', label: 'With errors' },
-  { value: 'warnings', label: 'With warnings' },
+  { value: 'all', label: 'Tout' },
+  { value: 'active', label: 'Actives' },
+  { value: 'dropped', label: 'Exclues' },
+  { value: 'errors', label: 'Erreurs' },
+  { value: 'warnings', label: 'Avertissements' },
 ];
 
 interface ColumnFilterBarProps {
@@ -52,21 +52,21 @@ export function ColumnFilterBar({
           <Input
             value={searchQuery}
             onChange={(e) => onSearchChange(e.target.value)}
-            placeholder="Search columns..."
+            placeholder="Rechercher une colonne..."
             className="pl-8"
           />
         </div>
 
         <Select value={typeFilter} onValueChange={(v) => onTypeFilterChange(v as Step3TypeFilter)}>
           <SelectTrigger className="h-9 w-full sm:w-[180px]">
-            <SelectValue placeholder="Filter by type" />
+            <SelectValue placeholder="Filtrer par type" />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="all">Type: all</SelectItem>
-            <SelectItem value="numeric">Type: numeric</SelectItem>
-            <SelectItem value="categorical">Type: categorical</SelectItem>
-            <SelectItem value="ordinal">Type: ordinal</SelectItem>
-            <SelectItem value="auto">Type: auto</SelectItem>
+            <SelectItem value="all">Tous les types</SelectItem>
+            <SelectItem value="numeric">Numérique</SelectItem>
+            <SelectItem value="categorical">Catégoriel</SelectItem>
+            <SelectItem value="ordinal">Ordinal</SelectItem>
+            <SelectItem value="auto">Auto</SelectItem>
           </SelectContent>
         </Select>
 
@@ -77,7 +77,7 @@ export function ColumnFilterBar({
           disabled={!hasActiveFilters}
           onClick={onResetFilters}
         >
-          Reset filters
+          Réinitialiser
         </Button>
       </div>
 
@@ -99,25 +99,10 @@ export function ColumnFilterBar({
         ))}
       </div>
 
-      <div className="flex flex-wrap items-center gap-2 text-xs">
-        <Badge variant="outline" className="font-normal">
-          {filteredCount} / {totalCount} colonne(s) affichee(s)
-        </Badge>
-        <Badge variant="outline" className="font-normal">
-          {filteredSelectedCount} selectionnee(s) dans le filtre courant
-        </Badge>
-        {counts.errors > 0 ? (
-          <Badge variant="destructive" className="font-normal">
-            <AlertTriangle className="h-3 w-3 mr-1" />
-            {counts.errors} erreur(s)
-          </Badge>
-        ) : (
-          <Badge variant="secondary" className="font-normal">
-            <CheckCircle2 className="h-3 w-3 mr-1" />
-            Aucune erreur bloquante
-          </Badge>
-        )}
-      </div>
+      <p className="text-xs text-muted-foreground">
+        {filteredCount} / {totalCount} colonne(s) affichée(s)
+        {filteredSelectedCount > 0 && ` · ${filteredSelectedCount} sélectionnée(s)`}
+      </p>
     </div>
   );
 }

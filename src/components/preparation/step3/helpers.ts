@@ -16,6 +16,8 @@ export function labelForMethod(value: string): string {
     maxabs: "MaxAbs",
     onehot: "One-Hot",
     knn: "KNN",
+    yeo_johnson: "Yeo-Johnson (λ optimal)",
+    box_cox: "Box-Cox (X > 0)",
   };
   return map[value] ?? value.charAt(0).toUpperCase() + value.slice(1);
 }
@@ -80,6 +82,7 @@ export function cleanColumnConfig(
   if (next.use === undefined) delete next.use;
   if (next.type === undefined) delete next.type;
   if (next.numericImputation === undefined) delete next.numericImputation;
+  if (next.numericPowerTransform === undefined) delete next.numericPowerTransform;
   if (next.numericScaling === undefined) delete next.numericScaling;
   if (next.categoricalImputation === undefined) delete next.categoricalImputation;
   if (next.categoricalEncoding === undefined) delete next.categoricalEncoding;

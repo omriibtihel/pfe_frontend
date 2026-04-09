@@ -18,11 +18,11 @@ import {
   ChevronRight,
   User,
   BarChart3,
-  Moon,
-  Sun,
   ImageIcon,
 } from "lucide-react";
 
+import { useTranslation } from "react-i18next";
+import { motion, AnimatePresence } from "framer-motion";
 import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -36,37 +36,42 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { UserProfileDialog } from "@/components/UserProfileDialog";
+import { LanguageSwitcher } from "@/components/LanguageSwitcher";
+import { ThemeToggle } from "@/components/ThemeToggle";
 
 interface AppLayoutProps {
   children: ReactNode;
 }
 
-const navItems = [
-  { path: "/dashboard", icon: LayoutDashboard, label: "Tableau de bord" },
-  { path: "/projects", icon: FolderOpen, label: "Projets" },
-];
-
-const projectNavItems = [
-  { path: "import",      icon: Upload,    label: "Import" },
-  { path: "database",    icon: Database,  label: "Données" },
-  { path: "charts",      icon: BarChart3, label: "Graphiques" },
-  { path: "nettoyage",   icon: Settings2, label: "Nettoyage" },
-  { path: "versions",    icon: GitBranch, label: "Versions" },
-  { path: "preparation", icon: Sliders,   label: "Préparation ML" },
-  { path: "training",    icon: Brain,     label: "Entraînement" },
-  { path: "predict",     icon: Target,    label: "Prédiction" },
-];
-
-const imagingNavItems = [
-  { path: "imaging/import",    icon: Upload,    label: "Import images" },
-  { path: "imaging/training",  icon: Brain,     label: "Entraînement" },
-  { path: "imaging/predict",   icon: Target,    label: "Prédiction" },
-];
+// Nav items are built inside the component to be reactive to language changes
 
 export function AppLayout({ children }: AppLayoutProps) {
+  const { t } = useTranslation();
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
+
+  const navItems = [
+    { path: "/dashboard", icon: LayoutDashboard, label: t("nav.dashboard") },
+    { path: "/projects",  icon: FolderOpen,       label: t("nav.projects") },
+  ];
+
+  const projectNavItems = [
+    { path: "import",      icon: Upload,    label: t("nav.import") },
+    { path: "database",    icon: Database,  label: t("nav.data") },
+    { path: "charts",      icon: BarChart3, label: t("nav.charts") },
+    { path: "nettoyage",   icon: Settings2, label: t("nav.cleaning") },
+    { path: "versions",    icon: GitBranch, label: t("nav.versions") },
+    { path: "preparation", icon: Sliders,   label: t("nav.preparation") },
+    { path: "training",    icon: Brain,     label: t("nav.training") },
+    { path: "predict",     icon: Target,    label: t("nav.prediction") },
+  ];
+
+  const imagingNavItems = [
+    { path: "imaging/import",   icon: Upload, label: t("nav.imagingImport") },
+    { path: "imaging/training", icon: Brain,  label: t("nav.imagingTraining") },
+    { path: "imaging/predict",  icon: Target, label: t("nav.imagingPrediction") },
+  ];
   const [isDark, setIsDark] = useState(() => {
     const stored = localStorage.getItem("theme");
     const prefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
@@ -170,7 +175,7 @@ export function AppLayout({ children }: AppLayoutProps) {
             {sidebarOpen && (
               <div className="flex min-w-0 flex-col">
                 <span className="text-lg font-bold tracking-tight">MedicalVision</span>
-                <span className="text-xs font-medium text-muted-foreground">Espace IA Médical</span>
+                <span className="text-xs font-medium text-muted-foreground">{t("nav.aiSpace")}</span>
               </div>
             )}
           </Link>
@@ -210,7 +215,7 @@ export function AppLayout({ children }: AppLayoutProps) {
                 {sidebarOpen ? (
                   <span className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-[0.2em] text-muted-foreground">
                     {isImagingProject && <ImageIcon className="h-3 w-3" />}
-                    Projet
+                    {t("nav.project")}
                   </span>
                 ) : (
                   <div className="h-0.5 w-8 rounded-full bg-border" />
@@ -282,46 +287,42 @@ export function AppLayout({ children }: AppLayoutProps) {
                 <p className="truncate text-xs text-muted-foreground">{user?.email}</p>
               </DropdownMenuLabel>
               <DropdownMenuSeparator />
-              <DropdownMenuItem onClick={toggleTheme} className="flex items-center justify-between cursor-pointer">
-                <span className="flex items-center gap-2">
-                  <span className="relative h-4 w-4">
-                    <Sun className={cn(
-                      "absolute inset-0 h-4 w-4 transition-all duration-300",
-                      isDark ? "opacity-0 rotate-90 scale-50" : "opacity-100 rotate-0 scale-100"
-                    )} />
-                    <Moon className={cn(
-                      "absolute inset-0 h-4 w-4 transition-all duration-300",
-                      isDark ? "opacity-100 rotate-0 scale-100" : "opacity-0 -rotate-90 scale-50"
-                    )} />
+              <DropdownMenuItem onSelect={(e) => e.preventDefault()} className="focus:bg-transparent cursor-default p-0">
+                <div className="flex w-full items-center justify-between px-2 py-1.5">
+                  <span className="relative h-5 overflow-hidden text-sm">
+                    <AnimatePresence mode="wait" initial={false}>
+                      <motion.span
+                        key={isDark ? "dark" : "light"}
+                        className="block"
+                        initial={{ y: 14, opacity: 0 }}
+                        animate={{ y: 0,  opacity: 1 }}
+                        exit={{    y: -14, opacity: 0 }}
+                        transition={{ duration: 0.18, ease: [0.22, 1, 0.36, 1] }}
+                      >
+                        {isDark ? t("nav.darkMode") : t("nav.lightMode")}
+                      </motion.span>
+                    </AnimatePresence>
                   </span>
-                  Mode sombre
-                </span>
-                {/* Animated pill toggle */}
-                <span
-                  className={cn(
-                    "relative inline-flex h-5 w-9 flex-shrink-0 rounded-full border-2 border-transparent",
-                    "transition-colors duration-300 ease-in-out",
-                    isDark ? "bg-primary" : "bg-muted-foreground/30"
-                  )}
-                >
-                  <span className={cn(
-                    "inline-block h-4 w-4 transform rounded-full bg-white shadow-sm",
-                    "transition-transform duration-300 ease-in-out",
-                    isDark ? "translate-x-4" : "translate-x-0"
-                  )} />
-                </span>
+                  <ThemeToggle isDark={isDark} onToggle={toggleTheme} />
+                </div>
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem onSelect={(e) => e.preventDefault()} className="focus:bg-transparent cursor-default p-0">
+                <div className="w-full px-2 py-1.5">
+                  <LanguageSwitcher variant="pill" />
+                </div>
               </DropdownMenuItem>
               <DropdownMenuSeparator />
               <DropdownMenuItem onClick={() => setProfileOpen(true)}>
                 <User className="mr-2 h-4 w-4" />
-                Mon profil
+                {t("nav.profile")}
               </DropdownMenuItem>
               <DropdownMenuItem
                 onClick={handleLogout}
                 className="text-destructive focus:text-destructive"
               >
                 <LogOut className="mr-2 h-4 w-4" />
-                Déconnexion
+                {t("nav.logout")}
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>

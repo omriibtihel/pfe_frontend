@@ -97,12 +97,14 @@ export function ModelResultCard({
           label: metricLabels.roc_auc,
           value: toPercent(classView?.rocAuc),
           relatedMetrics: ['roc_auc'] as MetricType[],
+          tooltip: 'Aire sous la courbe ROC. Mesure la capacité du modèle à distinguer les classes (1 = parfait, 0.5 = aléatoire). Fiable même avec des classes déséquilibrées.',
         },
         {
           key: 'pr_auc',
           label: metricLabels.pr_auc,
           value: toPercent(classView?.prAuc),
           relatedMetrics: ['pr_auc'] as MetricType[],
+          tooltip: 'Aire sous la courbe Précision-Rappel. Plus informative que la ROC quand la classe positive est rare (données très déséquilibrées).',
         },
         {
           key: 'precision_main',
@@ -178,11 +180,15 @@ export function ModelResultCard({
           </div>
         </CardHeader>
 
-        <CardContent className="space-y-3 pb-3">
+        <CardContent className="space-y-4 pb-4">
           <section aria-label="Métriques clés">
-            <div className="grid grid-cols-3 gap-1.5">
+            <div className="grid grid-cols-3 gap-2">
               {visibleMetricCards.map((metric) => (
-                <div key={metric.key} className="rounded-md bg-muted/50 px-2 py-1.5 text-center">
+                <div
+                  key={metric.key}
+                  className={`rounded-md bg-muted/50 px-3 py-2 text-center ${'tooltip' in metric ? 'cursor-help' : ''}`}
+                  title={'tooltip' in metric ? (metric as { tooltip: string }).tooltip : undefined}
+                >
                   <p className="text-base font-bold text-primary">{metric.value}</p>
                   <p className="text-[10px] leading-tight text-muted-foreground">{metric.label}</p>
                 </div>
@@ -235,7 +241,7 @@ export function ModelResultCard({
 
           {/* Barre train / test */}
           {!result.isCV ? (
-            <section aria-label="Scores train et test">
+            <section aria-label="Scores train et test" className="border-t border-border/30 pt-3">
               <div className="flex items-center gap-2 text-[11px] text-muted-foreground">
                 <span className="w-8 shrink-0">Train</span>
                 <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-muted" role="img" aria-label={`Train ${toPercent(result.trainScore)}`}>
@@ -252,7 +258,7 @@ export function ModelResultCard({
               </div>
             </section>
           ) : (
-            <div className="flex justify-between text-[11px] text-muted-foreground">
+            <div className="flex justify-between border-t border-border/30 pt-3 text-[11px] text-muted-foreground">
               <span>Train: —</span>
               <span>{result.hasHoldoutTest ? `Test holdout: ${toPercent(result.testScore)}` : `CV moy.: ${toPercent(result.testScore)}`}</span>
             </div>

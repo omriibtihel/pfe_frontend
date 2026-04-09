@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import { motion, useReducedMotion } from "framer-motion";
 import { Activity, Mail, Lock, Loader2, ArrowRight } from "lucide-react";
+import { useTranslation } from "react-i18next";
 
 import { useAuth } from "@/contexts/AuthContext";
 import { AuthLayout } from "@/layouts/AuthLayout";
@@ -23,6 +24,7 @@ const fieldVariants = {
 const iconSpring = { type: "spring", stiffness: 380, damping: 22 } as const;
 
 export function LoginPage() {
+  const { t } = useTranslation();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [isLoading, setIsLoading] = useState(false);
@@ -46,7 +48,7 @@ export function LoginPage() {
     };
     const detail = err.response?.data?.detail;
 
-    if (!detail) return err.message || "Erreur lors de la connexion";
+    if (!detail) return err.message || t("auth.login.defaultError");
     if (typeof detail === "string") return detail;
 
     if (Array.isArray(detail)) {
@@ -70,15 +72,15 @@ export function LoginPage() {
       const user = await login({ email, password });
 
       toast({
-        title: "Connexion reussie",
-        description: "Bienvenue sur MedicalVision",
+        title: t("auth.login.successTitle"),
+        description: t("auth.login.successDesc"),
       });
 
       if (user.role === "admin") navigate("/admin");
       else navigate("/dashboard");
     } catch (error) {
       toast({
-        title: "Erreur",
+        title: t("auth.login.errorTitle"),
         description: extractErrorMessage(error),
         variant: "destructive",
       });
@@ -100,10 +102,8 @@ export function LoginPage() {
 
         {/* Header */}
         <div className="space-y-1.5">
-          <h2 className="text-2xl font-semibold tracking-tight">Connexion</h2>
-          <p className="text-sm text-muted-foreground">
-            Accédez à votre espace de modélisation IA.
-          </p>
+          <h2 className="text-2xl font-semibold tracking-tight">{t("auth.login.title")}</h2>
+          <p className="text-sm text-muted-foreground">{t("auth.login.subtitle")}</p>
         </div>
 
         {/* Form */}
@@ -115,7 +115,7 @@ export function LoginPage() {
           variants={formVariants}
         >
           <motion.div variants={fieldVariants} className="space-y-1.5">
-            <Label htmlFor="email">Adresse email</Label>
+            <Label htmlFor="email">{t("auth.login.emailLabel")}</Label>
             <div className="relative">
               <motion.span
                 className="pointer-events-none absolute left-3 top-1/2 flex"
@@ -132,7 +132,7 @@ export function LoginPage() {
                 onFocus={() => setFocusedField("email")}
                 onBlur={() => setFocusedField(null)}
                 className="pl-9"
-                placeholder="votre@email.com"
+                placeholder={t("auth.login.emailPlaceholder")}
                 required
                 autoComplete="email"
               />
@@ -141,12 +141,12 @@ export function LoginPage() {
 
           <motion.div variants={fieldVariants} className="space-y-1.5">
             <div className="flex items-center justify-between">
-              <Label htmlFor="password">Mot de passe</Label>
+              <Label htmlFor="password">{t("auth.login.passwordLabel")}</Label>
               <button
                 type="button"
                 className="text-xs text-muted-foreground transition-colors hover:text-foreground"
               >
-                Mot de passe oublié ?
+                {t("auth.login.forgotPassword")}
               </button>
             </div>
             <div className="relative">
@@ -177,11 +177,11 @@ export function LoginPage() {
               {isLoading ? (
                 <>
                   <Loader2 className="h-4 w-4 animate-spin" />
-                  Connexion...
+                  {t("auth.login.submitting")}
                 </>
               ) : (
                 <>
-                  Se connecter
+                  {t("auth.login.submit")}
                   <ArrowRight className="h-4 w-4" />
                 </>
               )}
@@ -190,12 +190,12 @@ export function LoginPage() {
         </motion.form>
 
         <p className="text-center text-sm text-muted-foreground">
-          Pas encore de compte ?{" "}
+          {t("auth.login.noAccount")}{" "}
           <Link
             to="/signup"
             className="font-medium text-foreground underline-offset-4 hover:underline"
           >
-            S'inscrire
+            {t("auth.login.signupLink")}
           </Link>
         </p>
       </div>

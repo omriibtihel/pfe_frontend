@@ -71,7 +71,10 @@ export function ModelCardAnalyseTab({ result, isRegression, classView }: ModelCa
                     <p className="text-[10px] text-muted-foreground">Balanced Accuracy</p>
                     <p className="text-sm font-semibold">{toPercent(classView.balancedAccuracy)}</p>
                   </div>
-                  <div className="rounded-md border border-border/60 px-2.5 py-1.5">
+                  <div
+                    className="cursor-help rounded-md border border-border/60 px-2.5 py-1.5"
+                    title="Taux de vrais négatifs (TNR). Proportion de cas négatifs correctement identifiés comme tels. Élevé = peu de fausses alarmes."
+                  >
                     <p className="text-[10px] text-muted-foreground">Spécificité (TNR)</p>
                     <p className="text-sm font-semibold">{toPercent(classView.specificity)}</p>
                   </div>

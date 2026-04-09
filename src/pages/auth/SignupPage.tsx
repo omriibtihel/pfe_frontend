@@ -13,6 +13,7 @@ import {
   Loader2,
   ArrowRight,
 } from "lucide-react";
+import { useTranslation } from "react-i18next";
 
 import { useAuth } from "@/contexts/AuthContext";
 import { AuthLayout } from "@/layouts/AuthLayout";
@@ -35,6 +36,7 @@ const fieldVariants = {
 const iconSpring = { type: "spring", stiffness: 380, damping: 22 } as const;
 
 export function SignupPage() {
+  const { t } = useTranslation();
   const [formData, setFormData] = useState({
     fullName: "",
     email: "",
@@ -95,11 +97,11 @@ export function SignupPage() {
 
       const result = await signup(signupPayload);
 
-      toast({ title: "Inscription reussie", description: result.message });
+      toast({ title: t("auth.signup.successTitle"), description: result.message });
       navigate("/login");
     } catch (error) {
       toast({
-        title: "Erreur",
+        title: t("auth.signup.errorTitle"),
         description: (error as Error).message,
         variant: "destructive",
       });
@@ -121,10 +123,8 @@ export function SignupPage() {
 
         {/* Header */}
         <div className="space-y-1.5">
-          <h2 className="text-2xl font-semibold tracking-tight">Créer un compte</h2>
-          <p className="text-sm text-muted-foreground">
-            Rejoignez la plateforme IA médicale.
-          </p>
+          <h2 className="text-2xl font-semibold tracking-tight">{t("auth.signup.title")}</h2>
+          <p className="text-sm text-muted-foreground">{t("auth.signup.subtitle")}</p>
         </div>
 
         {/* Form */}
@@ -137,7 +137,7 @@ export function SignupPage() {
         >
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 sm:gap-4">
             <motion.div variants={fieldVariants} className="space-y-1.5">
-              <Label htmlFor="fullName">Nom complet</Label>
+              <Label htmlFor="fullName">{t("auth.signup.fullNameLabel")}</Label>
               <div className="relative">
                 <motion.span
                   className="pointer-events-none absolute left-3 top-1/2 flex"
@@ -153,14 +153,14 @@ export function SignupPage() {
                   onFocus={() => setFocusedField("fullName")}
                   onBlur={() => setFocusedField(null)}
                   className="pl-9"
-                  placeholder="Dr. Jean Dupont"
+                  placeholder={t("auth.signup.fullNamePlaceholder")}
                   required
                 />
               </div>
             </motion.div>
 
             <motion.div variants={fieldVariants} className="space-y-1.5">
-              <Label htmlFor="email">Email</Label>
+              <Label htmlFor="email">{t("auth.signup.emailLabel")}</Label>
               <div className="relative">
                 <motion.span
                   className="pointer-events-none absolute left-3 top-1/2 flex"
@@ -177,14 +177,14 @@ export function SignupPage() {
                   onFocus={() => setFocusedField("email")}
                   onBlur={() => setFocusedField(null)}
                   className="pl-9"
-                  placeholder="votre@email.com"
+                  placeholder={t("auth.signup.emailPlaceholder")}
                   required
                 />
               </div>
             </motion.div>
 
             <motion.div variants={fieldVariants} className="space-y-1.5">
-              <Label htmlFor="password">Mot de passe</Label>
+              <Label htmlFor="password">{t("auth.signup.passwordLabel")}</Label>
               <div className="relative">
                 <motion.span
                   className="pointer-events-none absolute left-3 top-1/2 flex"
@@ -208,7 +208,7 @@ export function SignupPage() {
             </motion.div>
 
             <motion.div variants={fieldVariants} className="space-y-1.5">
-              <Label htmlFor="dateOfBirth">Date de naissance</Label>
+              <Label htmlFor="dateOfBirth">{t("auth.signup.dobLabel")}</Label>
               <div className="relative">
                 <motion.span
                   className="pointer-events-none absolute left-3 top-1/2 flex"
@@ -230,7 +230,7 @@ export function SignupPage() {
             </motion.div>
 
             <motion.div variants={fieldVariants} className="space-y-1.5">
-              <Label htmlFor="phone">Téléphone</Label>
+              <Label htmlFor="phone">{t("auth.signup.phoneLabel")}</Label>
               <div className="relative">
                 <motion.span
                   className="pointer-events-none absolute left-3 top-1/2 flex"
@@ -246,13 +246,13 @@ export function SignupPage() {
                   onFocus={() => setFocusedField("phone")}
                   onBlur={() => setFocusedField(null)}
                   className="pl-9"
-                  placeholder="+216 ..."
+                  placeholder={t("auth.signup.phonePlaceholder")}
                 />
               </div>
             </motion.div>
 
             <motion.div variants={fieldVariants} className="space-y-1.5">
-              <Label htmlFor="address">Établissement</Label>
+              <Label htmlFor="address">{t("auth.signup.establishmentLabel")}</Label>
               <div className="relative">
                 <motion.span
                   className="pointer-events-none absolute left-3 top-1/2 flex"
@@ -268,7 +268,7 @@ export function SignupPage() {
                   onFocus={() => setFocusedField("address")}
                   onBlur={() => setFocusedField(null)}
                   className="pl-9"
-                  placeholder="Hôpital / Clinique"
+                  placeholder={t("auth.signup.establishmentPlaceholder")}
                 />
               </div>
             </motion.div>
@@ -277,8 +277,8 @@ export function SignupPage() {
           {/* Photo upload */}
           <motion.div variants={fieldVariants} className="space-y-1.5">
             <Label>
-              Photo de profil{" "}
-              <span className="font-normal text-muted-foreground">(optionnel)</span>
+              {t("auth.signup.photoLabel")}{" "}
+              <span className="font-normal text-muted-foreground">({t("common.optional")})</span>
             </Label>
             <input
               ref={fileInputRef}
@@ -310,7 +310,7 @@ export function SignupPage() {
                   >
                     <Upload className="h-4 w-4" />
                   </motion.span>
-                  Ajouter une photo
+                  {t("auth.signup.photoButton")}
                 </>
               )}
             </button>
@@ -321,11 +321,11 @@ export function SignupPage() {
               {isLoading ? (
                 <>
                   <Loader2 className="h-4 w-4 animate-spin" />
-                  Inscription...
+                  {t("auth.signup.submitting")}
                 </>
               ) : (
                 <>
-                  Créer mon compte
+                  {t("auth.signup.submit")}
                   <ArrowRight className="h-4 w-4" />
                 </>
               )}
@@ -334,12 +334,12 @@ export function SignupPage() {
         </motion.form>
 
         <p className="text-center text-sm text-muted-foreground">
-          Déjà inscrit ?{" "}
+          {t("auth.signup.hasAccount")}{" "}
           <Link
             to="/login"
             className="font-medium text-foreground underline-offset-4 hover:underline"
           >
-            Se connecter
+            {t("auth.signup.loginLink")}
           </Link>
         </p>
       </div>

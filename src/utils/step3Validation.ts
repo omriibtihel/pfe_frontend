@@ -2,6 +2,7 @@ import type {
   CategoricalEncodingStrategy,
   CategoricalImputationStrategy,
   NumericImputationStrategy,
+  NumericPowerTransformStrategy,
   NumericScalingStrategy,
   TrainingColumnType,
   TrainingColumnTypeSelection,
@@ -36,11 +37,14 @@ export type Step3ColumnValidationState = {
   selectedType: TrainingColumnTypeSelection;
   effectiveType: TrainingColumnType;
   numericImputation: NumericImputationStrategy;
+  numericPowerTransform: NumericPowerTransformStrategy;
   numericScaling: NumericScalingStrategy;
   categoricalImputation: CategoricalImputationStrategy;
   categoricalEncoding: CategoricalEncodingStrategy;
   ordinalOrder: string[];
   hasExplicitCategoricalConfig: boolean;
+  /** True when the column has negative values — Box-Cox requires X > 0 */
+  hasNegativeValues: boolean;
 };
 
 function pushIssue(
@@ -137,6 +141,20 @@ export function validateLocal(
 
     const isCategoricalLike =
       column.effectiveType === "categorical" || column.effectiveType === "ordinal";
+
+    if (
+      column.effectiveType === "numeric" &&
+      column.numericPowerTransform === "box_cox" &&
+      column.hasNegativeValues
+    ) {
+      pushIssue(out, {
+        column: column.name,
+        severity: "error",
+        code: "box_cox_negative_values",
+        message: "Box-Cox requiert des valeurs strictement positives (X > 0). Cette colonne contient des valeurs négatives — utilisez Yeo-Johnson à la place.",
+        source: "local",
+      });
+    }
 
     if (isCategoricalLike && column.categoricalEncoding === "none") {
       pushIssue(out, {
