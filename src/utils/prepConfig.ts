@@ -1,10 +1,11 @@
 import type {
   TrainingBalancingConfig,
   TrainingPreprocessingConfig,
+  FeatureEngineeringConfig,
   SplitMethod,
   TaskType,
 } from "@/types";
-import { DEFAULT_TRAINING_BALANCING, DEFAULT_TRAINING_PREPROCESSING } from "@/types";
+import { DEFAULT_TRAINING_BALANCING, DEFAULT_TRAINING_PREPROCESSING, DEFAULT_FEATURE_ENGINEERING } from "@/types";
 
 export interface PrepConfig {
   datasetVersionId: string;
@@ -19,6 +20,7 @@ export interface PrepConfig {
   preprocessing: TrainingPreprocessingConfig;
   balancing: TrainingBalancingConfig;
   useSmote: boolean;
+  featureEngineering?: FeatureEngineeringConfig;
 }
 
 export const DEFAULT_PREP_CONFIG: PrepConfig = {
@@ -34,6 +36,7 @@ export const DEFAULT_PREP_CONFIG: PrepConfig = {
   preprocessing: { ...DEFAULT_TRAINING_PREPROCESSING },
   balancing: { ...DEFAULT_TRAINING_BALANCING },
   useSmote: false,
+  featureEngineering: { ...DEFAULT_FEATURE_ENGINEERING },
 };
 
 const storageKey = (projectId: string, versionId: string) =>

@@ -31,7 +31,7 @@ function mapProject(p: BackendProject): Project {
     description: p.description ?? "",
     userId: String(p.owner_id),
     status: "active",
-    projectType: (p.project_type === "imaging" ? "imaging" : "tabular") as 'tabular' | 'imaging',
+    projectType: "tabular" as const,
     createdAt: p.created_at ?? "",
     updatedAt: p.updated_at ?? "",
     datasetName: undefined,
@@ -84,7 +84,7 @@ export const projectService = {
   async createProject(data: {
     name: string;
     description?: string;
-    projectType?: 'tabular' | 'imaging';
+    projectType?: 'tabular';
     userId?: string;
   }): Promise<Project> {
     const payload = {

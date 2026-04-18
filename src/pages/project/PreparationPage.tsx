@@ -4,6 +4,7 @@ import {
   ArrowRight,
   ChevronRight,
   Columns,
+  FlaskConical,
   Lock,
   RefreshCw,
   Save,
@@ -30,6 +31,7 @@ import { DEFAULT_TRAINING_PREPROCESSING, DEFAULT_TRAINING_BALANCING } from "@/ty
 import { Step2SplitStrategy } from "@/components/preparation/Step2SplitStrategy";
 import { Step3ColumnPreprocessing, type Step3ValidationState } from "@/components/preparation/Step3ColumnPreprocessing";
 import { BalancingPanel } from "@/components/preparation/BalancingPanel";
+import { FeatureEngineeringPanel } from "@/components/preparation/FeatureEngineeringPanel";
 
 import {
   savePrepConfig,
@@ -38,7 +40,8 @@ import {
   type PrepConfig,
 } from "@/utils/prepConfig";
 
-import type { TrainingConfig, TrainingBalancingConfig } from "@/types";
+import type { TrainingConfig, TrainingBalancingConfig, FeatureEngineeringConfig } from "@/types";
+import { DEFAULT_FEATURE_ENGINEERING } from "@/types";
 
 /** PrepConfig cast as a minimal TrainingConfig subset for child components that expect TrainingConfig */
 function toTrainingConfig(prep: PrepConfig): TrainingConfig {
@@ -212,6 +215,11 @@ export function PreparationPage() {
     []
   );
 
+  const updateFeatureEngineering = useCallback((cfg: FeatureEngineeringConfig) => {
+    setPrepConfig((prev) => ({ ...prev, featureEngineering: cfg }));
+    setIsSaved(false);
+  }, []);
+
   const handleSave = () => {
     if (!selectedVersionId) return;
     const toSave: PrepConfig = {
@@ -370,6 +378,26 @@ export function PreparationPage() {
                   )}
                 </Tooltip>
                 )}
+
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <span>
+                      <TabsTrigger value="features" className="gap-2" disabled={!splitDone}>
+                        {!splitDone && <Lock className="h-3.5 w-3.5 text-muted-foreground" />}
+                        <FlaskConical className="h-4 w-4" />
+                        {prepConfig.taskType === "classification" ? "4." : "3."} Features
+                        {(prepConfig.featureEngineering?.features.filter((f) => f.enabled).length ?? 0) > 0 && (
+                          <Badge variant="secondary" className="ml-1 text-[10px] h-4 px-1">
+                            {prepConfig.featureEngineering!.features.filter((f) => f.enabled).length}
+                          </Badge>
+                        )}
+                      </TabsTrigger>
+                    </span>
+                  </TooltipTrigger>
+                  {!splitDone && (
+                    <TooltipContent>Validez d'abord le split</TooltipContent>
+                  )}
+                </Tooltip>
               </TabsList>
 
               <Button
@@ -412,11 +440,13 @@ export function PreparationPage() {
               <div className="mt-4 flex justify-end">
                 <Button
                   variant="outline"
-                  onClick={() => setActiveTab("balancing")}
+                  onClick={() =>
+                    setActiveTab(prepConfig.taskType === "classification" ? "balancing" : "features")
+                  }
                   className="gap-2"
                   disabled={step3Validation.hasErrors}
                 >
-                  Suivant : Rééquilibrage
+                  {prepConfig.taskType === "classification" ? "Suivant : Rééquilibrage" : "Suivant : Features"}
                   <ArrowRight className="h-4 w-4" />
                 </Button>
               </div>
@@ -433,6 +463,26 @@ export function PreparationPage() {
                   useSmote: prepConfig.useSmote,
                 }}
                 onConfigChange={updateBalancing}
+              />
+              <div className="mt-4 flex justify-end">
+                <Button
+                  variant="outline"
+                  onClick={() => setActiveTab("features")}
+                  className="gap-2"
+                >
+                  Suivant : Features
+                  <ArrowRight className="h-4 w-4" />
+                </Button>
+              </div>
+            </TabsContent>
+
+            <TabsContent value="features">
+              <FeatureEngineeringPanel
+                projectId={projectId}
+                versionId={selectedVersionId}
+                targetColumn={prepConfig.targetColumn}
+                value={prepConfig.featureEngineering ?? DEFAULT_FEATURE_ENGINEERING}
+                onChange={updateFeatureEngineering}
               />
             </TabsContent>
           </Tabs>

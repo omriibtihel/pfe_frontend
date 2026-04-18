@@ -12,7 +12,6 @@ import {
   Search,
   Sparkles,
   Trash2,
-  ImageIcon,
   Database,
 } from "lucide-react";
 import { useTranslation } from "react-i18next";
@@ -77,10 +76,6 @@ export function DashboardPage() {
   const openProject = async (project: Project) => {
     setOpenLoadingId(project.id);
     try {
-      if (project.projectType === "imaging") {
-        navigate(`/projects/${project.id}/imaging/import`);
-        return;
-      }
       const datasets = await datasetService.list(project.id);
       if (datasets.length > 0) {
         navigate(`/projects/${project.id}/database`);
@@ -297,10 +292,7 @@ export function DashboardPage() {
                   <CardHeader className="pb-4">
                     <div className="flex items-start justify-between gap-3">
                       <div className="flex items-center gap-2 min-w-0">
-                        {project.projectType === "imaging"
-                          ? <ImageIcon className="h-4 w-4 flex-shrink-0 text-primary" />
-                          : <Database className="h-4 w-4 flex-shrink-0 text-muted-foreground" />
-                        }
+                        <Database className="h-4 w-4 flex-shrink-0 text-muted-foreground" />
                         <CardTitle className="line-clamp-2 text-lg">{project.name}</CardTitle>
                       </div>
                       <div className="flex flex-col items-end gap-1">

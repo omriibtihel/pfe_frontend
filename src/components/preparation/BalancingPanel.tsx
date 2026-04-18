@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { AlertTriangle, CheckCircle2, Info } from "lucide-react";
+import { MedHelp } from "@/components/ui/med-help";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -48,20 +49,50 @@ const SCALE_LABELS: Record<string, string> = {
 };
 
 const fallbackBalancingStrategies: Array<{ id: TrainingBalancingStrategy; label: string }> = [
-  { id: "none", label: "Aucun rééquilibrage" },
-  { id: "class_weight", label: "Poids de classes" },
-  { id: "smote", label: "SMOTE" },
-  { id: "smote_tomek", label: "SMOTE + Tomek" },
-  { id: "random_undersampling", label: "Sous-échantillonnage aléatoire" },
-  { id: "threshold_optimization", label: "Optimisation du seuil" },
+  { id: "none",                  label: "Aucune correction" },
+  { id: "class_weight",          label: "Poids adaptatifs (recommandé)" },
+  { id: "smote",                 label: "Génération de cas synthétiques (SMOTE)" },
+  { id: "smote_tomek",           label: "SMOTE + nettoyage des frontières" },
+  { id: "random_undersampling",  label: "Réduction de la classe majoritaire" },
+  { id: "threshold_optimization","label": "Ajustement du seuil de décision uniquement" },
 ];
 
-const thresholdStrategyOptions: Array<{ id: TrainingThresholdStrategy; label: string }> = [
-  { id: "youden", label: "Index de Youden — standard médical (sensibilité + spécificité - 1)" },
-  { id: "maximize_f1", label: "Maximiser F1" },
-  { id: "maximize_f2", label: "Maximiser F2 (rappel prioritaire)" },
-  { id: "min_recall", label: "Rappel minimum garanti" },
-  { id: "precision_recall_balance", label: "Équilibre précision/rappel" },
+const thresholdStrategyOptions: Array<{ id: TrainingThresholdStrategy; label: string; help: string }> = [
+  {
+    id: "youden",
+    label: "Index de Youden (standard médical)",
+    help: "Maximise simultanément la sensibilité et la spécificité — le meilleur équilibre global entre détecter les malades et ne pas alarmer les sains. Référence internationale pour les tests diagnostiques. Ex : dépistage du VIH, où une fausse alarme entraîne un traitement inutile et un cas manqué favorise la transmission.",
+  },
+  {
+    id: "maximize_f1",
+    label: "Équilibre détection / précision (F1)",
+    help: "Trouve le seuil qui équilibre au mieux la détection des malades et la précision des alertes. Bon choix quand une fausse alarme coûte presque autant qu'un cas manqué. Ex : détection de pneumonie à la radio — un faux positif déclenche un examen complémentaire, un faux négatif retarde le traitement.",
+  },
+  {
+    id: "maximize_f2",
+    label: "Priorité sensibilité — F2 (dépistage)",
+    help: "Favorise la détection des malades 2× plus que la précision. Recommandé quand manquer un malade est nettement plus grave qu'une fausse alarme. Ex : dépistage néonatal de maladies métaboliques — mieux vaut 10 rappels inutiles qu'un seul enfant non traité.",
+  },
+  {
+    id: "maximize_f_beta",
+    label: "Priorité ajustable (F-bêta)",
+    help: "Permet de régler précisément le compromis sensibilité / précision. Beta > 1 = plus de sensibilité (moins de malades manqués) | Beta < 1 = plus de précision (moins de fausses alarmes) | Beta = 1 = équivalent F1. Ex : si une maladie manquée est 3× plus grave qu'une fausse alarme, choisir beta = 3.",
+  },
+  {
+    id: "minimize_cost",
+    label: "Coût clinique personnalisé (FN vs FP)",
+    help: "Le critère le plus adapté à la pratique clinique réelle. Vous indiquez le coût relatif d'une maladie manquée (FN) vs une fausse alarme (FP) — le système calcule le seuil optimal. Ex : cancer du sein → Coût FN = 10, Coût FP = 1 (une mammographie supplémentaire est acceptable ; manquer un cancer ne l'est pas).",
+  },
+  {
+    id: "min_recall",
+    label: "Sensibilité minimale garantie",
+    help: "Impose que le modèle détecte au moins X % des vrais malades, puis maximise la précision dans cette contrainte. Utile quand un protocole ou une réglementation fixe un seuil de sensibilité. Ex : un protocole hospitalier exige que le modèle détecte ≥ 95 % des sepsis avant l'admission en réanimation.",
+  },
+  {
+    id: "precision_recall_balance",
+    label: "Équilibre parfait détection = précision",
+    help: "Trouve le seuil où le taux de détection des malades et la précision des alertes sont strictement égaux. Utile lorsque les deux types d'erreurs (manquer un cas, fausse alarme) ont exactement le même impact. Ex : triage aux urgences où admettre un patient sain ou renvoyer un patient malade ont des conséquences comparables.",
+  },
 ];
 
 function isSmoteStrategy(strategy: TrainingBalancingStrategy): boolean {
@@ -83,6 +114,9 @@ export function BalancingPanel({ projectId, config, onConfigChange }: BalancingP
         typeof config.balancing?.minRecallConstraint === "number"
           ? config.balancing.minRecallConstraint
           : DEFAULT_TRAINING_BALANCING.minRecallConstraint,
+      fBeta: typeof config.balancing?.fBeta === "number" ? config.balancing.fBeta : 2.0,
+      costFn: typeof config.balancing?.costFn === "number" ? config.balancing.costFn : 1.0,
+      costFp: typeof config.balancing?.costFp === "number" ? config.balancing.costFp : 1.0,
     }),
     [config.balancing, config.useSmote]
   );
@@ -163,10 +197,24 @@ export function BalancingPanel({ projectId, config, onConfigChange }: BalancingP
         <CardContent className="py-5 space-y-4">
           <div className="space-y-1">
             <div className="flex items-center gap-2">
-              <span className="font-semibold text-sm">Gestion du desequilibre</span>
+              <span className="font-semibold text-sm">Gestion du déséquilibre</span>
               <Badge variant="outline" className="text-[10px]">
                 Classification binaire
               </Badge>
+              <MedHelp title="Qu'est-ce que le déséquilibre des classes ?">
+                <p>
+                  Un dataset déséquilibré contient beaucoup plus d'exemples d'une catégorie que de l'autre.
+                  Par exemple&nbsp;: 95&nbsp;% de patients sains, 5&nbsp;% de malades.
+                </p>
+                <p>
+                  Sans correction, le modèle apprend à tout classer «&nbsp;sain&nbsp;» car c'est toujours
+                  vrai à 95&nbsp;%. Il <strong>manque tous les malades</strong> — exactitude 95&nbsp;%,
+                  sensibilité 0&nbsp;%.
+                </p>
+                <p>
+                  Les stratégies ci-dessous corrigent ce biais pour que le modèle détecte réellement les cas rares.
+                </p>
+              </MedHelp>
             </div>
             {config.taskType !== "classification" && (
               <p className="text-xs text-warning mt-1">Disponible uniquement en classification.</p>
@@ -294,7 +342,7 @@ export function BalancingPanel({ projectId, config, onConfigChange }: BalancingP
           </div>
 
           <div className="space-y-2">
-            <label className="text-xs text-muted-foreground">Strategie</label>
+            <label className="text-xs text-muted-foreground">Stratégie de correction</label>
             <Select
               value={balancing.strategy}
               onValueChange={(value) => handleStrategyChange(value as TrainingBalancingStrategy)}
@@ -339,11 +387,44 @@ export function BalancingPanel({ projectId, config, onConfigChange }: BalancingP
                 disabled={config.taskType !== "classification" || balancing.strategy === "threshold_optimization"}
                 onCheckedChange={(checked) => applyBalancing({ applyThreshold: Boolean(checked) })}
               />
-              <span className="text-xs font-medium">Appliquer l'optimisation du threshold</span>
+              <span className="text-xs font-medium">Ajuster le seuil de décision</span>
+              <MedHelp title="À quoi sert le seuil de décision ?">
+                <p>
+                  Par défaut, le modèle prédit «&nbsp;positif&nbsp;» dès que sa probabilité dépasse 50&nbsp;%.
+                  Ce seuil est rarement optimal en médecine.
+                </p>
+                <p>
+                  En abaissant le seuil (ex&nbsp;: 30&nbsp;%), le modèle détecte plus de vrais malades
+                  mais génère plus de fausses alarmes. En le relevant (ex&nbsp;: 70&nbsp;%), l'inverse.
+                </p>
+                <p>
+                  Les stratégies ci-dessous trouvent automatiquement le meilleur seuil selon vos priorités cliniques.
+                </p>
+              </MedHelp>
             </label>
+            {/* ── Bannière de guidance clinique — visible seulement si seuil activé ── */}
+            {(balancing.applyThreshold || balancing.strategy === "threshold_optimization") && (
+            <div className="rounded-xl border border-sky-200/60 bg-sky-50/50 dark:border-sky-800/40 dark:bg-sky-950/20 p-3.5 flex gap-3">
+              <Info className="h-4 w-4 text-sky-500 mt-0.5 shrink-0" />
+              <div className="space-y-1.5 text-[11px] text-sky-800 dark:text-sky-300">
+                <p className="font-semibold">Quel critère pour quel contexte ?</p>
+                <ul className="space-y-1 text-sky-700 dark:text-sky-400">
+                  <li>• <strong>Dépistage</strong> (cancer, diabète, sepsis…) — manquer un cas est grave
+                    → <em>F2</em> ou <em>Coût clinique personnalisé</em></li>
+                  <li>• <strong>Test de confirmation</strong> — fausses alarmes ont un coût élevé
+                    → <em>Équilibre F1</em> ou <em>Index de Youden</em></li>
+                  <li>• <strong>Seuil réglementaire</strong> — sensibilité imposée (ex : ≥ 90&nbsp;%)
+                    → <em>Sensibilité minimale garantie</em></li>
+                  <li>• <strong>Usage général</strong> sans contrainte particulière
+                    → <em>Index de Youden</em> (recommandé)</li>
+                </ul>
+              </div>
+            </div>
+            )}
+
             <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-              <div className="space-y-1">
-                <label className="text-[11px] text-muted-foreground">Strategie threshold</label>
+              <div className="space-y-1 sm:col-span-2">
+                <label className="text-[11px] text-muted-foreground">Critère d'optimisation du seuil</label>
                 <Select
                   value={balancing.thresholdStrategy}
                   onValueChange={(value) =>
@@ -366,25 +447,140 @@ export function BalancingPanel({ projectId, config, onConfigChange }: BalancingP
                     ))}
                   </SelectContent>
                 </Select>
+                {/* Clinical explanation for selected strategy */}
+                {(() => {
+                  const current = thresholdStrategyOptions.find((o) => o.id === balancing.thresholdStrategy);
+                  return current ? (
+                    <div className="rounded-md border border-sky-200/40 bg-sky-50/30 dark:border-sky-800/30 dark:bg-sky-950/20 px-2.5 py-2 mt-1.5 flex gap-2">
+                      <Info className="h-3.5 w-3.5 text-sky-500 shrink-0 mt-0.5" />
+                      <p className="text-[11px] text-sky-800 dark:text-sky-300 leading-relaxed">{current.help}</p>
+                    </div>
+                  ) : null;
+                })()}
               </div>
-              <div className="space-y-1">
-                <label className="text-[11px] text-muted-foreground">Contrainte recall min</label>
-                <Input
-                  type="number"
-                  step={0.01}
-                  min={0.01}
-                  max={0.99}
-                  disabled={balancing.thresholdStrategy !== "min_recall" || config.taskType !== "classification"}
-                  value={balancing.minRecallConstraint ?? 0.7}
-                  onChange={(e) =>
-                    applyBalancing({
-                      minRecallConstraint: Math.min(0.99, Math.max(0.01, Number(e.target.value) || 0.7)),
-                    })
-                  }
-                  className="h-8 text-xs"
-                />
-              </div>
+              {balancing.thresholdStrategy === "min_recall" && (
+                <div className="space-y-1">
+                  <label className="text-[11px] text-muted-foreground">Sensibilité minimale garantie</label>
+                  <Input
+                    type="number"
+                    step={0.01}
+                    min={0.01}
+                    max={0.99}
+                    disabled={config.taskType !== "classification"}
+                    value={balancing.minRecallConstraint ?? 0.7}
+                    onChange={(e) =>
+                      applyBalancing({
+                        minRecallConstraint: Math.min(0.99, Math.max(0.01, Number(e.target.value) || 0.7)),
+                      })
+                    }
+                    className="h-8 text-xs"
+                  />
+                  <p className="text-[10px] text-muted-foreground">
+                    Proportion de vrais malades à détecter (ex&nbsp;: 0.90 = 90&nbsp;%)
+                  </p>
+                </div>
+              )}
             </div>
+
+            {/* ── F-beta configurable ── */}
+            {balancing.thresholdStrategy === "maximize_f_beta" && (
+              <div className="mt-2 space-y-2 rounded-md border border-border/40 bg-muted/20 p-2.5">
+                <div className="flex items-center justify-between">
+                  <label className="text-[11px] text-muted-foreground">
+                    Beta&nbsp;=&nbsp;<span className="font-semibold text-foreground">{(balancing.fBeta ?? 2.0).toFixed(1)}</span>
+                  </label>
+                  <span className="text-[10px] font-medium text-primary">
+                    {(balancing.fBeta ?? 2.0) < 0.8
+                      ? "Confirmation diagnostique (haute précision)"
+                      : (balancing.fBeta ?? 2.0) < 1.2
+                      ? "Équilibre classique (F1)"
+                      : (balancing.fBeta ?? 2.0) < 2.5
+                      ? "Dépistage large (sensibilité 2×)"
+                      : "Sensibilité maximale"}
+                  </span>
+                </div>
+                <input
+                  type="range"
+                  min={0.1}
+                  max={5}
+                  step={0.1}
+                  value={balancing.fBeta ?? 2.0}
+                  onChange={(e) => applyBalancing({ fBeta: parseFloat(e.target.value) })}
+                  className="w-full accent-primary"
+                  disabled={config.taskType !== "classification"}
+                />
+                {/* Repères cliniques nommés */}
+                <div className="relative flex justify-between text-[9px] text-muted-foreground px-0.5">
+                  <span className="text-center">0.1<br/>précision<br/>max</span>
+                  <span className="text-center">1.0<br/>F1<br/>défaut</span>
+                  <span className="text-center">2.0<br/>F2<br/>dépistage</span>
+                  <span className="text-center">5.0<br/>sensibilité<br/>max</span>
+                </div>
+              </div>
+            )}
+
+            {/* ── Coût asymétrique FN/FP ── */}
+            {balancing.thresholdStrategy === "minimize_cost" && (
+              <div className="mt-2 space-y-2 rounded-md border border-border/40 bg-muted/20 p-2.5">
+                {/* Encadré d'ancrage clinique */}
+                <div className="rounded-md bg-amber-50/60 dark:bg-amber-950/20 border border-amber-200/50 px-2.5 py-2 text-[10px] text-amber-800 dark:text-amber-300 leading-relaxed">
+                  Repère clinique — <strong>cancer du sein</strong>&nbsp;: Coût FN&nbsp;=&nbsp;<strong>10</strong>, Coût FP&nbsp;=&nbsp;<strong>1</strong> (une mammographie supplémentaire est acceptable, manquer un cancer ne l'est pas).
+                  Pour une <strong>pathologie moins sévère</strong>, Coût FN&nbsp;=&nbsp;2–3 suffit.
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <Info className="h-3.5 w-3.5 text-sky-500 shrink-0" />
+                  <p className="text-[11px] text-muted-foreground">
+                    Ratio coût ={" "}
+                    <span className="font-semibold text-foreground">
+                      {((balancing.costFn ?? 1) / Math.max(balancing.costFp ?? 1, 0.01)).toFixed(1)}×
+                    </span>{" "}
+                    — manquer un positif coûte{" "}
+                    <span className="font-semibold">
+                      {((balancing.costFn ?? 1) / Math.max(balancing.costFp ?? 1, 0.01)).toFixed(1)}×
+                    </span>{" "}
+                    plus qu'une fausse alarme.
+                  </p>
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-1">
+                    <label className="text-[11px] text-muted-foreground">
+                      Coût FN (maladie manquée) — <span className="font-semibold text-foreground">{balancing.costFn ?? 1}</span>
+                    </label>
+                    <input
+                      type="range"
+                      min={1}
+                      max={20}
+                      step={1}
+                      value={balancing.costFn ?? 1}
+                      onChange={(e) => applyBalancing({ costFn: parseInt(e.target.value, 10) })}
+                      className="w-full accent-destructive"
+                      disabled={config.taskType !== "classification"}
+                    />
+                    <div className="flex justify-between text-[10px] text-muted-foreground">
+                      <span>1</span><span>20</span>
+                    </div>
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-[11px] text-muted-foreground">
+                      Coût FP (fausse alarme) — <span className="font-semibold text-foreground">{balancing.costFp ?? 1}</span>
+                    </label>
+                    <input
+                      type="range"
+                      min={1}
+                      max={20}
+                      step={1}
+                      value={balancing.costFp ?? 1}
+                      onChange={(e) => applyBalancing({ costFp: parseInt(e.target.value, 10) })}
+                      className="w-full accent-primary"
+                      disabled={config.taskType !== "classification"}
+                    />
+                    <div className="flex justify-between text-[10px] text-muted-foreground">
+                      <span>1</span><span>20</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
 
           {config.taskType === "classification" && !!balanceAnalysis && !balanceAnalysis.needs_balancing && balancing.strategy !== "none" && (

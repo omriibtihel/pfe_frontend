@@ -51,10 +51,10 @@ import { Step6Summary } from "@/components/training/wizard/Step6Summary";
 import { loadPrepConfig } from "@/utils/prepConfig";
 
 const steps = [
-  { label: "Dataset & Cible", icon: <Database className="h-5 w-5" /> },
-  { label: "Modeles", icon: <Brain className="h-5 w-5" /> },
-  { label: "Metriques", icon: <BarChart3 className="h-5 w-5" /> },
-  { label: "Lancer", icon: <Rocket className="h-5 w-5" /> },
+  { label: "Dataset & Cible",  icon: <Database       className="h-5 w-5" /> },
+  { label: "Modeles",          icon: <Brain           className="h-5 w-5" /> },
+  { label: "Metriques",        icon: <BarChart3       className="h-5 w-5" /> },
+  { label: "Lancer",           icon: <Rocket          className="h-5 w-5" /> },
 ];
 
 // ── Mode dialog (shown after step 1 is complete) ─────────────────────────────
@@ -280,14 +280,10 @@ export function TrainingPage() {
 
   const canGoNext = useMemo((): boolean => {
     switch (currentStep) {
-      case 0:
-        return !!config.datasetVersionId && !!config.targetColumn;
-      case 1:
-        return (config.models || []).length > 0;
-      case 2:
-        return (config.metrics || []).length > 0;
-      default:
-        return false;
+      case 0: return !!config.datasetVersionId && !!config.targetColumn;
+      case 1: return (config.models || []).length > 0;
+      case 2: return (config.metrics || []).length > 0;
+      default: return false;
     }
   }, [currentStep, config]);
 
@@ -341,6 +337,7 @@ export function TrainingPage() {
             preprocessing: prepConfig.preprocessing,
             balancing: prepConfig.balancing,
             useSmote: prepConfig.useSmote,
+            ...(prepConfig.featureEngineering ? { featureEngineering: prepConfig.featureEngineering } : {}),
           }
         : config;
       const session = await trainingService.startTraining(projectId, mergedConfig);

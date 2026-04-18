@@ -508,6 +508,7 @@ export function toTrainingStartPayload(config: TrainingConfig): TrainingStartPay
     preprocessing,
     modelHyperparams,
     customCode: config.customCode ?? "",
+    featureEngineering: config.featureEngineering ?? { features: [] },
   };
 }
 

@@ -183,6 +183,19 @@ class ApiClient {
     }
   }
 
+  async deleteWithBody<T>(url: string, body: unknown, opts?: RequestOptions): Promise<T> {
+    try {
+      const res = await this.axios.delete<T>(url, {
+        data: body,
+        headers: { "Content-Type": "application/json" },
+        ...this.cfg(opts),
+      });
+      return res.data;
+    } catch (err) {
+      throw new Error(extractErrorMessage(err));
+    }
+  }
+
   async postForm<T>(url: string, body: Record<string, string>, opts?: RequestOptions): Promise<T> {
     try {
       const form = new URLSearchParams(body);

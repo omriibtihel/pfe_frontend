@@ -147,20 +147,25 @@ function dot(doc: jsPDF, x: number, y: number, q: Quality): void {
 
 /** En-tête de section numérotée (bandeau). */
 function section(doc: jsPDF, num: string, title: string, y: number): number {
-  y = ensureY(doc, y, 14);
+  y = ensureY(doc, y, 18);
+  y += 4;
+  // Background band
   fill(doc, C.navyLight);
-  doc.rect(M, y, CW, 9, 'F');
+  doc.rect(M, y, CW, 11, 'F');
+  // Left accent bar
   fill(doc, C.navy);
-  doc.rect(M, y, 4, 9, 'F');
+  doc.rect(M, y, 4, 11, 'F');
+  // Section number
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(7.5);
   txtc(doc, C.teal);
-  doc.text(num, M + 7, y + 6);
-  doc.setFontSize(9);
+  doc.text(num, M + 8, y + 7.5);
+  // Title
+  doc.setFontSize(10);
   txtc(doc, C.navy);
-  doc.text(title.toUpperCase(), M + 18, y + 6);
+  doc.text(title.toUpperCase(), M + 19, y + 7.5);
   txtc(doc, C.slate);
-  return y + 13;
+  return y + 16;
 }
 
 /** Séparateur horizontal léger. */
@@ -292,14 +297,31 @@ function footers(doc: jsPDF, genDate: string): void {
   const total = doc.getNumberOfPages();
   for (let p = 1; p <= total; p++) {
     doc.setPage(p);
-    fill(doc, C.navy);
+    // Thin top divider
+    drawc(doc, C.border);
+    doc.setLineWidth(0.3);
+    doc.line(M, H - 14.5, W - M, H - 14.5);
+    doc.setLineWidth(0.1);
+    // Light footer background
+    fill(doc, [248, 250, 252] as RGB);
     doc.rect(0, H - 14, W, 14, 'F');
-    doc.setFont('helvetica', 'normal');
+    // Left: branding
+    doc.setFont('helvetica', 'bold');
     doc.setFontSize(6.5);
-    txtc(doc, C.navyLight);
-    doc.text('MedicalVision — Document confidentiel à usage professionnel', M, H - 8);
-    doc.text(`Généré le ${genDate}`, W / 2, H - 8, { align: 'center' });
-    doc.text(`Page ${p} / ${total}`, W - M, H - 8, { align: 'right' });
+    txtc(doc, C.navy);
+    doc.text('MedicalVision', M, H - 5.5);
+    doc.setFont('helvetica', 'normal');
+    txtc(doc, C.muted);
+    doc.text(' \u2014 Document confidentiel a usage professionnel', M + 23, H - 5.5);
+    // Center: generation date
+    doc.setFontSize(6.5);
+    txtc(doc, C.muted);
+    doc.text(`Genere le ${genDate}`, W / 2, H - 5.5, { align: 'center' });
+    // Right: page number
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(7.5);
+    txtc(doc, C.navy);
+    doc.text(`${p} / ${total}`, W - M, H - 5.5, { align: 'right' });
   }
 }
 
@@ -321,35 +343,53 @@ export function generateTrainingReportPdf(session: TrainingSession): void {
   // ║  1. BANDEAU D'EN-TÊTE                                       ║
   // ╚══════════════════════════════════════════════════════════════╝
 
+  // Header background — navy band
   fill(doc, C.navy);
-  doc.rect(0, 0, W, 40, 'F');
+  doc.rect(0, 0, W, 46, 'F');
+  // Inner lighter stripe for depth
+  fill(doc, [20, 40, 90] as RGB);
+  doc.rect(0, 14, W, 28, 'F');
+  fill(doc, C.navy);
+  doc.rect(0, 0, W, 14, 'F');
+  // Bottom accent line
   fill(doc, C.teal);
-  doc.rect(0, 38, W, 3, 'F');
+  doc.rect(0, 44, W, 3, 'F');
 
-  // Logotype texte
+  // Logo & branding
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(8);
   txtc(doc, C.teal);
-  doc.text('MEDICALVISION', M, 11);
+  doc.text('MEDICALVISION', M, 10);
+  drawc(doc, C.teal);
+  doc.setLineWidth(0.5);
+  doc.line(M, 11.5, M + 35, 11.5);
+  doc.setLineWidth(0.1);
 
-  // Titre principal
+  // Document type label
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(8);
+  txtc(doc, [147, 197, 253] as RGB);
+  doc.text('RAPPORT D\'ANALYSE', M, 21);
+
+  // Main title
   doc.setFont('helvetica', 'bold');
-  doc.setFontSize(17);
+  doc.setFontSize(16);
   txtc(doc, C.white);
-  doc.text("RAPPORT D'ANALYSE", M, 21);
-  doc.setFontSize(12);
+  doc.text('Apprentissage automatique', M, 31);
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(9);
   txtc(doc, C.navyLight);
-  doc.text('Apprentissage automatique — Aide à la décision clinique', M, 29);
+  doc.text('Aide a la decision clinique \u2014 analyse comparative de modeles', M, 39);
 
-  // Métadonnées (droite)
+  // Metadata — right aligned
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(7.5);
   txtc(doc, C.navyLight);
-  doc.text(`Session #${session.id}  •  Projet #${session.projectId}`, W - M, 13, { align: 'right' });
+  doc.text(`Session #${session.id}  \u2022  Projet #${session.projectId}`, W - M, 11, { align: 'right' });
   doc.text(genDate, W - M, 20, { align: 'right' });
-  doc.text(`Durée d'entraînement : ${duration(session)}`, W - M, 27, { align: 'right' });
+  doc.text(`Duree : ${duration(session)}`, W - M, 29, { align: 'right' });
 
-  let y = 46;
+  let y = 52;
 
   // ╔══════════════════════════════════════════════════════════════╗
   // ║  2. RÉSUMÉ EXÉCUTIF                                         ║
@@ -646,32 +686,44 @@ export function generateTrainingReportPdf(session: TrainingSession): void {
     y = ensureY(doc, y, 45);
 
     // ── En-tête du modèle ───────────────────────────────────────
+    const CARD_H = 13;
+    // Fond + bordure
     fill(doc, isBest ? C.amberBg : C.bg);
     drawc(doc, isBest ? C.amber : C.border);
-    doc.setLineWidth(isBest ? 0.4 : 0.2);
-    doc.rect(M, y, CW, 10, 'FD');
+    doc.setLineWidth(isBest ? 0.35 : 0.15);
+    doc.rect(M, y, CW, CARD_H, 'FD');
     doc.setLineWidth(0.1);
 
     // Barre latérale colorée
-    fill(doc, isBest ? C.amber : C.navyMid);
-    doc.rect(M, y, 4, 10, 'F');
+    fill(doc, isBest ? C.amber : C.navy);
+    doc.rect(M, y, 4.5, CARD_H, 'F');
 
+    // Nom du modèle
     doc.setFont('helvetica', 'bold');
     doc.setFontSize(10.5);
     txtc(doc, isBest ? C.amber : C.navy);
-    doc.text(
-      modelName(r.modelType).toUpperCase() + (isBest ? '  — MODÈLE RECOMMANDÉ' : ''),
-      M + 7, y + 6.8,
-    );
+    const mLabel = modelName(r.modelType).toUpperCase();
+    doc.text(mLabel, M + 8, y + 8.5);
 
-    // Temps + statut
+    // Badge "RECOMMANDE" (pill) pour le meilleur modèle
+    if (isBest) {
+      const badgeX = M + 9 + doc.getTextWidth(mLabel) + 4;
+      fill(doc, C.amber);
+      doc.roundedRect(badgeX, y + 3.5, 32, 6, 1.5, 1.5, 'F');
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(6);
+      txtc(doc, C.white);
+      doc.text('RECOMMANDE', badgeX + 16, y + 8, { align: 'center' });
+    }
+
+    // Statut + durée (droite)
     doc.setFont('helvetica', 'normal');
     doc.setFontSize(7.5);
     txtc(doc, C.muted);
-    const statusTxt = r.status === 'completed' ? '✓ Terminé' : (r.status ?? '');
-    doc.text(`${statusTxt}  —  ${sec(r.trainingTime)}`, W - M, y + 6.8, { align: 'right' });
+    const statusTxt = r.status === 'completed' ? 'Termine' : (r.status ?? '');
+    doc.text(`${statusTxt}  \u2014  ${sec(r.trainingTime)}`, W - M, y + 8.5, { align: 'right' });
 
-    y += 13;
+    y += CARD_H + 3;
 
     // ── Grille de métriques ─────────────────────────────────────
     type MetricEntry = { label: string; val: string; raw: number | null; lower?: boolean };
@@ -694,10 +746,10 @@ export function generateTrainingReportPdf(session: TrainingSession): void {
           { label: 'Train Score',       val: pct(r.trainScore),          raw: safeN(r.trainScore) },
         ].filter(m => m.raw != null);
 
-    // Affichage 4 colonnes
+    // Affichage 4 colonnes — cartes metriques
     const NCOLS = 4;
     const CELL_W = CW / NCOLS;
-    const CELL_H = 16;
+    const CELL_H = 18;
     let col = 0;
     let rowY = y;
 
@@ -705,28 +757,35 @@ export function generateTrainingReportPdf(session: TrainingSession): void {
       const cx = M + col * CELL_W;
       const q = quality(m.raw, m.lower ?? false);
 
-      // Fond de cellule alterné
+      // Fond de cellule avec bordure
       fill(doc, col % 2 === 0 ? C.bg : C.white);
-      doc.rect(cx, rowY, CELL_W, CELL_H, 'F');
+      drawc(doc, C.border);
+      doc.setLineWidth(0.15);
+      doc.rect(cx, rowY, CELL_W, CELL_H, 'FD');
+      doc.setLineWidth(0.1);
 
-      // Point de qualité
-      dot(doc, cx + 4, rowY + 5, q);
+      // Bandeau superieur colore (indique la qualite)
+      fill(doc, qualityColor(q));
+      doc.rect(cx, rowY, CELL_W, 1.5, 'F');
+
+      // Point de qualite
+      dot(doc, cx + 5, rowY + 7, q);
 
       // Valeur
       doc.setFont('helvetica', 'bold');
       doc.setFontSize(12);
       txtc(doc, qualityColor(q));
-      doc.text(m.val, cx + 9, rowY + 8);
+      doc.text(m.val, cx + 10, rowY + 9.5);
 
-      // Barre
-      bar(doc, cx + 9, rowY + 9.5, CELL_W - 14, 2.5, m.raw, m.lower ?? false);
+      // Barre de progression
+      bar(doc, cx + 10, rowY + 11, CELL_W - 15, 2.5, m.raw, m.lower ?? false);
 
       // Label
       doc.setFont('helvetica', 'normal');
-      doc.setFontSize(7);
+      doc.setFontSize(6.5);
       txtc(doc, C.muted);
-      const lLines = doc.splitTextToSize(m.label, CELL_W - 10);
-      doc.text(lLines, cx + 9, rowY + 14);
+      const lLines = doc.splitTextToSize(m.label, CELL_W - 12);
+      doc.text(lLines, cx + 10, rowY + 16);
 
       col++;
       if (col >= NCOLS) { col = 0; rowY += CELL_H + 1; }
@@ -960,18 +1019,32 @@ export function generateTrainingReportPdf(session: TrainingSession): void {
     y = section(doc, '5.', 'Avertissements et limites', y);
 
     for (const w of warnings.slice(0, 8)) {
-      y = ensureY(doc, y, 10);
+      const wLines = doc.splitTextToSize(w, CW - 22);
+      const wH = Math.max(11, wLines.length * 4.5 + 9);
+      y = ensureY(doc, y, wH + 3);
+      // Background
       fill(doc, C.orangeBg);
       drawc(doc, C.orange);
-      doc.setLineWidth(0.25);
-      doc.rect(M, y, CW, 8, 'FD');
+      doc.setLineWidth(0.2);
+      doc.roundedRect(M, y, CW, wH, 1.5, 1.5, 'FD');
       doc.setLineWidth(0.1);
+      // Left accent bar
+      fill(doc, C.orange);
+      doc.roundedRect(M, y, 4, wH, 1.5, 1.5, 'F');
+      doc.rect(M + 1.5, y, 2.5, wH, 'F');
+      // Icon circle
+      fill(doc, C.orange);
+      doc.circle(M + 12, y + wH / 2, 3.5, 'F');
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(7.5);
+      txtc(doc, C.white);
+      doc.text('!', M + 12, y + wH / 2 + 2.5, { align: 'center' });
+      // Text
       doc.setFont('helvetica', 'normal');
       doc.setFontSize(7.5);
       txtc(doc, C.slate);
-      const wLines = doc.splitTextToSize(`[!]  ${w}`, CW - 8);
-      doc.text(wLines, M + 4, y + 5);
-      y += Math.max(8, wLines.length * 4) + 2;
+      doc.text(wLines, M + 21, y + 6.5);
+      y += wH + 3;
     }
   }
 

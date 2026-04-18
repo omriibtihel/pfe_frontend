@@ -392,6 +392,8 @@ export function ChartsPage() {
         name: col.name, value: s_max,
         s_min, s_p25, s_p50, s_p75, s_max,
         _min: min!, _p25: p25!, _p50: p50!, _p75: p75!, _max: max!,
+        _mean: col.numeric!.mean ?? null,
+        _std: col.numeric!.std ?? null,
         fill: COLORS[i % COLORS.length],
       };
     });

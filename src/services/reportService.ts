@@ -371,14 +371,23 @@ export function generateDatasetReport(input: ReportInput): void {
   // ── Layout helpers ──────────────────────────────────────────────────────────
 
   const drawRunningHeader = () => {
-    doc.setDrawColor(...C_RULE);
-    doc.setLineWidth(0.3);
-    doc.line(M, 9, pw - M, 9);
+    // Dark header strip matching cover style
+    doc.setFillColor(11, 22, 46);
+    doc.rect(0, 0, pw, 11, 'F');
+    doc.setFillColor(...C_ACCENT);
+    doc.rect(0, 10.5, pw, 0.8, 'F');
+    // Logo text
+    doc.setFont('helvetica', 'bold');
     doc.setFontSize(7);
-    doc.setTextColor(...C_MUTED);
+    doc.setTextColor(37, 99, 235);
+    doc.text('MEDICALVISION', M, 7.5);
+    // Center: document label
     doc.setFont('helvetica', 'normal');
-    doc.text('MedicalVision — Rapport d\'analyse', M, 7);
-    doc.text(dataset.original_name, pw - M, 7, { align: 'right' });
+    doc.setTextColor(148, 163, 184);
+    doc.text('Rapport d\'analyse des donnees', pw / 2, 7.5, { align: 'center' });
+    // Right: dataset name
+    doc.setTextColor(203, 213, 225);
+    doc.text(dataset.original_name, pw - M, 7.5, { align: 'right' });
   };
 
   const ensureSpace = (needed: number) => {
@@ -396,22 +405,27 @@ export function generateDatasetReport(input: ReportInput): void {
     y += 4;
   };
 
-  // Section title: accent bar + number + title + thin rule
+  // Section title: full-width band with left accent bar + number + title
   const sectionTitle = (num: string, title: string) => {
-    ensureSpace(18);
-    y += 6;
+    ensureSpace(22);
+    y += 8;
+    // Background band
+    doc.setFillColor(239, 246, 255);
+    doc.rect(M, y, CW, 11, 'F');
+    // Left accent bar
     doc.setFillColor(...C_ACCENT);
-    doc.rect(M, y - 3, 2, 7, 'F');
-    doc.setFontSize(7);
+    doc.rect(M, y, 3.5, 11, 'F');
+    // Section number
     doc.setFont('helvetica', 'bold');
+    doc.setFontSize(7.5);
     doc.setTextColor(...C_ACCENT);
-    doc.text(num, M + 5, y + 1);
-    doc.setFontSize(11);
+    doc.text(num, M + 9, y + 7.5);
+    // Title text
+    doc.setFontSize(10.5);
     doc.setFont('helvetica', 'bold');
     doc.setTextColor(...C_DARK);
-    doc.text(title, M + 14, y + 1);
-    y += 9;
-    drawRule();
+    doc.text(title.toUpperCase(), M + 21, y + 7.5);
+    y += 16;
   };
 
   // Sub-heading inside a section
@@ -456,17 +470,29 @@ export function generateDatasetReport(input: ReportInput): void {
     maxWidth = CW,
   ) => {
     const c = ALERT[kind];
-    const lines = doc.splitTextToSize(text, maxWidth - 14);
-    const h = lines.length * 5 + 10;
+    const icon = kind === 'success' ? 'v' : '!';
+    const lines = doc.splitTextToSize(text, maxWidth - 22);
+    const h = Math.max(14, lines.length * 5 + 12);
     ensureSpace(h + 4);
+    // Background
     doc.setFillColor(...c.bg);
     doc.roundedRect(M, y, maxWidth, h, 2, 2, 'F');
+    // Left accent bar (rounded left edge + straight right)
     doc.setFillColor(...c.bar);
-    doc.rect(M, y, 3, h, 'F');
+    doc.roundedRect(M, y, 4, h, 2, 2, 'F');
+    doc.rect(M + 1.5, y, 2.5, h, 'F');
+    // Icon circle
+    doc.setFillColor(...c.bar);
+    doc.circle(M + 12, y + h / 2, 3.8, 'F');
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(8);
+    doc.setTextColor(255, 255, 255);
+    doc.text(icon, M + 12, y + h / 2 + 2.5, { align: 'center' });
+    // Message text
     doc.setFontSize(8.5);
     doc.setFont('helvetica', 'normal');
     doc.setTextColor(...c.text);
-    doc.text(lines, M + 9, y + 7);
+    doc.text(lines, M + 20, y + 7.5);
     y += h + 5;
   };
 
@@ -474,42 +500,91 @@ export function generateDatasetReport(input: ReportInput): void {
 
   // ── COVER PAGE ──────────────────────────────────────────────────────────────
 
-  const BAND_H = 52;
-  doc.setFillColor(15, 23, 42);
-  doc.rect(0, 0, pw, BAND_H, 'F');
-  doc.setFillColor(...C_ACCENT);
-  doc.rect(0, BAND_H - 2, pw, 2, 'F');
-
-  doc.setFontSize(20);
-  doc.setFont('helvetica', 'bold');
-  doc.setTextColor(...C_WHITE);
-  doc.text('Rapport d\'analyse du dataset', M, 20);
-
-  doc.setFontSize(12);
-  doc.setFont('helvetica', 'normal');
-  doc.setTextColor(148, 163, 184);
-  doc.text(dataset.original_name, M, 32);
-
-  doc.setFontSize(8);
-  doc.setTextColor(100, 116, 139);
   const now = new Date().toLocaleDateString('fr-FR', { year: 'numeric', month: 'long', day: 'numeric' });
-  doc.text('Généré le ' + now + '  ·  MedicalVision AI Workspace', M, 44);
 
-  y = BAND_H + 12;
+  // Main header band — dark navy
+  const BAND_H = 96;
+  doc.setFillColor(11, 22, 46);
+  doc.rect(0, 0, pw, BAND_H, 'F');
+  // Inner lighter stripe for visual depth
+  doc.setFillColor(15, 33, 68);
+  doc.rect(0, 52, pw, BAND_H - 52, 'F');
+  // Bottom accent line
+  doc.setFillColor(...C_ACCENT);
+  doc.rect(0, BAND_H - 3, pw, 3, 'F');
 
-  doc.setFontSize(9);
+  // Logo & branding — top left
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(8);
+  doc.setTextColor(37, 99, 235);
+  doc.text('MEDICALVISION', M, 13);
+  doc.setDrawColor(37, 99, 235);
+  doc.setLineWidth(0.5);
+  doc.line(M, 14.8, M + 36, 14.8);
+  doc.setLineWidth(0.1);
+
+  // Generation date — top right
   doc.setFont('helvetica', 'normal');
-  doc.setTextColor(...C_MUTED);
-  const metaLine = [
-    `${totalRows.toLocaleString()} lignes`,
-    `${totalCols} colonnes`,
-    `Complétude ${completeness}%`,
-    targetColumn ? `Cible : ${targetColumn}` : 'Cible non définie',
-  ].join('   ·   ');
-  doc.text(metaLine, M, y);
-  y += 8;
+  doc.setFontSize(7.5);
+  doc.setTextColor(100, 116, 139);
+  doc.text(`Généré le ${now}`, pw - M, 13, { align: 'right' });
 
-  drawRule(0.5);
+  // Document type label
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(8.5);
+  doc.setTextColor(147, 197, 253);
+  doc.text('RAPPORT D\'ANALYSE', M, 27);
+
+  // Dataset title — large bold
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(19);
+  doc.setTextColor(255, 255, 255);
+  const titleLines = doc.splitTextToSize(dataset.original_name, pw - 2 * M - 20);
+  doc.text(titleLines[0], M, 39);
+  if (titleLines.length > 1) {
+    doc.setFontSize(14);
+    doc.text(titleLines[1], M, 48);
+  }
+
+  // Subtitle
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(9);
+  doc.setTextColor(148, 163, 184);
+  doc.text('Analyse de qualite  \u00b7  Preparation ML  \u00b7  Recommandations', M, 51);
+
+  // ── KPI boxes row ───────────────────────────────────────────────────────────
+  const KPI_TOP = 57;
+  const KPI_H   = 24;
+  const KPI_GAP = 3;
+  const KPI_W   = (CW - KPI_GAP * 3) / 4;
+  const mlBadgeLabel = mlReadiness.level === 'ready' ? 'Pret' : mlReadiness.level === 'ready_with_prep' ? 'A prep.' : 'Bloque';
+  const mlBadgeColor: RGB = mlReadiness.level === 'ready'
+    ? [74, 222, 128]
+    : mlReadiness.level === 'ready_with_prep' ? [251, 191, 36] : [248, 113, 113];
+  const completenessColor: RGB = completeness >= 95
+    ? [74, 222, 128] : completeness >= 80 ? [251, 191, 36] : [248, 113, 113];
+  const kpiData: Array<{ label: string; value: string; color: RGB }> = [
+    { label: 'Observations',  value: totalRows.toLocaleString(), color: [255, 255, 255] },
+    { label: 'Variables',     value: String(totalCols),           color: [255, 255, 255] },
+    { label: 'Completude',    value: `${completeness}%`,           color: completenessColor },
+    { label: 'Statut ML',     value: mlBadgeLabel,                 color: mlBadgeColor },
+  ];
+  for (let i = 0; i < kpiData.length; i++) {
+    const kx = M + i * (KPI_W + KPI_GAP);
+    doc.setFillColor(22, 42, 84);
+    doc.roundedRect(kx, KPI_TOP, KPI_W, KPI_H, 2, 2, 'F');
+    const vc = kpiData[i].color;
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(16);
+    doc.setTextColor(vc[0], vc[1], vc[2]);
+    doc.text(kpiData[i].value, kx + KPI_W / 2, KPI_TOP + 14, { align: 'center' });
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(6.5);
+    doc.setTextColor(148, 163, 184);
+    doc.text(kpiData[i].label.toUpperCase(), kx + KPI_W / 2, KPI_TOP + 20.5, { align: 'center' });
+  }
+
+  y = BAND_H + 10;
 
   // ── SECTION 01: Résumé exécutif ─────────────────────────────────────────────
   if (sections.executiveSummary) {
@@ -1351,11 +1426,25 @@ export function generateDatasetReport(input: ReportInput): void {
   const pageCount = doc.getNumberOfPages();
   for (let i = 1; i <= pageCount; i++) {
     doc.setPage(i);
-    doc.setFontSize(8);
-    doc.setTextColor(...C_MUTED);
+    // Footer band — dark, matching header
+    doc.setFillColor(11, 22, 46);
+    doc.rect(0, ph - 13, pw, 13, 'F');
+    // Left: branding
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(6.5);
+    doc.setTextColor(37, 99, 235);
+    doc.text('MedicalVision', M, ph - 5.5);
     doc.setFont('helvetica', 'normal');
-    doc.text(`Page ${i} / ${pageCount}`, pw - M, ph - 8, { align: 'right' });
-    doc.text('MedicalVision AI Workspace', M, ph - 8);
+    doc.setTextColor(100, 116, 139);
+    doc.text(' \u2014 Document confidentiel', M + 23, ph - 5.5);
+    // Center: date
+    doc.setTextColor(100, 116, 139);
+    doc.text(now, pw / 2, ph - 5.5, { align: 'center' });
+    // Right: page indicator
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(7.5);
+    doc.setTextColor(203, 213, 225);
+    doc.text(`${i} / ${pageCount}`, pw - M, ph - 5.5, { align: 'right' });
     if (i > 1) drawRunningHeader();
   }
 

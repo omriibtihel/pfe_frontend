@@ -18,7 +18,6 @@ import {
   ChevronRight,
   User,
   BarChart3,
-  ImageIcon,
 } from "lucide-react";
 
 import { useTranslation } from "react-i18next";
@@ -67,11 +66,6 @@ export function AppLayout({ children }: AppLayoutProps) {
     { path: "predict",     icon: Target,    label: t("nav.prediction") },
   ];
 
-  const imagingNavItems = [
-    { path: "imaging/import",   icon: Upload, label: t("nav.imagingImport") },
-    { path: "imaging/training", icon: Brain,  label: t("nav.imagingTraining") },
-    { path: "imaging/predict",  icon: Target, label: t("nav.imagingPrediction") },
-  ];
   const [isDark, setIsDark] = useState(() => {
     const stored = localStorage.getItem("theme");
     const prefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
@@ -91,8 +85,6 @@ export function AppLayout({ children }: AppLayoutProps) {
   const pathSegments = location.pathname.split("/").filter(Boolean);
   const isProjectPage = pathSegments[0] === "projects" && Boolean(pathSegments[1]);
   const projectId = isProjectPage ? pathSegments[1] : null;
-  const isImagingProject = isProjectPage && pathSegments[2] === "imaging";
-
   const handleLogout = async () => {
     await logout();
     navigate("/login");
@@ -213,8 +205,7 @@ export function AppLayout({ children }: AppLayoutProps) {
             <>
               <div className={cn("pb-3 pt-6", sidebarOpen ? "px-4" : "flex justify-center px-0")}>
                 {sidebarOpen ? (
-                  <span className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-[0.2em] text-muted-foreground">
-                    {isImagingProject && <ImageIcon className="h-3 w-3" />}
+                  <span className="text-xs font-bold uppercase tracking-[0.2em] text-muted-foreground">
                     {t("nav.project")}
                   </span>
                 ) : (
@@ -222,10 +213,9 @@ export function AppLayout({ children }: AppLayoutProps) {
                 )}
               </div>
 
-              {(isImagingProject ? imagingNavItems : projectNavItems).map((item) => {
+              {projectNavItems.map((item) => {
                 const fullPath = `/projects/${projectId}/${item.path}`;
-                const isActive = location.pathname.startsWith(fullPath) ||
-                  (item.path === "imaging/training" && location.pathname.startsWith(`/projects/${projectId}/imaging/results`));
+                const isActive = isProjectNavActive(item.path);
                 return (
                   <Link
                     key={item.path}

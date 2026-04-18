@@ -61,9 +61,11 @@ export type TrainingBalancingStrategy =
 export type TrainingThresholdStrategy =
   | 'maximize_f1'
   | 'maximize_f2'
+  | 'maximize_f_beta'
   | 'min_recall'
   | 'precision_recall_balance'
-  | 'youden';
+  | 'youden'
+  | 'minimize_cost';
 export type TrainingImbalanceLevel = 'balanced' | 'mild' | 'moderate' | 'severe' | 'critical';
 export type GridScoringOption = 'auto' | 'roc_auc' | 'average_precision' | 'f1_weighted' | 'r2';
 export type SearchType = 'none' | 'grid' | 'random' | 'halving_random';
@@ -123,6 +125,12 @@ export interface TrainingBalancingConfig {
   applyThreshold: boolean;
   thresholdStrategy: TrainingThresholdStrategy;
   minRecallConstraint?: number | null;
+  /** F-beta parameter for maximize_f_beta strategy (default 2.0, range 0.1–10) */
+  fBeta?: number;
+  /** Cost of a false negative (missed positive) for minimize_cost strategy (default 1.0) */
+  costFn?: number;
+  /** Cost of a false positive (false alarm) for minimize_cost strategy (default 1.0) */
+  costFp?: number;
 }
 
 export interface TrainingAvailableBalancingStrategy {
@@ -209,6 +217,23 @@ export const DEFAULT_TRAINING_BALANCING: TrainingBalancingConfig = {
 
 export type TrainingMode = 'manual' | 'automl';
 
+// ── Feature Engineering ──────────────────────────────────────────────────────
+
+export interface FeatureDef {
+  name: string;
+  enabled: boolean;
+  /** Python expression sent to the backend (user-editable, built with operation snippets). */
+  expression: string;
+}
+
+export interface FeatureEngineeringConfig {
+  features: FeatureDef[];
+}
+
+export const DEFAULT_FEATURE_ENGINEERING: FeatureEngineeringConfig = { features: [] };
+
+// ── TrainingConfig ────────────────────────────────────────────────────────────
+
 export interface TrainingConfig {
   datasetVersionId: string;
   targetColumn: string;
@@ -245,6 +270,8 @@ export interface TrainingConfig {
   configMode?: TrainingMode;
   /** Keys pre-filled by the recommendation engine that the user may have adjusted. */
   userOverrides?: string[];
+  /** User-defined engineered features computed before preprocessing. */
+  featureEngineering?: FeatureEngineeringConfig;
 }
 
 // ── AutoML mode ───────────────────────────────────────────────────────────────

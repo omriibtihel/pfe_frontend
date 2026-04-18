@@ -27,5 +27,7 @@ export type BoxplotRow = {
   value: number;
   s_min: number; s_p25: number; s_p50: number; s_p75: number; s_max: number;
   _min: number; _p25: number; _p50: number; _p75: number; _max: number;
+  _mean?: number | null;
+  _std?: number | null;
   fill: string;
 };
