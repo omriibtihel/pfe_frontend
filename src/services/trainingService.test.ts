@@ -4,8 +4,8 @@ import type { TrainingConfig } from "@/types";
 import {
   FALLBACK_PREPROCESSING_CAPABILITIES,
   toPreprocessingCapabilities,
-  toTrainingStartPayload,
 } from "@/services/trainingService";
+import { toTrainingStartPayload } from "@/services/trainingPayloadBuilders";
 
 describe("toTrainingStartPayload", () => {
   it("keeps preprocessing defaults+columns exactly and does not remap metrics/models", () => {

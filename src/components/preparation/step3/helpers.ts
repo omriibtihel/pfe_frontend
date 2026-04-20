@@ -6,6 +6,29 @@ import type {
   TrainingPreprocessingConfig,
 } from "@/types";
 import { DEFAULT_TRAINING_PREPROCESSING, DEFAULT_TRAINING_PREPROCESSING_DEFAULTS } from "@/types";
+import type { Step3ColumnValidationState } from "@/utils/step3Validation";
+import type { Step3ColumnRowData } from "./types";
+
+/** Local row type before issue/count fields are merged in. */
+export type BaseRow = Omit<Step3ColumnRowData, "issues" | "errorCount" | "warningCount" | "status">;
+
+export function toValidationRows(rows: BaseRow[]): Step3ColumnValidationState[] {
+  return rows.map((row) => ({
+    name: row.columnName,
+    use: row.use,
+    inferredType: row.inferredType,
+    selectedType: row.selectedType,
+    effectiveType: row.effectiveType,
+    numericImputation: row.numericImputation,
+    numericPowerTransform: row.numericPowerTransform,
+    numericScaling: row.numericScaling,
+    categoricalImputation: row.categoricalImputation,
+    categoricalEncoding: row.categoricalEncoding,
+    ordinalOrder: row.ordinalOrder,
+    hasExplicitCategoricalConfig: row.hasExplicitCategoricalConfig,
+    hasNegativeValues: row.hasNegativeValues,
+  }));
+}
 
 export function labelForMethod(value: string): string {
   if (value === "none") return "Aucun";

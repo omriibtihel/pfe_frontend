@@ -8,6 +8,13 @@ import type {
 } from "@/types";
 import type { Step3Issue } from "@/utils/step3Validation";
 
+export type Step3ValidationState = {
+  hasErrors: boolean;
+  errorCount: number;
+  warningCount: number;
+  isValidating: boolean;
+};
+
 export type Step3StatusFilter = "all" | "active" | "dropped" | "errors" | "warnings";
 export type Step3TypeFilter = "all" | "numeric" | "categorical" | "ordinal" | "auto";
 
