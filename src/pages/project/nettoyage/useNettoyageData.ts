@@ -3,7 +3,7 @@
  * Consomme useNettoyageState. Exporte aussi les utilitaires de type/kind
  * partagés par les composants enfants.
  */
-import { useEffect, useMemo, useRef } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { useToast } from "@/hooks/use-toast";
 
@@ -19,6 +19,7 @@ type AnyServerMeta = Partial<ColumnMeta> & {
   name?: string; dtype?: string; kind?: string; inferred_kind?: string;
   override_kind?: string | null; confidence?: number;
   missing?: number; unique?: number; total?: number; sample?: string[];
+  parasites?: { count: number; distinct: string[]; convertible_ratio: number } | null;
 };
 
 type SchemaState = {
@@ -90,6 +91,7 @@ function buildMetaMap(columns: string[], dtypes: Record<string, string>, serverM
         unique: Number(m.unique ?? 0),
         total: Number(m.total ?? 0),
         sample: Array.isArray(m.sample) ? (m.sample as any) : [],
+        parasites: m.parasites ?? null,
       } as ColumnMeta;
     }
   }
@@ -162,6 +164,16 @@ export function useNettoyageData(state: NettoyageState, projectId: string) {
   const [searchParams] = useSearchParams();
   const { toast } = useToast();
   const requestTokenRef = useRef(0);
+  const [columnsError, setColumnsError] = useState<string | null>(null);
+
+  // Ref kept current every render — lets cleanupWorkspace read fresh values
+  // without being recreated or causing stale-closure issues.
+  const cleanupCtxRef = useRef<{
+    versionId: number | null;
+    isEditingVersion: boolean;
+    activeDatasetId: number | null;
+    workspaceDatasetId: number | null;
+  }>({ versionId: null, isEditingVersion: false, activeDatasetId: null, workspaceDatasetId: null });
 
   const versionId = useMemo(() => {
     const raw = searchParams.get("version");
@@ -171,15 +183,27 @@ export function useNettoyageData(state: NettoyageState, projectId: string) {
 
   const isEditingVersion = Boolean(versionId);
 
+  // workspaceDatasetId est toujours le dataset effectif (version workspace ou raw workspace).
+  // Fallback sur activeDatasetId uniquement pendant le chargement initial.
   const effectiveDatasetId = useMemo(
-    () => (isEditingVersion ? state.workspaceDatasetId : state.activeDatasetId),
-    [isEditingVersion, state.workspaceDatasetId, state.activeDatasetId],
+    () => state.workspaceDatasetId ?? state.activeDatasetId,
+    [state.workspaceDatasetId, state.activeDatasetId],
   );
 
   const totalPages = useMemo(() => {
     if (!state.totalRows) return 1;
     return Math.max(1, Math.ceil(state.totalRows / state.pageSize));
   }, [state.totalRows, state.pageSize]);
+
+  // ── Versions helpers ─────────────────────────────────────────────────────────
+  const refreshVersions = async () => {
+    try {
+      const all = await dataService.getVersions(projectId);
+      state.setVersions(all);
+    } catch {
+      // silently ignore — versions list is non-critical
+    }
+  };
 
   // ── API helpers ─────────────────────────────────────────────────────────────
   const fetchTarget = async (datasetId: number) => {
@@ -200,7 +224,8 @@ export function useNettoyageData(state: NettoyageState, projectId: string) {
   const loadVersionMeta = async (vid: number) => {
     try {
       const all = await dataService.getVersions(projectId);
-      const v = (all as any[])?.find((x) => x.id === vid) ?? null;
+      state.setVersions(all);
+      const v = all.find((x) => x.id === vid) ?? null;
       state.setVersionMeta(
         v
           ? { id: v.id, name: v.name ?? `Version #${vid}`, createdAt: v.createdAt ?? null, operations: Array.isArray(v.operations) ? v.operations : [] }
@@ -216,9 +241,18 @@ export function useNettoyageData(state: NettoyageState, projectId: string) {
     const token = ++requestTokenRef.current;
 
     const shouldUseVersionSchemaMeta = Boolean(isEditingVersion && versionId);
+    let metaFetchFailed = false;
     const metaPromise = shouldUseVersionSchemaMeta
-      ? dataService.getVersionColumnsMeta(projectId, versionId as number, datasetId).catch(() => null)
-      : dataService.getProcessingColumnsMeta(projectId, datasetId).catch(() => null);
+      ? dataService.getVersionColumnsMeta(projectId, versionId as number, datasetId).catch((e) => {
+          console.error('[useNettoyageData] Failed to load column metadata:', e);
+          metaFetchFailed = true;
+          return null;
+        })
+      : dataService.getProcessingColumnsMeta(projectId, datasetId).catch((e) => {
+          console.error('[useNettoyageData] Failed to load column metadata:', e);
+          metaFetchFailed = true;
+          return null;
+        });
 
     const [opsResp, previewResp, targetResp, metaResp, schemaResp] = await Promise.all([
       dataService.getOperations(projectId, datasetId),
@@ -229,6 +263,11 @@ export function useNettoyageData(state: NettoyageState, projectId: string) {
     ]);
 
     if (token !== requestTokenRef.current) return;
+    if (metaFetchFailed) {
+      setColumnsError('Impossible de charger les colonnes. Vérifiez votre connexion.');
+    } else {
+      setColumnsError(null);
+    }
 
     const cols = previewResp?.columns ?? [];
     const dts = previewResp?.dtypes ?? {};
@@ -284,9 +323,13 @@ export function useNettoyageData(state: NettoyageState, projectId: string) {
     const load = async () => {
       state.setIsLoading(true);
       try {
-        const list = await datasetService.list(projectId);
+        const [list, versionsList] = await Promise.all([
+          datasetService.list(projectId),
+          dataService.getVersions(projectId).catch(() => []),
+        ]);
         if (!mounted) return;
         state.setDatasets(list);
+        state.setVersions(versionsList);
 
         const active = await datasetService.getActive(projectId).catch(() => ({ active_dataset_id: null }));
         let chosen: number | null = active.active_dataset_id ?? null;
@@ -318,11 +361,17 @@ export function useNettoyageData(state: NettoyageState, projectId: string) {
 
         if (chosen) {
           state.setVersionMeta(null);
-          state.setWorkspaceDatasetId(null);
           state.resetSelections();
           state.setTargetColumn(null);
           state.setIsTargetLoaded(false);
-          await refreshProcessing(chosen, 1);
+          try {
+            const ws = await dataService.getOrCreateDatasetWorkspace(projectId, chosen);
+            state.setWorkspaceDatasetId(ws.workspace_dataset_id);
+            await refreshProcessing(ws.workspace_dataset_id, 1);
+          } catch {
+            state.setWorkspaceDatasetId(null);
+            await refreshProcessing(chosen, 1);
+          }
         } else {
           state.setVersionMeta(null);
           state.setWorkspaceDatasetId(null);
@@ -349,8 +398,15 @@ export function useNettoyageData(state: NettoyageState, projectId: string) {
       state.setIsSwitchingDataset(true);
       try {
         await datasetService.setActive(projectId, state.activeDatasetId!).catch(() => {});
-        await refreshProcessing(state.activeDatasetId!, 1);
+        const ws = await dataService.getOrCreateDatasetWorkspace(projectId, state.activeDatasetId!);
+        if (!mounted) return;
+        state.setWorkspaceDatasetId(ws.workspace_dataset_id);
+        state.setHasDirtySession(false);
+        await refreshProcessing(ws.workspace_dataset_id, 1);
       } catch (e) {
+        if (!mounted) return;
+        state.setWorkspaceDatasetId(null);
+        await refreshProcessing(state.activeDatasetId!, 1).catch(() => {});
         toast({ title: "Erreur", description: (e as Error).message, variant: "destructive" });
       } finally {
         if (mounted) state.setIsSwitchingDataset(false);
@@ -361,15 +417,49 @@ export function useNettoyageData(state: NettoyageState, projectId: string) {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [state.activeDatasetId, isEditingVersion]);
 
+  // Keep ref current on every render (mutable write, no re-render triggered).
+  cleanupCtxRef.current = {
+    versionId,
+    isEditingVersion,
+    activeDatasetId: state.activeDatasetId,
+    workspaceDatasetId: state.workspaceDatasetId,
+  };
+
+  // Fire-and-forget — safe to call without await from event handlers or
+  // useEffect cleanup functions.  Silently ignores errors (user already left).
+  const cleanupWorkspace = useCallback(async () => {
+    const { versionId: vid, isEditingVersion: isVer, activeDatasetId: dsId, workspaceDatasetId: wsId } = cleanupCtxRef.current;
+    if (!wsId) return;
+    try {
+      if (isVer && vid) {
+        await dataService.closeVersionWorkspace(projectId, vid);
+      } else if (!isVer && dsId) {
+        await dataService.closeDatasetWorkspace(projectId, dsId);
+      }
+    } catch {
+      // cleanup is best-effort
+    }
+  }, [projectId]);
+
+  const retryColumnsLoad = useCallback(() => {
+    if (state.activeDatasetId) {
+      setColumnsError(null);
+      void refreshProcessing(state.activeDatasetId, state.page ?? 1);
+    }
+  }, [state.activeDatasetId, state.page, refreshProcessing]);
+
   return {
     versionId,
     isEditingVersion,
     effectiveDatasetId,
     totalPages,
     refreshProcessing,
-    fetchTarget,
+    refreshVersions,
     setTarget,
     loadVersionMeta,
+    cleanupWorkspace,
+    columnsError,
+    retryColumnsLoad,
   };
 }
 
