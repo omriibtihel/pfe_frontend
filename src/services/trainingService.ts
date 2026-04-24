@@ -7,6 +7,9 @@ import type {
   CategoricalImputationStrategy,
   DatasetProfile,
   ModelResult,
+  ModelResultDetail,
+  ExplainabilityData,
+  CurvesData,
   NumericImputationStrategy,
   NumericPowerTransformStrategy,
   NumericScalingStrategy,
@@ -31,7 +34,7 @@ import {
 } from "@/services/trainingPayloadBuilders";
 
 export type { TrainingValidationPreviewSubset, TrainingValidationPreviewMode };
-export type { TrainingSession, ModelResult };
+export type { TrainingSession, ModelResult, ModelResultDetail, ExplainabilityData, CurvesData };
 export type { TrainingStartPayload };
 
 type SaveModelResponse = {
@@ -58,26 +61,18 @@ function _toSaveModelResponse(raw: RawRecord): SaveModelResponse {
   };
 }
 
+// Kept only to suppress: the backend now returns clean typed SavedModelSummary objects.
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 function _toSavedModelSummary(raw: RawRecord): SavedModelSummary {
   return {
-    id: String(raw["id"] ?? raw["modelId"] ?? raw["model_id"] ?? ""),
-    modelType: String(raw["modelType"] ?? raw["model_type"] ?? ""),
-    taskType:
-      (raw["taskType"] as "classification" | "regression") ??
-      (raw["task_type"] as "classification" | "regression") ??
-      "classification",
-    sessionId: String(raw["sessionId"] ?? raw["session_id"] ?? ""),
-    datasetVersionId:
-      raw["datasetVersionId"] != null
-        ? String(raw["datasetVersionId"])
-        : raw["dataset_version_id"] != null
-          ? String(raw["dataset_version_id"])
-          : null,
+    id: String(raw["id"] ?? ""),
+    modelType: String(raw["modelType"] ?? ""),
+    taskType: (raw["taskType"] as "classification" | "regression") ?? "classification",
+    sessionId: String(raw["sessionId"] ?? ""),
+    datasetVersionId: raw["datasetVersionId"] != null ? String(raw["datasetVersionId"]) : null,
     datasetVersionName:
       raw["datasetVersionName"] != null
         ? String(raw["datasetVersionName"])
-        : raw["dataset_version_name"] != null
-          ? String(raw["dataset_version_name"])
           : null,
     isActive: Boolean(raw["isActive"] ?? raw["is_active"]),
     isSaved: Boolean(raw["isSaved"] ?? raw["is_saved"]),
@@ -204,7 +199,7 @@ export type AnalyzeBalancePayload = {
 
 export const FALLBACK_PREPROCESSING_CAPABILITIES: TrainingPreprocessingCapabilities = {
   numericImputation: ["none", "median", "mean", "most_frequent", "constant", "knn"],
-  numericPowerTransform: ["none", "yeo_johnson", "box_cox"],
+  numericPowerTransform: ["none", "log", "sqrt", "yeo_johnson", "box_cox"],
   numericScaling: ["none", "standard", "minmax", "robust", "maxabs"],
   categoricalImputation: ["none", "most_frequent", "constant"],
   categoricalEncoding: ["none", "onehot", "ordinal", "label"],
@@ -484,27 +479,52 @@ export const trainingService = {
     );
   },
 
-  async getSavedModels(projectId: string): Promise<SavedModelSummary[]> {
-    const raw = await apiClient.get<RawRecord[]>(
-      `/projects/${projectId}/training/saved-models`
+  async getModelDetails(projectId: string, sessionId: string, modelId: string): Promise<ModelResultDetail> {
+    return await apiClient.get<ModelResultDetail>(
+      `/projects/${projectId}/training/sessions/${sessionId}/models/${encodeURIComponent(modelId)}/details`
     );
-    return raw.map(_toSavedModelSummary);
   },
 
-  async downloadResults(projectId: string, sessionId: string): Promise<Blob> {
+  async getModelExplainability(projectId: string, sessionId: string, modelId: string): Promise<ExplainabilityData> {
+    return await apiClient.get<ExplainabilityData>(
+      `/projects/${projectId}/training/sessions/${sessionId}/models/${encodeURIComponent(modelId)}/explainability`
+    );
+  },
+
+  async getModelCurves(projectId: string, sessionId: string, modelId: string): Promise<CurvesData> {
+    return await apiClient.get<CurvesData>(
+      `/projects/${projectId}/training/sessions/${sessionId}/models/${encodeURIComponent(modelId)}/curves`
+    );
+  },
+
+  async getSavedModels(projectId: string): Promise<SavedModelSummary[]> {
+    return await apiClient.get<SavedModelSummary[]>(
+      `/projects/${projectId}/training/saved-models`
+    );
+  },
+
+  async downloadResults(projectId: string, sessionId: string): Promise<{ success: true; blob: Blob } | { success: false; error: string }> {
     try {
       const { blob } = await apiClient.getBlob(`/projects/${projectId}/training/sessions/${sessionId}/download`);
-      return blob;
+      return { success: true, blob };
     } catch (primaryError) {
       console.warn('downloadResults: primary /download endpoint failed, trying /export fallback', primaryError);
-      const { blob } = await apiClient.getBlob(`/projects/${projectId}/training/sessions/${sessionId}/export`);
-      return blob;
+      try {
+        const { blob } = await apiClient.getBlob(`/projects/${projectId}/training/sessions/${sessionId}/export`);
+        return { success: true, blob };
+      } catch (fallbackError) {
+        console.error('downloadResults: both endpoints failed', fallbackError);
+        return { success: false, error: String(fallbackError) };
+      }
     }
   },
 
   async downloadResultsAndSaveToDisk(projectId: string, sessionId: string, filename?: string): Promise<void> {
-    const blob = await this.downloadResults(projectId, sessionId);
-    const objectUrl = window.URL.createObjectURL(blob);
+    const result = await this.downloadResults(projectId, sessionId);
+    if (!result.success) {
+      throw new Error(result.error);
+    }
+    const objectUrl = window.URL.createObjectURL(result.blob);
     const a = document.createElement("a");
     a.href = objectUrl;
     a.download = filename?.trim() || `training_session_${sessionId}.json`;
