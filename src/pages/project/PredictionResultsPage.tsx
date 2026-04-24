@@ -284,6 +284,7 @@ export function PredictionResultsPage() {
 
   const [result, setResult] = useState<PredictionResponse | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [parseError, setParseError] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
   const [page, setPage] = useState(0);
   const [shapModal, setShapModal] = useState<{ row: PredictionRow; items: ShapLocalItem[] } | null>(null);
@@ -291,9 +292,16 @@ export function PredictionResultsPage() {
   const [loadingShapRows, setLoadingShapRows] = useState<Set<number>>(new Set());
 
   useEffect(() => {
+    setParseError(false);
     const raw = sessionStorage.getItem('lastPrediction');
     if (raw) {
-      try { setResult(JSON.parse(raw) as PredictionResponse); } catch { /* ignore */ }
+      try {
+        setResult(JSON.parse(raw) as PredictionResponse);
+      } catch (e) {
+        console.error('[PredictionResultsPage] Failed to parse prediction response:', e);
+        toast({ title: 'Erreur de chargement', description: "Les résultats de prédiction n'ont pas pu être chargés. Réessayez.", variant: 'destructive' });
+        setParseError(true);
+      }
     }
     setIsLoading(false);
   }, []);
@@ -385,10 +393,27 @@ export function PredictionResultsPage() {
     );
   }
 
+  if (parseError) {
+    return (
+      <AppLayout>
+        <div className="max-w-md mx-auto text-center space-y-4 pt-16" data-testid="prediction-parse-error">
+          <AlertTriangle className="h-12 w-12 mx-auto text-destructive" />
+          <h2 className="text-xl font-semibold">Erreur de chargement</h2>
+          <p className="text-sm text-muted-foreground">
+            Les résultats de prédiction sont corrompus ou illisibles. Relancez une prédiction.
+          </p>
+          <Button onClick={() => navigate(`/projects/${id}/predict`)}>
+            <ArrowLeft className="h-4 w-4 mr-2" /> Nouvelle prédiction
+          </Button>
+        </div>
+      </AppLayout>
+    );
+  }
+
   if (!result) {
     return (
       <AppLayout>
-        <div className="max-w-md mx-auto text-center space-y-4 pt-16">
+        <div className="max-w-md mx-auto text-center space-y-4 pt-16" data-testid="prediction-empty">
           <Target className="h-12 w-12 mx-auto text-muted-foreground" />
           <h2 className="text-xl font-semibold">Aucun résultat disponible</h2>
           <p className="text-sm text-muted-foreground">
