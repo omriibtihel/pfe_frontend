@@ -17,6 +17,7 @@ import {
   ExternalLink,
   MoreHorizontal,
   Pencil,
+  RefreshCw,
   Trash2,
 } from "lucide-react";
 
@@ -48,7 +49,8 @@ import { Step1DatasetTarget } from "@/components/training/wizard/Step1DatasetTar
 import { Step4Models } from "@/components/training/wizard/Step4Models";
 import { Step5Metrics } from "@/components/training/wizard/Step5Metrics";
 import { Step6Summary } from "@/components/training/wizard/Step6Summary";
-import { loadPrepConfig } from "@/utils/prepConfig";
+import { loadPrepConfig, savePrepConfig } from "@/utils/prepConfig";
+import dataService from "@/services/dataService";
 
 const steps = [
   { label: "Dataset & Cible",  icon: <Database       className="h-5 w-5" /> },
@@ -199,6 +201,7 @@ export function TrainingPage() {
   const [trainingMode, setTrainingMode] = useState<TrainingMode | null>(null);
   const [showModeDialog, setShowModeDialog] = useState(false);
   const [pastSessions, setPastSessions] = useState<TrainingSession[]>([]);
+  const [historyLoadFailed, setHistoryLoadFailed] = useState(false);
   const [deletingSessionId, setDeletingSessionId] = useState<string | null>(null);
   const [renamingSessionId, setRenamingSessionId] = useState<string | null>(null);
   const [renameValue, setRenameValue] = useState("");
@@ -242,8 +245,8 @@ export function TrainingPage() {
   useEffect(() => {
     if (!projectId) return;
     trainingService.getSessions(String(projectId))
-      .then((sessions) => setPastSessions(sessions.slice().reverse()))
-      .catch(() => {/* silent — history is not critical */});
+      .then((sessions) => { setPastSessions(sessions.slice().reverse()); setHistoryLoadFailed(false); })
+      .catch((e) => { console.warn('[TrainingPage] History load failed — non-critical:', e); setHistoryLoadFailed(true); });
   }, [projectId]);
 
   const updateConfig = useCallback((updates: Partial<TrainingConfig>) => {
@@ -323,8 +326,16 @@ export function TrainingPage() {
     }
     try {
       // Merge PrepConfig (split/preprocessing/balancing) from PreparationPage if available
+      // Priorité : localStorage (cache) → backend (source de vérité si cache vide)
       const versionId = String(config.datasetVersionId || routeVersionId || "").trim();
-      const prepConfig = versionId ? loadPrepConfig(String(projectId), versionId) : null;
+      let prepConfig = versionId ? loadPrepConfig(String(projectId), versionId) : null;
+      if (!prepConfig && versionId) {
+        const remote = await dataService.getPrepConfig(projectId, versionId);
+        if (remote) {
+          prepConfig = remote as unknown as import("@/utils/prepConfig").PrepConfig;
+          savePrepConfig(String(projectId), versionId, prepConfig); // mise en cache locale
+        }
+      }
       const mergedConfig: TrainingConfig = prepConfig
         ? {
             ...config,
@@ -557,6 +568,31 @@ export function TrainingPage() {
               )}
             </Button>
           </motion.div>
+        )}
+
+        {/* Session history — soft failure indicator */}
+        {historyLoadFailed && (
+          <div
+            className="flex items-center gap-2 rounded-lg border border-border/60 bg-muted/40 px-3 py-2 text-xs text-muted-foreground"
+            data-testid="history-load-failed"
+          >
+            <History className="h-3.5 w-3.5 shrink-0" />
+            <span>Historique indisponible</span>
+            <button
+              type="button"
+              className="ml-auto flex items-center gap-1 rounded px-2 py-1 hover:bg-muted transition-colors"
+              onClick={() => {
+                setHistoryLoadFailed(false);
+                trainingService.getSessions(String(projectId))
+                  .then((sessions) => setPastSessions(sessions.slice().reverse()))
+                  .catch((e) => { console.warn('[TrainingPage] History retry failed:', e); setHistoryLoadFailed(true); });
+              }}
+              data-testid="history-retry-btn"
+            >
+              <RefreshCw className="h-3 w-3" />
+              Réessayer
+            </button>
+          </div>
         )}
 
         {/* Session history */}
