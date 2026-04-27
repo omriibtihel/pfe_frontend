@@ -11,7 +11,6 @@ import type {
 import { BulkActionsBar } from "./BulkActionsBar";
 import { ColumnFilterBar } from "./ColumnFilterBar";
 import { ColumnRow } from "./ColumnRow";
-import { parseOrdinalOrder } from "./helpers";
 import type { Step3ColumnRowData, Step3Options, Step3StatusFilter, Step3TypeFilter } from "./types";
 
 const AUTO_TYPE = "auto" as const;
@@ -191,11 +190,11 @@ export function ColumnsCard({
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      {["État", "Sél.", "Colonne", "Inclure", "Type", "Valeurs manquantes", "Transformation", "Normalisation / Encodage", "Ordre ordinal"].map((header, i) => (
+                      {["État", "Sél.", "Colonne", "Inclure", "Type", "Valeurs manquantes", "Transformation", "Normalisation / Encodage"].map((header, i) => (
                         <TableHead
                           key={header}
                           className={`sticky top-0 z-20 bg-background/95 backdrop-blur ${
-                            i === 0 ? "w-20" : i === 1 ? "w-12" : i === 3 ? "w-24" : i === 4 ? "w-44" : i === 5 ? "w-48" : i === 6 ? "w-44" : i === 7 ? "w-44" : i === 8 ? "w-56" : ""
+                            i === 0 ? "w-20" : i === 1 ? "w-12" : i === 3 ? "w-24" : i === 4 ? "w-44" : i === 5 ? "w-48" : i === 6 ? "w-44" : i === 7 ? "w-44" : ""
                           }`}
                         >
                           {header}
@@ -223,7 +222,6 @@ export function ColumnsCard({
                             const next = { ...c };
                             if (value === AUTO_TYPE) delete next.type;
                             else next.type = value;
-                            if ((next.type ?? row.inferredType) !== "ordinal") delete next.ordinalOrder;
                             return next;
                           })
                         }
@@ -240,17 +238,7 @@ export function ColumnsCard({
                           onUpdateColumnConfig(row.columnName, (c) => ({ ...c, numericScaling: value }))
                         }
                         onCategoricalEncodingChange={(value) =>
-                          onUpdateColumnConfig(row.columnName, (c) => {
-                            const next = { ...c, categoricalEncoding: value };
-                            if (value !== "ordinal") delete next.ordinalOrder;
-                            return next;
-                          })
-                        }
-                        onOrdinalOrderChange={(rawInput) =>
-                          onUpdateColumnConfig(row.columnName, (c) => {
-                            const parsed = parseOrdinalOrder(rawInput);
-                            return { ...c, ordinalOrder: parsed.length ? parsed : undefined };
-                          })
+                          onUpdateColumnConfig(row.columnName, (c) => ({ ...c, categoricalEncoding: value }))
                         }
                         onToggleExpanded={() => onToggleExpanded(row.columnName)}
                         onKnnNeighborsChange={(v) =>

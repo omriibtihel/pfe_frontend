@@ -1,12 +1,12 @@
 import { Grid3X3, Shuffle, Sparkles, Zap } from 'lucide-react';
 
 import { Badge } from '@/components/ui/badge';
-import type { ModelResult } from '@/types';
-import { fmtMetric } from './CvResultsPanel';
+import type { GridSearchInfo } from '@/types';
+import { formatMetricValue } from '@/utils/metricUtils';
 
 interface GridSearchResultsPanelProps {
-  gridSearch: NonNullable<ModelResult['gridSearch']>;
-  hyperparams?: ModelResult['hyperparams'];
+  gridSearch: GridSearchInfo;
+  hyperparams?: Record<string, unknown> | null;
 }
 
 export function GridSearchResultsPanel({
@@ -76,7 +76,7 @@ export function GridSearchResultsPanel({
             <p className="text-[11px] text-muted-foreground">
               Meilleur score CV{scoring && scoring !== 'auto' ? ` (${scoring})` : ''}
             </p>
-            <p className="text-2xl font-bold text-primary">{fmtMetric(bestScore)}</p>
+            <p className="text-2xl font-bold text-primary">{formatMetricValue(bestScore, scoring)}</p>
           </div>
           <Sparkles className="ml-auto h-5 w-5 text-primary opacity-60" aria-hidden="true" />
         </div>
@@ -117,14 +117,14 @@ export function GridSearchResultsPanel({
               >
                 <span className="w-4 shrink-0 text-[10px] text-muted-foreground">#{i + 1}</span>
                 <span className="w-14 shrink-0 text-xs font-semibold text-primary">
-                  {fmtMetric(candidate.mean_score)}
+                  {formatMetricValue(candidate.mean_score, scoring)}
                 </span>
                 {candidate.overfit_gap != null && (
                   <span
                     className={`w-12 shrink-0 text-[10px] tabular-nums ${candidate.overfit_gap > 0.1 ? 'text-amber-600 dark:text-amber-400' : 'text-muted-foreground'}`}
                     title="Écart train/val — valeur élevée = surapprentissage"
                   >
-                    Δ{candidate.overfit_gap > 0 ? '+' : ''}{fmtMetric(candidate.overfit_gap)}
+                    Δ{candidate.overfit_gap > 0 ? '+' : ''}{formatMetricValue(candidate.overfit_gap, scoring)}
                   </span>
                 )}
                 {isHalving && candidate.halving_iter != null && (

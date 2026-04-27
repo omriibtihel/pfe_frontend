@@ -41,7 +41,6 @@ export type Step3ColumnValidationState = {
   numericScaling: NumericScalingStrategy;
   categoricalImputation: CategoricalImputationStrategy;
   categoricalEncoding: CategoricalEncodingStrategy;
-  ordinalOrder: string[];
   hasExplicitCategoricalConfig: boolean;
   /** True when the column has negative values — Box-Cox requires X > 0 */
   hasNegativeValues: boolean;
@@ -156,6 +155,34 @@ export function validateLocal(
       });
     }
 
+    if (
+      column.effectiveType === "numeric" &&
+      column.numericPowerTransform === "log" &&
+      column.hasNegativeValues
+    ) {
+      pushIssue(out, {
+        column: column.name,
+        severity: "warning",
+        code: "log_negative_values",
+        message: "log(x) requiert X > 0. Cette colonne contient des valeurs négatives ou nulles — elles seront clippées à ε = 1e-10, ce qui peut fausser la distribution. Préférez Yeo-Johnson.",
+        source: "local",
+      });
+    }
+
+    if (
+      column.effectiveType === "numeric" &&
+      column.numericPowerTransform === "sqrt" &&
+      column.hasNegativeValues
+    ) {
+      pushIssue(out, {
+        column: column.name,
+        severity: "warning",
+        code: "sqrt_negative_values",
+        message: "√x requiert X ≥ 0. Cette colonne contient des valeurs négatives — elles seront clippées à 0, ce qui peut fausser la distribution.",
+        source: "local",
+      });
+    }
+
     if (isCategoricalLike && column.categoricalEncoding === "none") {
       pushIssue(out, {
         column: column.name,
@@ -173,20 +200,6 @@ export function validateLocal(
         severity: "warning",
         code: "ordinal_encoding_recommended",
         message: "Type ordinal detecte: l'encodage 'ordinal' est recommande.",
-        source: "local",
-      });
-    }
-
-    if (
-      column.effectiveType === "ordinal" &&
-      column.categoricalEncoding === "ordinal" &&
-      column.ordinalOrder.length === 0
-    ) {
-      pushIssue(out, {
-        column: column.name,
-        severity: "error",
-        code: "ordinal_order_missing",
-        message: "Encodage ordinal actif sans ordre explicite (ordinalOrder).",
         source: "local",
       });
     }

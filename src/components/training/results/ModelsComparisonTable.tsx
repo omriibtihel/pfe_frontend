@@ -4,14 +4,31 @@ import { ArrowDown, ArrowUp, ArrowUpDown, Trophy } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import type { ModelResult, TrainingSession } from '@/types';
-import { buildClassificationView, toNumber, toPercent, toSeconds } from './trainingResultsHelpers';
+import { metricDirection } from '@/utils/metricUtils';
+import { toNumber, toPercent, toSeconds } from './trainingResultsHelpers';
+
+/**
+ * Returns true when lower values are "better" for the given column key.
+ *
+ * Model metrics delegate to the canonical metricDirection from metricUtils so
+ * that additions to LOWER_IS_BETTER (e.g. mse, log_loss, brier_score) are
+ * automatically honoured here without a second patch site.
+ *
+ * 'time' (training time) is handled explicitly: it is not a model metric and
+ * therefore absent from metricUtils.LOWER_IS_BETTER, but a shorter training
+ * time is still better for comparison purposes.
+ *
+ * Exported for unit tests — not part of the public API of this module.
+ */
+export function columnLowerIsBetter(key: string): boolean {
+  if (key === 'time') return true;
+  return metricDirection(key) === 'lower_is_better';
+}
 
 const METRIC_DESCRIPTIONS: Record<string, string> = {
   accuracy: 'Proportion de prédictions correctes sur le jeu de test.',
-  precision: 'Parmi les exemples prédits positifs, quelle proportion est réellement positive.',
-  recall: 'Parmi tous les exemples positifs, quelle proportion a été correctement détectée.',
-  f1: 'Moyenne harmonique de la précision et du rappel. Équilibre les deux.',
-  roc_auc: 'Aire sous la courbe ROC. Mesure la discrimination du modèle entre les classes.',
+  f1: 'Moyenne harmonique de la précision et du rappel.',
+  rocAuc: 'Aire sous la courbe ROC. Mesure la discrimination du modèle entre les classes.',
   r2: 'Coefficient de détermination (R²). Plus proche de 1 = meilleure explication de la variance.',
   rmse: "Racine de l'erreur quadratique moyenne. Pénalise les grandes erreurs.",
   mae: 'Erreur absolue moyenne. Robuste aux valeurs aberrantes.',
@@ -25,12 +42,9 @@ interface SortConfig {
 
 interface EnrichedRow {
   result: ModelResult;
-  /** Actual accuracy from metricsDetailed (same source as ModelResultCard). */
   accuracy: number | null;
-  precision: number | null;
-  recall: number | null;
   f1: number | null;
-  roc_auc: number | null;
+  rocAuc: number | null;
   r2: number | null;
   rmse: number | null;
   mae: number | null;
@@ -48,14 +62,10 @@ export function ModelsComparisonTable({
   bestModel,
   isRegression,
 }: ModelsComparisonTableProps) {
-  const [sort, setSort] = useState<SortConfig>({ key: 'accuracy', dir: 'desc' });
-
-  const hasBinaryResult = useMemo(
-    () =>
-      !isRegression &&
-      session.results.some((r) => buildClassificationView(r).classificationType === 'binary'),
-    [isRegression, session.results],
-  );
+  const [sort, setSort] = useState<SortConfig>({
+    key: isRegression ? 'rmse' : 'rocAuc',
+    dir: isRegression ? 'asc' : 'desc',
+  });
 
   const columns: Array<{ key: keyof Omit<EnrichedRow, 'result'>; label: string }> = isRegression
     ? [
@@ -66,38 +76,27 @@ export function ModelsComparisonTable({
       ]
     : [
         { key: 'accuracy', label: 'Accuracy' },
-        { key: 'precision', label: hasBinaryResult ? 'Précision (+)' : 'Précision (macro)' },
-        { key: 'recall', label: hasBinaryResult ? 'Rappel (+)' : 'Rappel (macro)' },
-        { key: 'f1', label: hasBinaryResult ? 'F1 (+)' : 'F1 (macro)' },
-        { key: 'roc_auc', label: 'ROC AUC' },
+        { key: 'f1', label: 'F1-score' },
+        { key: 'rocAuc', label: 'AUC-ROC' },
         { key: 'time', label: 'Temps' },
       ];
 
   const enriched = useMemo<EnrichedRow[]>(
     () =>
-      session.results.map((r) => {
-        const cv = !isRegression ? buildClassificationView(r) : null;
-        // Use the same accuracy source as ModelResultCard (metricsDetailed.global.accuracy),
-        // falling back to testScore only if accuracy is genuinely absent.
-        const accuracy = cv?.accuracy ?? (isRegression ? null : (r.testScore ?? null));
-        return {
-          result: r,
-          accuracy,
-          precision: cv?.precisionMain ?? null,
-          recall: cv?.recallMain ?? null,
-          f1: cv?.f1Main ?? null,
-          roc_auc: cv?.rocAuc ?? null,
-          r2: r.metrics?.r2 ?? null,
-          rmse: r.metrics?.rmse ?? null,
-          mae: r.metrics?.mae ?? null,
-          time: r.trainingTime ?? null,
-        };
-      }),
-    [session.results, isRegression],
+      session.results.map((r) => ({
+        result: r,
+        accuracy: r.metrics.accuracy ?? null,
+        f1: r.metrics.f1 ?? null,
+        rocAuc: r.metrics.rocAuc ?? null,
+        r2: r.metrics.r2 ?? null,
+        rmse: r.metrics.rmse ?? null,
+        mae: r.metrics.mae ?? null,
+        time: r.trainingTime ?? null,
+      })),
+    [session.results],
   );
 
   const sorted = useMemo(() => {
-    const LOWER_IS_BETTER = new Set(['rmse', 'mae', 'time']);
     return [...enriched].sort((a, b) => {
       const av = (a[sort.key as keyof EnrichedRow] as number | null) ?? Number.NEGATIVE_INFINITY;
       const bv = (b[sort.key as keyof EnrichedRow] as number | null) ?? Number.NEGATIVE_INFINITY;
@@ -106,8 +105,7 @@ export function ModelsComparisonTable({
       if (!Number.isFinite(na) && !Number.isFinite(nb)) return 0;
       if (!Number.isFinite(na)) return 1;
       if (!Number.isFinite(nb)) return -1;
-      const lowerBetter = LOWER_IS_BETTER.has(sort.key);
-      if (lowerBetter) return sort.dir === 'asc' ? na - nb : nb - na;
+      if (columnLowerIsBetter(sort.key)) return sort.dir === 'asc' ? na - nb : nb - na;
       return sort.dir === 'desc' ? nb - na : na - nb;
     });
   }, [enriched, sort]);
@@ -194,13 +192,33 @@ export function ModelsComparisonTable({
                               aria-label="Meilleur modèle"
                             />
                           )}
-                          <span className={`font-semibold ${isBest ? 'text-amber-700 dark:text-amber-400' : ''}`}>
+                          <span
+                            className={`font-semibold ${isBest ? 'text-amber-700 dark:text-amber-400' : ''}`}
+                          >
                             {result.modelType.toUpperCase()}
                           </span>
                           {result.isCV && (
                             <Badge variant="outline" className="px-1.5 py-0 text-[10px]">
                               CV
                             </Badge>
+                          )}
+                          {result.automl && (
+                            <Badge variant="outline" className="px-1.5 py-0 text-[10px] border-violet-400 text-violet-600">
+                              AutoML
+                            </Badge>
+                          )}
+                          {result.evaluationSource && (
+                            <span
+                              className={`text-[10px] border rounded px-1 py-0.5 ${
+                                result.evaluationSource.isIndependentTest
+                                  ? 'text-green-600 border-green-300 bg-green-50'
+                                  : result.evaluationSource.type === 'train_only'
+                                    ? 'text-red-600 border-red-300 bg-red-50'
+                                    : 'text-blue-600 border-blue-300 bg-blue-50'
+                              }`}
+                            >
+                              {result.evaluationSource.label}
+                            </span>
                           )}
                         </div>
                       </td>
@@ -238,7 +256,6 @@ function SortIcon({ colKey, sort }: { colKey: string; sort: SortConfig }) {
       />
     );
   }
-
   return sort.dir === 'desc' ? (
     <ArrowDown className="h-3 w-3 text-primary" aria-hidden="true" />
   ) : (

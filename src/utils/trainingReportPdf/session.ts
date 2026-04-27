@@ -1,12 +1,12 @@
 import type { ModelResult, TrainingSession } from '@/types';
 import { safeN } from './formatters';
+import { selectBestModel } from '@/utils/metricUtils';
 
 // ── Helpers session ───────────────────────────────────────────────────────────
-export function bestModel(session: TrainingSession): ModelResult | null {
-  if (!session.results?.length) return null;
-  return session.results.reduce((b, c) =>
-    (safeN(c.testScore) ?? -Infinity) > (safeN(b.testScore) ?? -Infinity) ? c : b,
-  );
+export function bestModel(session: TrainingSession): ModelResult | undefined {
+  if (!session.results?.length) return undefined;
+  // null (mixed metrics) collapses to undefined — PDF simply omits the "best model" highlight
+  return selectBestModel(session.results, session.config?.metrics?.[0]) ?? undefined;
 }
 
 export function duration(session: TrainingSession): string {

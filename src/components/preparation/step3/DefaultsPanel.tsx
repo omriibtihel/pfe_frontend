@@ -1,6 +1,5 @@
-import { SlidersHorizontal } from 'lucide-react';
-import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import {
   DEFAULT_ADVANCED_PARAMS,
@@ -8,7 +7,7 @@ import {
   type TrainingPreprocessingConfig,
   type TrainingPreprocessingDefaults,
 } from '@/types';
-import { AdvancedPreprocessingModal } from './AdvancedPreprocessingModal';
+import { SlidersHorizontal } from 'lucide-react';
 import { labelForMethod } from './helpers';
 import type { Step3Options } from './types';
 
@@ -20,7 +19,12 @@ interface DefaultsPanelProps {
 }
 
 export function DefaultsPanel({ preprocessing, options, onSetDefault, onSetAdvancedParams }: DefaultsPanelProps) {
-  const advancedParams = preprocessing.advancedParams ?? DEFAULT_ADVANCED_PARAMS;
+  const adv = preprocessing.advancedParams ?? DEFAULT_ADVANCED_PARAMS;
+  const setAdv = (patch: Partial<TrainingPreprocessingAdvancedParams>) =>
+    onSetAdvancedParams({ ...adv, ...patch });
+
+  const numImp = preprocessing.defaults.numericImputation;
+  const catImp = preprocessing.defaults.categoricalImputation;
 
   return (
     <Card className="glass-premium shadow-card">
@@ -30,20 +34,21 @@ export function DefaultsPanel({ preprocessing, options, onSetDefault, onSetAdvan
             <SlidersHorizontal className="h-4 w-4 text-primary" />
           </div>
           Paramètres par défaut
-          <div className="ml-auto">
-            <AdvancedPreprocessingModal params={advancedParams} onChange={onSetAdvancedParams} />
-          </div>
         </CardTitle>
       </CardHeader>
       <CardContent className="space-y-4">
         <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
+
+          {/* ── Variables numériques ─────────────────────────────────────── */}
           <div className="rounded-xl border border-border/60 bg-background/60 p-3 space-y-3">
             <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Variables numériques</p>
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-              <div className="space-y-1">
-                <p className="text-xs text-muted-foreground">Valeurs manquantes</p>
+
+              {/* Imputation numérique */}
+              <div className="space-y-1.5">
+                <p className="text-xs text-muted-foreground">Imputation</p>
                 <Select
-                  value={preprocessing.defaults.numericImputation}
+                  value={numImp}
                   onValueChange={(v) => onSetDefault('numericImputation', v as TrainingPreprocessingDefaults['numericImputation'])}
                 >
                   <SelectTrigger className="h-10"><SelectValue /></SelectTrigger>
@@ -53,14 +58,38 @@ export function DefaultsPanel({ preprocessing, options, onSetDefault, onSetAdvan
                     ))}
                   </SelectContent>
                 </Select>
-                {preprocessing.defaults.numericImputation === 'knn' && (
-                  <p className="text-[10px] text-primary">k = {advancedParams.knnNeighbors}</p>
+                {numImp === 'knn' && (
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-[10px] text-muted-foreground shrink-0">Voisins k =</span>
+                    <Input
+                      type="number" min={1} max={50}
+                      className="h-7 text-xs"
+                      value={adv.knnNeighbors}
+                      onChange={(e) => {
+                        const v = Math.max(1, Math.min(50, parseInt(e.target.value) || 1));
+                        setAdv({ knnNeighbors: v });
+                      }}
+                    />
+                  </div>
                 )}
-                {preprocessing.defaults.numericImputation === 'constant' && (
-                  <p className="text-[10px] text-primary">fill = {advancedParams.constantFillNumeric}</p>
+                {numImp === 'constant' && (
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-[10px] text-muted-foreground shrink-0">Valeur =</span>
+                    <Input
+                      type="number" step="any"
+                      className="h-7 text-xs"
+                      value={adv.constantFillNumeric}
+                      onChange={(e) => {
+                        const v = parseFloat(e.target.value);
+                        if (!isNaN(v)) setAdv({ constantFillNumeric: v });
+                      }}
+                    />
+                  </div>
                 )}
               </div>
-              <div className="space-y-1">
+
+              {/* Transformation */}
+              <div className="space-y-1.5">
                 <p className="text-xs text-muted-foreground">Transformation</p>
                 <Select
                   value={preprocessing.defaults.numericPowerTransform}
@@ -74,7 +103,9 @@ export function DefaultsPanel({ preprocessing, options, onSetDefault, onSetAdvan
                   </SelectContent>
                 </Select>
               </div>
-              <div className="space-y-1">
+
+              {/* Normalisation */}
+              <div className="space-y-1.5">
                 <p className="text-xs text-muted-foreground">Normalisation (linéaire)</p>
                 <Select
                   value={preprocessing.defaults.numericScaling}
@@ -88,16 +119,20 @@ export function DefaultsPanel({ preprocessing, options, onSetDefault, onSetAdvan
                   </SelectContent>
                 </Select>
               </div>
+
             </div>
           </div>
 
+          {/* ── Variables catégorielles ──────────────────────────────────── */}
           <div className="rounded-xl border border-border/60 bg-background/60 p-3 space-y-3">
             <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Variables catégorielles</p>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <div className="space-y-1">
-                <p className="text-xs text-muted-foreground">Valeurs manquantes</p>
+
+              {/* Imputation catégorielle */}
+              <div className="space-y-1.5">
+                <p className="text-xs text-muted-foreground">Imputation</p>
                 <Select
-                  value={preprocessing.defaults.categoricalImputation}
+                  value={catImp}
                   onValueChange={(v) => onSetDefault('categoricalImputation', v as TrainingPreprocessingDefaults['categoricalImputation'])}
                 >
                   <SelectTrigger className="h-10"><SelectValue /></SelectTrigger>
@@ -107,11 +142,21 @@ export function DefaultsPanel({ preprocessing, options, onSetDefault, onSetAdvan
                     ))}
                   </SelectContent>
                 </Select>
-                {preprocessing.defaults.categoricalImputation === 'constant' && (
-                  <p className="text-[10px] text-primary">fill = "{advancedParams.constantFillCategorical}"</p>
+                {catImp === 'constant' && (
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-[10px] text-muted-foreground shrink-0">Valeur =</span>
+                    <Input
+                      className="h-7 text-xs"
+                      placeholder="__missing__"
+                      value={adv.constantFillCategorical}
+                      onChange={(e) => setAdv({ constantFillCategorical: e.target.value })}
+                    />
+                  </div>
                 )}
               </div>
-              <div className="space-y-1">
+
+              {/* Encodage */}
+              <div className="space-y-1.5">
                 <p className="text-xs text-muted-foreground">Encodage</p>
                 <Select
                   value={preprocessing.defaults.categoricalEncoding}
@@ -125,22 +170,28 @@ export function DefaultsPanel({ preprocessing, options, onSetDefault, onSetAdvan
                   </SelectContent>
                 </Select>
               </div>
+
             </div>
           </div>
         </div>
 
+        {/* ── Seuil de variance ───────────────────────────────────────────── */}
         <div className="flex items-center gap-2 pt-1">
-          <p className="text-xs text-muted-foreground">Seuil de variance :</p>
-          {advancedParams.varianceThreshold === 0 ? (
-            <Badge variant="secondary" className="text-xs">Désactivé</Badge>
+          <p className="text-xs text-muted-foreground shrink-0">Seuil de variance :</p>
+          <Input
+            type="number" min={0} max={1} step={0.001}
+            className="h-7 text-xs w-24 font-mono"
+            value={adv.varianceThreshold}
+            onChange={(e) => {
+              const v = Math.max(0, Math.min(1, parseFloat(e.target.value) || 0));
+              setAdv({ varianceThreshold: v });
+            }}
+          />
+          {adv.varianceThreshold === 0 ? (
+            <span className="text-[10px] text-amber-600">désactivé — aucune feature supprimée</span>
           ) : (
-            <Badge variant="outline" className="text-xs font-mono">
-              seuil = {advancedParams.varianceThreshold}
-            </Badge>
+            <span className="text-[10px] text-muted-foreground">— features avec variance &lt; seuil supprimées automatiquement</span>
           )}
-          <p className="text-[10px] text-muted-foreground">
-            — colonnes avec trop peu de variation supprimées automatiquement
-          </p>
         </div>
       </CardContent>
     </Card>

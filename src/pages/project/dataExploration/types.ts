@@ -18,6 +18,11 @@ export type ColProfile = {
     max: number | null;
   } | null;
   topValues?: Array<{ value: string; count: number }>;
+  parasites?: {
+    count: number;
+    distinct: string[];
+    convertible_ratio: number;
+  } | null;
 };
 
 export function fmt(v: number | null | undefined, d = 2): string {

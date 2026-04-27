@@ -6,7 +6,7 @@ import { AppLayout } from "@/layouts/AppLayout";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { PageSkeleton } from "@/components/ui/loading-skeleton";
 import { useToast } from "@/hooks/use-toast";
@@ -55,12 +55,16 @@ export function ChartsPage() {
   const [isRefreshing, setIsRefreshing] = useState(false);
 
   // ── Datasets & versions lists ────────────────────────────────────────────
-  const [datasets,        setDatasets]        = useState<DatasetListItem[]>([]);
-  const [activeDatasetId, setActiveDatasetId] = useState<number | null>(null);
+  type DataSource = { kind: "dataset" | "version"; id: number };
 
-  const [sourceType,      setSourceType]      = useState<"dataset" | "version">("dataset");
-  const [versions,        setVersions]        = useState<VersionUI[]>([]);
-  const [activeVersionId, setActiveVersionId] = useState<number | null>(null);
+  const [datasets,      setDatasets]      = useState<DatasetListItem[]>([]);
+  const [versions,      setVersions]      = useState<VersionUI[]>([]);
+  const [activeSource,  setActiveSource]  = useState<DataSource | null>(null);
+
+  // Derived source type and ids
+  const sourceType      = activeSource?.kind ?? "dataset";
+  const activeDatasetId = activeSource?.kind === "dataset" ? activeSource.id : null;
+  const activeVersionId = activeSource?.kind === "version" ? activeSource.id : null;
 
   // ── Analytics (overview + profile) ──────────────────────────────────────
   const [overview, setOverview] = useState<AnalyticsOverview | null>(null);
@@ -88,6 +92,9 @@ export function ChartsPage() {
 
   const [boxplotCols, setBoxplotCols] = useState<string[]>([]);
   const [radarCols,   setRadarCols]   = useState<string[]>([]);
+
+  // ── Column selection readiness (guards against stale columns on source switch) ──
+  const [columnSelectionReady, setColumnSelectionReady] = useState(false);
 
   // ── Chart results ────────────────────────────────────────────────────────
   const [chartLoading, setChartLoading] = useState(false);
@@ -137,9 +144,8 @@ export function ChartsPage() {
 
         const active  = await databaseService.getActiveDataset(projectId);
         const forced  = opts?.forceDatasetId ?? null;
-        const chosen  = forced ?? active.active_dataset_id ?? (dsList?.[0]?.id ?? null);
-        setActiveDatasetId(chosen);
-        setActiveVersionId((prev) => prev ?? vList[0]?.id ?? null);
+        const chosen = forced ?? active.active_dataset_id ?? (dsList?.[0]?.id ?? null);
+        setActiveSource((prev) => prev ?? (chosen ? { kind: "dataset", id: chosen } : null));
 
         if (!chosen) { setOverview(null); setProfile(null); }
       } catch (error) {
@@ -156,14 +162,11 @@ export function ChartsPage() {
     [projectId, toast, loadAnalytics],
   );
 
-  // Reload analytics when source type or active id changes
+  // Reload analytics when source changes
   useEffect(() => {
-    if (sourceType === "dataset" && activeDatasetId) {
-      void loadAnalytics("dataset", activeDatasetId);
-    } else if (sourceType === "version" && activeVersionId) {
-      void loadAnalytics("version", activeVersionId);
-    }
-  }, [sourceType, activeDatasetId, activeVersionId, loadAnalytics]);
+    if (!activeSource) return;
+    void loadAnalytics(activeSource.kind, activeSource.id);
+  }, [activeSource, loadAnalytics]);
 
   useEffect(() => {
     setIsLoading(true);
@@ -223,11 +226,12 @@ export function ChartsPage() {
 
   // ── Clear selections when source changes ─────────────────────────────────
   useEffect(() => {
+    setColumnSelectionReady(false);
     setXCat(""); setYNum(""); setPieCol(""); setHistCol("");
     setSx(""); setSy(""); setBx(""); setBy(""); setBz("");
     setBoxplotCols([]); setRadarCols([]);
     setAggOut(null); setCountsOut(null); setSampleOut(null); setHistOut(null);
-  }, [sourceType, activeDatasetId, activeVersionId]);
+  }, [activeSource]);
 
   // ── Populate defaults when columns are first available ───────────────────
   useEffect(() => {
@@ -242,6 +246,7 @@ export function ChartsPage() {
     setBoxplotCols(allBoxplotCols.slice(0, 1));
     setRadarCols(numericCols.slice(0, 8).map((c) => c.name));
     if (!numericCols.length) setAgg("count");
+    setColumnSelectionReady(true);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [columns]);
 
@@ -263,6 +268,7 @@ export function ChartsPage() {
       isVersion ? databaseService.versionSample(projectId, id, p) : databaseService.sample(projectId, id, p);
 
     const run = async () => {
+      if (!columnSelectionReady) return;
       if (chartKind === "radar" || chartKind === "heatmap" || chartKind === "boxplot") {
         setAggOut(null); setCountsOut(null); setSampleOut(null); setHistOut(null);
         return;
@@ -300,14 +306,22 @@ export function ChartsPage() {
 
     run();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [projectId, effectiveId, sourceType, chartKind, topK, agg, xCat, yNum, pieCol, histCol, histBins, sx, sy, bx, by, bz, sampleN, isAggChart, isPieChart]);
+  }, [projectId, effectiveId, sourceType, chartKind, topK, agg, xCat, yNum, pieCol, histCol, histBins, sx, sy, bx, by, bz, sampleN, isAggChart, isPieChart, columnSelectionReady]);
+
+  // ── Source change handler ─────────────────────────────────────────────────
+  const handleSourceChange = useCallback((value: string) => {
+    const dash = value.indexOf("-");
+    const kind = value.slice(0, dash) as "dataset" | "version";
+    const id = Number(value.slice(dash + 1));
+    setActiveSource({ kind, id });
+  }, []);
 
   // ── Refresh callback ──────────────────────────────────────────────────────
   const onRefresh = async () => {
-    if (sourceType === "version" && activeVersionId) {
-      await loadAnalytics("version", activeVersionId);
+    if (activeSource) {
+      await loadAnalytics(activeSource.kind, activeSource.id);
     } else {
-      await load({ forceDatasetId: activeDatasetId });
+      await load();
     }
   };
 
@@ -528,7 +542,7 @@ export function ChartsPage() {
               </h1>
               <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
                 Projet&nbsp;<b>#{projectId}</b> &middot;{" "}
-                {sourceType === "version" ? `Version #${activeVersionId}` : `Dataset #${activeDatasetId}`}
+                {activeSource ? `${activeSource.kind === "version" ? "Version" : "Dataset"} #${activeSource.id}` : "—"}
               </p>
             </div>
             <div className="flex flex-wrap gap-2 shrink-0">
@@ -628,44 +642,39 @@ export function ChartsPage() {
                   {/* Parameter controls */}
                   <div className="grid grid-cols-1 lg:grid-cols-6 gap-3">
 
-                    {/* Source toggle */}
+                    {/* Unified source selector */}
                     <div className="space-y-1">
                       <p className="text-xs font-medium text-muted-foreground">Source</p>
-                      <div className="flex rounded-xl border overflow-hidden">
-                        {(["dataset", "version"] as const).map((t) => (
-                          <button
-                            key={t}
-                            className={`flex-1 px-3 py-2 text-sm transition ${t !== "dataset" ? "border-l" : ""} ${sourceType === t ? "bg-white dark:bg-slate-900 font-medium" : "bg-transparent text-muted-foreground hover:bg-muted/50"}`}
-                            onClick={() => setSourceType(t)}
-                          >
-                            {t === "dataset" ? "Dataset" : "Version"}
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-
-                    {/* Dataset / version picker */}
-                    <div className="space-y-1">
-                      <p className="text-xs font-medium text-muted-foreground">
-                        {sourceType === "version" ? "Version" : "Dataset"}
-                      </p>
-                      {sourceType === "version" ? (
-                        <Select value={String(activeVersionId ?? "")} onValueChange={(v) => setActiveVersionId(Number(v))}>
-                          <SelectTrigger className="rounded-xl"><SelectValue placeholder="Choisir une version" /></SelectTrigger>
-                          <SelectContent>
-                            {versions.map((v) => <SelectItem key={v.id} value={String(v.id)}>{v.name}</SelectItem>)}
-                          </SelectContent>
-                        </Select>
-                      ) : (
-                        <Select value={String(activeDatasetId)} onValueChange={(v) => load({ forceDatasetId: Number(v) })}>
-                          <SelectTrigger className="rounded-xl"><SelectValue /></SelectTrigger>
-                          <SelectContent>
-                            {datasets.map((d) => (
-                              <SelectItem key={d.id} value={String(d.id)}>{d.original_name ?? `Dataset #${d.id}`}</SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      )}
+                      <Select
+                        value={activeSource ? `${activeSource.kind}-${activeSource.id}` : ""}
+                        onValueChange={handleSourceChange}
+                      >
+                        <SelectTrigger className="rounded-xl">
+                          <SelectValue placeholder="Choisir une source" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {datasets.length > 0 && (
+                            <SelectGroup>
+                              <SelectLabel>Datasets</SelectLabel>
+                              {datasets.map((d) => (
+                                <SelectItem key={`dataset-${d.id}`} value={`dataset-${d.id}`}>
+                                  {d.original_name ?? `Dataset #${d.id}`}
+                                </SelectItem>
+                              ))}
+                            </SelectGroup>
+                          )}
+                          {versions.length > 0 && (
+                            <SelectGroup>
+                              <SelectLabel>Versions</SelectLabel>
+                              {versions.map((v) => (
+                                <SelectItem key={`version-${v.id}`} value={`version-${v.id}`}>
+                                  {v.name}
+                                </SelectItem>
+                              ))}
+                            </SelectGroup>
+                          )}
+                        </SelectContent>
+                      </Select>
                     </div>
 
                     {/* Top K */}

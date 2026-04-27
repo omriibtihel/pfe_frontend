@@ -13,6 +13,7 @@ export type CleaningAction =
   | "drop_columns"
   | "drop_duplicates"
   | "drop_empty_rows"
+  | "drop_empty_cols"
   | "rename_columns"
   | "strip_whitespace"
   | "substitute_values";
@@ -43,6 +44,16 @@ export type ProcessingPreviewOut = {
 
 export type ColumnKind = "numeric" | "categorical" | "datetime" | "binary" | "text" | "id" | "other";
 
+export type AlertThresholdsConfig = {
+  missing_high: number;
+  missing_low: number;
+  high_cardinality_ratio: number;
+  high_cardinality_min_uniq: number;
+  outlier_high: number;
+  outlier_moderate: number;
+  skewness: number;
+};
+
 export type ColumnMeta = {
   name: string;
   dtype: string;
@@ -62,6 +73,32 @@ export type ColumnMeta = {
   outlier_count?: number | null;
   outlier_ratio?: number | null;
   has_negative?: boolean | null;
+  min_val?: number | null;
+  max_val?: number | null;
+  mean_val?: number | null;
+  median_val?: number | null;
+  q1_val?: number | null;
+  q3_val?: number | null;
+
+  parasites?: {
+    count: number;
+    distinct: string[];
+    convertible_ratio: number;
+  } | null;
+};
+
+export type ColumnDistributionBar = {
+  label: string;
+  count: number;
+  rangeMin?: number;
+  rangeMax?: number;
+};
+
+export type ColumnDistributionOut = {
+  type: "categorical" | "histogram";
+  column: string;
+  total: number;
+  bars: ColumnDistributionBar[];
 };
 
 export type ColumnsMetaOut = {
@@ -298,6 +335,13 @@ export const dataService = {
     return apiClient.postJson<{ workspace_dataset_id: number }>(`${versionsBase(projectId)}/${versionId}/workspace`, {});
   },
 
+  async getOrCreateDatasetWorkspace(projectId: string | number, datasetId: number): Promise<{ workspace_dataset_id: number }> {
+    return apiClient.postJson<{ workspace_dataset_id: number }>(
+      `/projects/${projectId}/datasets/${datasetId}/nettoyage/workspace`,
+      {}
+    );
+  },
+
   async commitVersionWorkspace(projectId: string | number, versionId: number, workspaceDatasetId: number) {
     return apiClient.postJson<{ ok: boolean }>(`${versionsBase(projectId)}/${versionId}/commit-workspace`, {
       workspace_dataset_id: workspaceDatasetId,
@@ -308,7 +352,43 @@ export const dataService = {
     return apiClient.delete<{ ok: boolean }>(`${versionsBase(projectId)}/${versionId}/workspace`);
   },
 
+  async closeDatasetWorkspace(projectId: string | number, datasetId: number) {
+    return apiClient.delete<{ ok: boolean }>(`/projects/${projectId}/datasets/${datasetId}/nettoyage/workspace`);
+  },
+
+  async getAlertConfig(projectId: string | number, datasetId: number): Promise<AlertThresholdsConfig> {
+    return apiClient.get<AlertThresholdsConfig>(`/projects/${projectId}/datasets/${datasetId}/nettoyage/alert-config`);
+  },
+
+  async getColumnDistribution(
+    projectId: string | number,
+    datasetId: number,
+    column: string,
+    maxBins = 20,
+  ): Promise<ColumnDistributionOut> {
+    return apiClient.get<ColumnDistributionOut>(
+      `${processingBase(projectId, datasetId)}/column-distribution?column=${encodeURIComponent(column)}&max_bins=${maxBins}`,
+    );
+  },
+
   // -------------------------
+  // -------------------------
+  // Prep config (persistance backend — source de vérité)
+  // -------------------------
+
+  async getPrepConfig(projectId: string | number, versionId: string | number): Promise<Record<string, unknown> | null> {
+    try {
+      const res = await apiClient.get<Record<string, unknown> | null>(`${versionsBase(projectId)}/${versionId}/prep-config`);
+      return res ?? null;
+    } catch {
+      return null;
+    }
+  },
+
+  async savePrepConfigToBackend(projectId: string | number, versionId: string | number, config: Record<string, unknown>): Promise<void> {
+    await apiClient.putJson(`${versionsBase(projectId)}/${versionId}/prep-config`, { config });
+  },
+
   // ✅ Training helpers (NO NEW BACKEND ROUTE)
   // We reuse: GET /versions/{id}/columns-meta
   // -------------------------

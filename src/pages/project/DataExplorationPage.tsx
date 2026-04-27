@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import {
+  AlertCircle,
   AlertTriangle,
   ArrowUpDown,
   BarChart3,
@@ -32,7 +33,9 @@ import { Progress } from '@/components/ui/progress';
 import {
   Select,
   SelectContent,
+  SelectGroup,
   SelectItem,
+  SelectLabel,
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
@@ -42,7 +45,7 @@ import { useDataExploration } from '@/hooks/useDataExploration';
 import DataTable from '@/components/ui/data-table';
 import CorrelationHeatmap from '@/components/ui/CorrelationHeatmap';
 import databaseService from '@/services/databaseService';
-import type { CorrelationOut, AnalyticsOverview, AnalyticsProfile } from '@/services/databaseService';
+import type { CorrelationOut, AnalyticsOverview, AnalyticsProfile, DatasetOut, DatasetOverviewOut, DatasetProfileOut } from '@/services/databaseService';
 import dataService, { type VersionUI } from '@/services/dataService';
 import { ReportExportModal } from '@/components/report/ReportExportModal';
 
@@ -86,20 +89,29 @@ export default function DataExplorationPage() {
     refreshPreview,
   } = useDataExploration(projectId);
 
-  // ── Version source state ─────────────────────────────────────────────────────
-  const [sourceType, setSourceType] = useState<'dataset' | 'version'>('dataset');
+  // ── Unified source state ─────────────────────────────────────────────────────
+  type DataSource = { kind: 'dataset' | 'version'; id: number };
+
+  const [activeSource, setActiveSource] = useState<DataSource | null>(null);
   const [versions, setVersions] = useState<VersionUI[]>([]);
-  const [activeVersionId, setActiveVersionId] = useState<number | null>(null);
   const [versionOverview, setVersionOverview] = useState<AnalyticsOverview | null>(null);
   const [versionProfile, setVersionProfile] = useState<AnalyticsProfile | null>(null);
   const [versionLoading, setVersionLoading] = useState(false);
 
+  // Derived source type and ids
+  const sourceType = activeSource?.kind ?? 'dataset';
+  const activeVersionId = activeSource?.kind === 'version' ? activeSource.id : null;
+
+  // Initialize from active dataset once the hook provides it
+  useEffect(() => {
+    if (activeSource === null && activeDatasetId != null) {
+      setActiveSource({ kind: 'dataset', id: activeDatasetId });
+    }
+  }, [activeDatasetId]); // eslint-disable-line react-hooks/exhaustive-deps
+
   // Load versions list once
   useEffect(() => {
-    void dataService.getVersions(projectId).then((list) => {
-      setVersions(list);
-      setActiveVersionId((prev) => prev ?? list[0]?.id ?? null);
-    });
+    void dataService.getVersions(projectId).then(setVersions);
   }, [projectId]);
 
   const loadVersionAnalytics = useCallback(
@@ -121,11 +133,11 @@ export default function DataExplorationPage() {
     [projectId, toast],
   );
 
-  // When version source is active and version selection changes, load analytics
+  // Load analytics when switching to a version
   useEffect(() => {
-    if (sourceType !== 'version' || !activeVersionId) return;
-    void loadVersionAnalytics(activeVersionId);
-  }, [projectId, sourceType, activeVersionId, loadVersionAnalytics]);
+    if (activeSource?.kind !== 'version') return;
+    void loadVersionAnalytics(activeSource.id);
+  }, [activeSource?.kind, activeSource?.id, loadVersionAnalytics]);
 
   // Derived: use version or dataset analytics
   const activeOverview = sourceType === 'version' ? versionOverview : overview;
@@ -138,7 +150,6 @@ export default function DataExplorationPage() {
 
   // Column list filters
   const [colSearch, setColSearch] = useState('');
-  const [colKindFilter, setColKindFilter] = useState<'all' | ColKind | 'missing'>('all');
   const [sortBy, setSortBy] = useState<'name' | 'type' | 'nulls'>('name');
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc');
 
@@ -165,8 +176,19 @@ export default function DataExplorationPage() {
       missingPct: p.missing_pct,
       unique: p.unique,
       uniquePct: p.unique_pct,
-      numeric: p.numeric ?? null,
+      numeric: p.numeric
+        ? {
+            mean: p.numeric.mean ?? null,
+            std:  p.numeric.std  ?? null,
+            min:  p.numeric.min  ?? null,
+            p25:  p.numeric.p25  ?? null,
+            p50:  p.numeric.p50  ?? null,
+            p75:  p.numeric.p75  ?? null,
+            max:  p.numeric.max  ?? null,
+          }
+        : null,
       topValues: p.categorical?.top_values ?? [],
+      parasites: p.parasites ?? null,
     }));
   }, [activeProfile]);
 
@@ -187,6 +209,11 @@ export default function DataExplorationPage() {
     [colProfiles],
   );
 
+  const parasiteCols = useMemo(
+    () => colProfiles.filter((c) => c.parasites && c.parasites.count > 0),
+    [colProfiles],
+  );
+
   const completeness = useMemo(() => {
     const cells = totalRows * totalCols;
     if (!cells) return 100;
@@ -197,11 +224,6 @@ export default function DataExplorationPage() {
     const q = colSearch.trim().toLowerCase();
     return colProfiles
       .filter((c) => (q ? c.name.toLowerCase().includes(q) : true))
-      .filter((c) => {
-        if (colKindFilter === 'all') return true;
-        if (colKindFilter === 'missing') return c.missing > 0;
-        return c.kind === colKindFilter;
-      })
       .sort((a, b) => {
         let cmp = 0;
         if (sortBy === 'name') cmp = a.name.localeCompare(b.name);
@@ -266,13 +288,21 @@ export default function DataExplorationPage() {
     setShowTargetModal(true);
   };
 
+  const handleSourceChange = useCallback((value: string) => {
+    const dash = value.indexOf('-');
+    const kind = value.slice(0, dash) as 'dataset' | 'version';
+    const id = Number(value.slice(dash + 1));
+    if (kind === 'dataset') void changeActiveDataset(id);
+    setActiveSource({ kind, id });
+  }, [changeActiveDataset]);
+
   const handleRefresh = useCallback(() => {
-    if (sourceType === 'version' && activeVersionId) {
-      void loadVersionAnalytics(activeVersionId);
+    if (activeSource?.kind === 'version') {
+      void loadVersionAnalytics(activeSource.id);
     } else {
       void reload();
     }
-  }, [sourceType, activeVersionId, loadVersionAnalytics, reload]);
+  }, [activeSource, loadVersionAnalytics, reload]);
 
   const handleConfirmTarget = async () => {
     if (!activeDatasetId) return;
@@ -290,6 +320,16 @@ export default function DataExplorationPage() {
     }
   };
 
+  const activeDataset = datasets.find((d) => d.id === activeDatasetId);
+
+  const reportDataset = useMemo(() => {
+    if (sourceType === 'version' && activeVersionId) {
+      const v = versions.find((ver) => ver.id === activeVersionId);
+      if (v) return { ...(activeDataset ?? {}), original_name: v.name, size_bytes: v.sizeBytes ?? null, created_at: v.createdAt ?? new Date().toISOString() } as typeof activeDataset;
+    }
+    return activeDataset;
+  }, [sourceType, activeVersionId, versions, activeDataset]);
+
   // ── Render guards ─────────────────────────────────────────────────────────────
 
   if (isLoading) {
@@ -300,7 +340,7 @@ export default function DataExplorationPage() {
     );
   }
 
-  if (!datasets.length && (sourceType !== 'version' || !versions.length)) {
+  if (!datasets.length && !versions.length) {
     return (
       <AppLayout>
         <div className="flex flex-col items-center justify-center py-20 gap-4 text-center">
@@ -319,8 +359,6 @@ export default function DataExplorationPage() {
   }
 
   // ── Main render ──────────────────────────────────────────────────────────────
-
-  const activeDataset = datasets.find((d) => d.id === activeDatasetId);
 
   return (
     <AppLayout>
@@ -341,58 +379,38 @@ export default function DataExplorationPage() {
           </div>
 
           <div className="flex flex-col sm:flex-row gap-2 sm:items-center">
-            {/* Source toggle */}
-            <div className="flex rounded-lg border overflow-hidden text-sm">
-              <button
-                className={`px-3 py-1.5 transition ${sourceType === 'dataset' ? 'bg-white dark:bg-slate-900 font-medium' : 'text-muted-foreground hover:bg-muted/50'}`}
-                onClick={() => setSourceType('dataset')}
-              >
-                Dataset
-              </button>
-              <button
-                className={`px-3 py-1.5 border-l transition ${sourceType === 'version' ? 'bg-white dark:bg-slate-900 font-medium' : 'text-muted-foreground hover:bg-muted/50'}`}
-                onClick={() => setSourceType('version')}
-              >
-                Version
-              </button>
-            </div>
-
-            {/* Dataset / Version selector */}
-            {sourceType === 'version' ? (
-              <Select
-                value={String(activeVersionId ?? '')}
-                onValueChange={(v) => setActiveVersionId(Number(v))}
-              >
-                <SelectTrigger className="w-64">
-                  <Layers className="h-4 w-4 mr-2 text-muted-foreground flex-shrink-0" />
-                  <SelectValue placeholder="Choisir une version" />
-                </SelectTrigger>
-                <SelectContent>
-                  {versions.map((v) => (
-                    <SelectItem key={v.id} value={String(v.id)}>
-                      {v.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            ) : (
-              <Select
-                value={String(activeDatasetId ?? '')}
-                onValueChange={(v) => void changeActiveDataset(Number(v))}
-              >
-                <SelectTrigger className="w-64">
-                  <Layers className="h-4 w-4 mr-2 text-muted-foreground flex-shrink-0" />
-                  <SelectValue placeholder="Choisir un dataset" />
-                </SelectTrigger>
-                <SelectContent>
-                  {datasets.map((d) => (
-                    <SelectItem key={d.id} value={String(d.id)}>
-                      {d.original_name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            )}
+            {/* Unified source selector */}
+            <Select
+              value={activeSource ? `${activeSource.kind}-${activeSource.id}` : ''}
+              onValueChange={handleSourceChange}
+            >
+              <SelectTrigger className="w-64">
+                <Layers className="h-4 w-4 mr-2 text-muted-foreground flex-shrink-0" />
+                <SelectValue placeholder="Choisir une source" />
+              </SelectTrigger>
+              <SelectContent>
+                {datasets.length > 0 && (
+                  <SelectGroup>
+                    <SelectLabel>Datasets</SelectLabel>
+                    {datasets.map((d) => (
+                      <SelectItem key={`dataset-${d.id}`} value={`dataset-${d.id}`}>
+                        {d.original_name}
+                      </SelectItem>
+                    ))}
+                  </SelectGroup>
+                )}
+                {versions.length > 0 && (
+                  <SelectGroup>
+                    <SelectLabel>Versions</SelectLabel>
+                    {versions.map((v) => (
+                      <SelectItem key={`version-${v.id}`} value={`version-${v.id}`}>
+                        {v.name}
+                      </SelectItem>
+                    ))}
+                  </SelectGroup>
+                )}
+              </SelectContent>
+            </Select>
 
             <Button
               variant="outline"
@@ -408,7 +426,7 @@ export default function DataExplorationPage() {
               variant="outline"
               size="sm"
               onClick={() => setShowReport(true)}
-              disabled={!activeOverview || !activeProfile || sourceType === 'version'}
+              disabled={!activeOverview || !activeProfile}
             >
               <FileText className="h-4 w-4 mr-1.5" />
               Rapport PDF
@@ -417,7 +435,7 @@ export default function DataExplorationPage() {
         </div>
 
         {/* ── Summary cards ────────────────────────────────────────────────── */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
           <Card className="border-primary/20 bg-gradient-to-br from-primary/10 to-primary/5">
             <CardContent className="pt-5 pb-4">
               <p className="text-xs text-muted-foreground uppercase tracking-wide">Lignes</p>
@@ -456,6 +474,27 @@ export default function DataExplorationPage() {
               </p>
               <p className="text-xs text-muted-foreground mt-1">
                 {pctLabel(totalNulls, totalRows * totalCols)} des cellules
+              </p>
+            </CardContent>
+          </Card>
+
+          <Card
+            className={`cursor-pointer transition-all ${
+              parasiteCols.length > 0
+                ? 'border-red-500 bg-gradient-to-br from-red-500/15 to-red-500/5 shadow-red-200 dark:shadow-red-900/30 shadow-md'
+                : 'border-muted bg-muted/20'
+            }`}
+            onClick={() => parasiteCols.length > 0 && setActiveTab('colonnes')}
+          >
+            <CardContent className="pt-5 pb-4">
+              <p className={`text-xs uppercase tracking-wide ${parasiteCols.length > 0 ? 'text-red-600 dark:text-red-400 font-semibold' : 'text-muted-foreground'}`}>
+                Valeurs suspectes
+              </p>
+              <p className={`text-3xl font-bold mt-1 ${parasiteCols.length > 0 ? 'text-red-600 dark:text-red-400' : 'text-muted-foreground'}`}>
+                {parasiteCols.length}
+              </p>
+              <p className={`text-xs mt-1 ${parasiteCols.length > 0 ? 'text-red-500/80 dark:text-red-400/70' : 'text-muted-foreground'}`}>
+                {parasiteCols.length > 0 ? `colonne${parasiteCols.length > 1 ? 's' : ''} affectée${parasiteCols.length > 1 ? 's' : ''}` : 'aucun problème'}
               </p>
             </CardContent>
           </Card>
@@ -655,29 +694,7 @@ export default function DataExplorationPage() {
                         />
                       </div>
                     </div>
-                    {/* Kind filter buttons */}
-                    <div className="flex gap-1.5 flex-wrap mt-1">
-                      {(
-                        [
-                          { key: 'all', label: 'Tout' },
-                          { key: 'numeric', label: 'Numérique' },
-                          { key: 'categorical', label: 'Catégorielle' },
-                          { key: 'missing', label: 'Avec nulls' },
-                        ] as { key: 'all' | ColKind | 'missing'; label: string }[]
-                      ).map(({ key, label }) => (
-                        <button
-                          key={key}
-                          onClick={() => setColKindFilter(key)}
-                          className={`rounded-full px-2.5 py-0.5 text-[11px] font-medium transition-colors border ${
-                            colKindFilter === key
-                              ? 'bg-primary text-primary-foreground border-primary'
-                              : 'border-border text-muted-foreground hover:border-primary/50 hover:text-foreground'
-                          }`}
-                        >
-                          {label}
-                        </button>
-                      ))}
-                    </div>
+
                   </CardHeader>
                   <CardContent className="p-0">
                     {/* Table header */}
@@ -720,11 +737,17 @@ export default function DataExplorationPage() {
                             ? ((col.missing / totalRows) * 100).toFixed(1)
                             : '0';
 
+                          const hasParasites = !!(col.parasites && col.parasites.count > 0);
+
                           return (
                             <button
                               key={col.name}
-                              className={`w-full grid grid-cols-[1fr_100px_80px_80px] gap-2 items-center px-4 py-2.5 border-b border-border/40 text-left text-sm transition-colors hover:bg-muted/40 ${
-                                isSelected ? 'bg-primary/8 border-l-2 border-l-primary' : ''
+                              className={`w-full grid grid-cols-[1fr_100px_80px_80px] gap-2 items-center px-4 py-2.5 border-b text-left text-sm transition-colors ${
+                                hasParasites
+                                  ? 'bg-red-50/60 dark:bg-red-950/20 border-b-red-200 dark:border-b-red-900/40 border-l-2 border-l-red-500 hover:bg-red-100/60 dark:hover:bg-red-950/40'
+                                  : isSelected
+                                    ? 'bg-primary/8 border-b-border/40 border-l-2 border-l-primary hover:bg-muted/40'
+                                    : 'border-b-border/40 hover:bg-muted/40'
                               }`}
                               onClick={() => setSelectedCol(isSelected ? null : col)}
                             >
@@ -736,6 +759,14 @@ export default function DataExplorationPage() {
                                 {outlierCols.has(col.name) && (
                                   <span title="Outliers possibles (IQR×3)" className="flex-shrink-0">
                                     <AlertTriangle className="h-3 w-3 text-amber-500" />
+                                  </span>
+                                )}
+                                {col.parasites && col.parasites.count > 0 && (
+                                  <span
+                                    title={`${col.parasites.count} valeur(s) suspecte(s) : ${col.parasites.distinct.slice(0, 3).map(v => `"${v}"`).join(', ')} — probablement des valeurs manquantes`}
+                                    className="flex-shrink-0 animate-pulse"
+                                  >
+                                    <AlertCircle className="h-4 w-4 text-red-500 drop-shadow-[0_0_4px_rgba(239,68,68,0.8)]" />
                                   </span>
                                 )}
                               </div>
@@ -872,6 +903,48 @@ export default function DataExplorationPage() {
               </Card>
             </div>
 
+            {/* Parasite values block */}
+            {colProfiles.some((c) => c.parasites && c.parasites.count > 0) && (
+              <Card className="border-orange-200 dark:border-orange-800">
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-base flex items-center gap-2">
+                    <AlertCircle className="h-4 w-4 text-orange-500" />
+                    Valeurs suspectes détectées
+                  </CardTitle>
+                  <CardDescription>
+                    Colonnes numériques contenant des valeurs non-convertibles (ex. "?", "N/A", "_") — à remplacer par NaN avant l'entraînement
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-2">
+                    {colProfiles
+                      .filter((c) => c.parasites && c.parasites.count > 0)
+                      .map((col) => (
+                        <div key={col.name} className="flex items-start gap-3 rounded-md bg-orange-50 dark:bg-orange-950/30 px-3 py-2 text-sm">
+                          <AlertCircle className="h-3.5 w-3.5 text-orange-500 mt-0.5 flex-shrink-0" />
+                          <div className="flex-1 min-w-0">
+                            <button
+                              className="font-medium text-orange-700 dark:text-orange-300 hover:underline"
+                              onClick={() => { setSelectedCol(col); setActiveTab('colonnes'); }}
+                            >
+                              {col.name}
+                            </button>
+                            <span className="text-muted-foreground ml-2">
+                              {col.parasites!.count} occurrence{col.parasites!.count > 1 ? 's' : ''} —{' '}
+                              {col.parasites!.distinct.slice(0, 3).map(v => `"${v}"`).join(', ')}
+                              {col.parasites!.distinct.length > 3 ? '…' : ''}
+                            </span>
+                          </div>
+                          <span className="text-xs text-muted-foreground flex-shrink-0">
+                            {(col.parasites!.convertible_ratio * 100).toFixed(0)}% numérique
+                          </span>
+                        </div>
+                      ))}
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+
             {/* Numeric distributions overview */}
             {colProfiles.filter((c) => c.kind === 'numeric' && c.numeric).length > 0 && (
               <Card>
@@ -978,12 +1051,12 @@ export default function DataExplorationPage() {
       </Modal>
 
       {/* Report export modal */}
-      {overview && profile && activeDataset && sourceType === 'dataset' && (
+      {activeOverview && activeProfile && reportDataset && (
         <ReportExportModal
           open={showReport}
           onClose={() => setShowReport(false)}
           correlationData={correlationData}
-          reportInput={{ dataset: activeDataset, overview, profile, targetColumn }}
+          reportInput={{ dataset: reportDataset as DatasetOut, overview: activeOverview as DatasetOverviewOut, profile: activeProfile as DatasetProfileOut, targetColumn }}
         />
       )}
     </AppLayout>

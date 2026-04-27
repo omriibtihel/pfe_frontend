@@ -169,8 +169,9 @@ function computeMLReadiness(opts: {
   heavyMissingCols: string[];
   outlierCols: ColumnProfile[];
   zeroSuspects: string[];
+  parasiteCols?: string[];
 }): MLReadiness {
-  const { completeness, targetColumn, imbalanceRatio, suspectedIds, constantCols, heavyMissingCols, outlierCols, zeroSuspects } = opts;
+  const { completeness, targetColumn, imbalanceRatio, suspectedIds, constantCols, heavyMissingCols, outlierCols, zeroSuspects, parasiteCols = [] } = opts;
 
   const blockers: string[] = [];
   const warnings: string[] = [];
@@ -185,6 +186,7 @@ function computeMLReadiness(opts: {
   if (imbalanceRatio != null && imbalanceRatio > 3)
     warnings.push(`Déséquilibre de classes : ratio ${imbalanceRatio.toFixed(1)}:1`);
   if (outlierCols.length)    warnings.push(`${outlierCols.length} colonne(s) avec outliers (IQR×3)`);
+  if (parasiteCols.length)   warnings.push(`${parasiteCols.length} colonne(s) avec valeurs parasites non-numériques`);
   if (completeness < 95 && completeness >= 70)
     warnings.push(`Complétude imparfaite : ${completeness}%`);
 
@@ -351,6 +353,7 @@ export function generateDatasetReport(input: ReportInput): void {
   const constantCols        = detectConstant(profile.profiles);
   const highCardinalityCols = detectHighCardinality(profile.profiles);
   const zeroSuspects        = detectZeroSuspects(profile.profiles);
+  const parasiteCols        = profile.profiles.filter(p => p.parasites && p.parasites.count > 0);
   const heavyMissingCols    = missingEntries
     .filter(([, count]) => (count / totalRows) * 100 >= 15)
     .map(([col]) => col);
@@ -366,6 +369,7 @@ export function generateDatasetReport(input: ReportInput): void {
     heavyMissingCols,
     outlierCols,
     zeroSuspects,
+    parasiteCols: parasiteCols.map(p => p.name),
   });
 
   // ── Layout helpers ──────────────────────────────────────────────────────────
@@ -763,6 +767,13 @@ export function generateDatasetReport(input: ReportInput): void {
           String(constantCols.length),
           constantCols.length === 0 ? 'Aucune' : 'À supprimer — aucune information discriminante',
         ],
+        [
+          'Valeurs parasites (non-numériques)',
+          String(parasiteCols.length),
+          parasiteCols.length === 0
+            ? 'Aucune valeur suspecte détectée'
+            : `${parasiteCols.slice(0, 3).map(p => p.name).join(', ')}${parasiteCols.length > 3 ? '…' : ''} — remplacer par NaN`,
+        ],
       ] as [string, string, string][],
       margin: { left: M, right: M },
       styles: { fontSize: 8.5, cellPadding: 3, textColor: C_INK },
@@ -789,7 +800,39 @@ export function generateDatasetReport(input: ReportInput): void {
         }
       },
     });
-    y = getLastY() + 10;
+    y = getLastY() + 6;
+
+    if (parasiteCols.length > 0) {
+      subHeading('Qualité des données — Valeurs suspectes détectées');
+      highlight(
+        `${parasiteCols.length} colonne${parasiteCols.length > 1 ? 's contiennent' : ' contient'} des valeurs non-numériques qui devraient être remplacées par NaN avant l'entraînement.`,
+        'warning',
+      );
+      autoTable(doc, {
+        startY: y,
+        head: [['Colonne', 'Occurrences', 'Valeurs suspectes', '% numérique']],
+        body: parasiteCols.map(p => [
+          p.name,
+          String(p.parasites!.count),
+          p.parasites!.distinct.slice(0, 5).map(v => `"${v}"`).join(', '),
+          `${(p.parasites!.convertible_ratio * 100).toFixed(0)}%`,
+        ]) as [string, string, string, string][],
+        margin: { left: M, right: M },
+        styles: { fontSize: 8, cellPadding: 2.5, textColor: C_INK },
+        headStyles: { fillColor: [255, 237, 213], textColor: [154, 52, 18], fontStyle: 'bold' },
+        columnStyles: {
+          0: { fontStyle: 'bold', cellWidth: 50 },
+          1: { cellWidth: 25, halign: 'center' },
+          2: { textColor: C_AMBER },
+          3: { cellWidth: 25, halign: 'center' },
+        },
+        alternateRowStyles: { fillColor: C_ROW_ALT },
+        tableWidth: CW,
+      });
+      y = getLastY() + 10;
+    } else {
+      y += 4;
+    }
   }
 
   // ── SECTION 04: Analyse des colonnes ────────────────────────────────────────

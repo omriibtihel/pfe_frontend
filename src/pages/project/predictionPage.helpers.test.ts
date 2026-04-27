@@ -20,6 +20,8 @@ function makeSavedModel(overrides: Partial<SavedModelSummary>): SavedModelSummar
     featureNames: ["age", "bmi"],
     threshold: 0.5,
     trainedAt: "2026-03-06T10:00:00Z",
+    primaryMetric: null,
+    testScore: null,
     ...overrides,
   };
 }

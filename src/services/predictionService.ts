@@ -214,13 +214,12 @@ function _mapSavedModel(raw: Record<string, unknown>, index: number): SavedModel
         ? (raw['testScore'] as number)
         : raw['test_score'] != null
           ? (raw['test_score'] as number)
-          : undefined,
-    primaryMetric:
-      raw['primaryMetric'] != null
-        ? String(raw['primaryMetric'])
-        : raw['primary_metric'] != null
-          ? String(raw['primary_metric'])
           : null,
+    primaryMetric: (() => {
+      const pm = raw['primaryMetric'] ?? raw['primary_metric'];
+      if (pm != null && typeof pm === 'object') return pm as import('@/types/training/results').PrimaryMetric;
+      return null;
+    })(),
     trainingTime:
       raw['trainingTime'] != null
         ? (raw['trainingTime'] as number)
@@ -248,7 +247,7 @@ function _mapPredictionResponse(raw: Record<string, unknown>): PredictionRespons
     modelId: raw['model_id'] as number,
     sessionId: raw['session_id'] as number,
     modelType: raw['model_type'] as string,
-    taskType: raw['task_type'] as string,
+    taskType: raw['task_type'] as 'classification' | 'regression',
     timestamp: raw['timestamp'] as string,
     nRows: raw['n_rows'] as number,
     featureCountReceived: raw['feature_count_received'] as number,

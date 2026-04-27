@@ -164,6 +164,17 @@ export function VersionsPage() {
   };
 
   const handleRename = async (versionId: number, newName: string) => {
+    const isDuplicate = versions.some(
+      (v) => v.id !== versionId && v.name.trim().toLowerCase() === newName.trim().toLowerCase(),
+    );
+    if (isDuplicate) {
+      toast({
+        title: "Nom déjà utilisé",
+        description: `Une version nommée "${newName}" existe déjà dans ce projet.`,
+        variant: "destructive",
+      });
+      return;
+    }
     const previous = versions.find((v) => v.id === versionId)?.name;
     setVersions((prev) =>
       prev.map((v) => (v.id === versionId ? { ...v, name: newName } : v)),
@@ -296,7 +307,7 @@ export function VersionsPage() {
               <Button
                 size="sm"
                 className="flex-1 bg-gradient-to-r from-primary to-secondary"
-                onClick={() => navigate(`/projects/${projectId}/nettoyage?version=${v.id}&mode=edit`)}
+                onClick={() => navigate(`/projects/${projectId}/nettoyage?version=${v.id}`)}
               >
                 <Target className="mr-1 h-3.5 w-3.5" />
                 Prétraiter

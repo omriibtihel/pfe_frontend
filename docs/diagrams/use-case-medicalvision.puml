@@ -1,0 +1,97 @@
+@startuml
+title Diagramme general de cas d'utilisation - MedicalVision
+
+left to right direction
+skinparam dpi 180
+skinparam shadowing false
+skinparam backgroundColor #FFFFFF
+skinparam defaultFontName Arial
+skinparam defaultFontSize 13
+skinparam roundCorner 14
+skinparam actorStyle awesome
+skinparam packageStyle rectangle
+
+skinparam actor {
+  BackgroundColor #F8FAFC
+  BorderColor #334155
+  FontColor #0F172A
+}
+
+skinparam rectangle {
+  BackgroundColor #FFFFFF
+  BorderColor #CBD5E1
+}
+
+skinparam package {
+  BackgroundColor #FFFFFF
+  BorderColor #CBD5E1
+  FontColor #0F172A
+}
+
+skinparam usecase {
+  BackgroundColor #EFF6FF
+  BorderColor #2563EB
+  FontColor #0F172A
+  ArrowColor #475569
+}
+
+actor "Visiteur" as Visitor
+actor "Medecin" as Doctor
+actor "Administrateur" as Admin
+
+rectangle "Systeme MedicalVision" {
+  package "Acces au systeme" {
+    usecase "Creer une demande\nd'inscription" as UC_Register
+    usecase "S'authentifier" as UC_Login
+    usecase "Gerer le profil" as UC_Profile
+  }
+
+  package "Administration" {
+    usecase "Valider les comptes\nutilisateurs" as UC_Accounts
+    usecase "Consulter les statistiques\ndu systeme" as UC_Stats
+  }
+
+  package "Espace projet" {
+    usecase "Gerer les projets\nmedicaux" as UC_Projects
+    usecase "Importer, organiser et\nversionner les datasets" as UC_Datasets
+  }
+
+  package "Donnees medicales" {
+    usecase "Explorer, visualiser et\nnettoyer les donnees" as UC_DataAnalysis
+    usecase "Preparer les donnees\npour l'apprentissage" as UC_Prepare
+  }
+
+  package "Intelligence artificielle" {
+    usecase "Entrainer, evaluer et\ncomparer les modeles" as UC_Train
+    usecase "Activer un modele\noperationnel" as UC_Activate
+    usecase "Effectuer des predictions\net exporter les resultats" as UC_Predict
+  }
+}
+
+Visitor --> UC_Register
+Visitor --> UC_Login
+
+Admin --> UC_Login
+Admin --> UC_Accounts
+Admin --> UC_Stats
+
+Doctor --> UC_Login
+Doctor --> UC_Profile
+Doctor --> UC_Projects
+Doctor --> UC_Datasets
+Doctor --> UC_DataAnalysis
+Doctor --> UC_Prepare
+Doctor --> UC_Train
+Doctor --> UC_Activate
+Doctor --> UC_Predict
+
+UC_Projects -[hidden]down- UC_Datasets
+UC_DataAnalysis -[hidden]down- UC_Prepare
+UC_Train -[hidden]down- UC_Activate
+UC_Activate -[hidden]down- UC_Predict
+
+legend bottom
+  Diagramme volontairement synthetique : il presente les grands services du systeme
+  et les acteurs qui les utilisent, sans detailler les dependances techniques internes.
+endlegend
+@enduml

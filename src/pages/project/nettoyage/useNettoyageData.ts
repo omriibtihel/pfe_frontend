@@ -10,7 +10,8 @@ import { useToast } from "@/hooks/use-toast";
 import dataService from "@/services/dataService";
 import datasetService from "@/services/datasetService";
 import apiClient from "@/services/apiClient";
-import type { ColumnMeta, ColumnKind } from "@/services/dataService";
+import type { ColumnMeta, ColumnKind, AlertThresholdsConfig } from "@/services/dataService";
+import type { AlertThresholds } from "@/components/nettoyage/alertRules";
 
 import type { NettoyageState } from "./useNettoyageState";
 
@@ -78,7 +79,7 @@ export function getOpResult(op: any) {
   return op?.result ?? op?.params?.__result ?? null;
 }
 
-function buildMetaMap(columns: string[], dtypes: Record<string, string>, serverMeta?: AnyServerMeta[]) {
+export function buildMetaMap(columns: string[], dtypes: Record<string, string>, serverMeta?: AnyServerMeta[]) {
   const map: Record<string, ColumnMeta> = {};
   if (Array.isArray(serverMeta)) {
     for (const m of serverMeta) {
@@ -91,7 +92,17 @@ function buildMetaMap(columns: string[], dtypes: Record<string, string>, serverM
         unique: Number(m.unique ?? 0),
         total: Number(m.total ?? 0),
         sample: Array.isArray(m.sample) ? (m.sample as any) : [],
-        parasites: m.parasites ?? null,
+        parasites:     m.parasites     ?? null,
+        skewness:      m.skewness      ?? null,
+        outlier_count: m.outlier_count ?? null,
+        outlier_ratio: m.outlier_ratio ?? null,
+        has_negative:  m.has_negative  ?? null,
+        min_val:       m.min_val       ?? null,
+        max_val:       m.max_val       ?? null,
+        mean_val:      m.mean_val      ?? null,
+        median_val:    m.median_val    ?? null,
+        q1_val:        m.q1_val        ?? null,
+        q3_val:        m.q3_val        ?? null,
       } as ColumnMeta;
     }
   }
@@ -157,6 +168,18 @@ export async function postSchemaAction(
     | { schema_action: "dismiss_alert"; alert_key: string; dismissed: boolean },
 ) {
   await apiClient.postJson(`/projects/${projectId}/datasets/${datasetId}/nettoyage/schema`, payload);
+}
+
+function mapAlertConfig(cfg: AlertThresholdsConfig): Partial<AlertThresholds> {
+  return {
+    missingHigh: cfg.missing_high,
+    missingLow: cfg.missing_low,
+    highCardinalityRatio: cfg.high_cardinality_ratio,
+    highCardinalityMinUniq: cfg.high_cardinality_min_uniq,
+    outlierHigh: cfg.outlier_high,
+    outlierModerate: cfg.outlier_moderate,
+    skewness: cfg.skewness,
+  };
 }
 
 // ── Hook ──────────────────────────────────────────────────────────────────────
@@ -237,26 +260,27 @@ export function useNettoyageData(state: NettoyageState, projectId: string) {
   };
 
   // ── Core data refresher ─────────────────────────────────────────────────────
-  const refreshProcessing = async (datasetId: number, nextPage = 1) => {
+  // `ps` lets callers pass the new page-size immediately after a state update,
+  // before React re-renders (avoiding a stale-closure read of state.pageSize).
+  const refreshProcessing = async (datasetId: number, nextPage = 1, ps?: number) => {
     const token = ++requestTokenRef.current;
+    const pageSize = ps ?? state.pageSize;
 
     const shouldUseVersionSchemaMeta = Boolean(isEditingVersion && versionId);
     let metaFetchFailed = false;
     const metaPromise = shouldUseVersionSchemaMeta
-      ? dataService.getVersionColumnsMeta(projectId, versionId as number, datasetId).catch((e) => {
-          console.error('[useNettoyageData] Failed to load column metadata:', e);
+      ? dataService.getVersionColumnsMeta(projectId, versionId as number, datasetId).catch(() => {
           metaFetchFailed = true;
           return null;
         })
-      : dataService.getProcessingColumnsMeta(projectId, datasetId).catch((e) => {
-          console.error('[useNettoyageData] Failed to load column metadata:', e);
+      : dataService.getProcessingColumnsMeta(projectId, datasetId).catch(() => {
           metaFetchFailed = true;
           return null;
         });
 
     const [opsResp, previewResp, targetResp, metaResp, schemaResp] = await Promise.all([
       dataService.getOperations(projectId, datasetId),
-      dataService.getProcessingPreview(projectId, datasetId, nextPage, state.pageSize),
+      dataService.getProcessingPreview(projectId, datasetId, nextPage, pageSize),
       fetchTarget(datasetId),
       metaPromise,
       fetchSchemaState(projectId, datasetId).catch(() => null),
@@ -368,9 +392,25 @@ export function useNettoyageData(state: NettoyageState, projectId: string) {
             const ws = await dataService.getOrCreateDatasetWorkspace(projectId, chosen);
             state.setWorkspaceDatasetId(ws.workspace_dataset_id);
             await refreshProcessing(ws.workspace_dataset_id, 1);
-          } catch {
+          } catch (err) {
             state.setWorkspaceDatasetId(null);
-            await refreshProcessing(chosen, 1);
+            await refreshProcessing(chosen, 1).catch(() => {});
+
+            // Surface the failure - do not let the user continue cleaning
+            // with a null workspace, as operations would target the source
+            // dataset directly and corrupt shared state across versions.
+            const message = err instanceof Error
+              ? err.message
+              : "Échec de la création de l'espace de travail.";
+
+            toast({
+              title: "Impossible d'initialiser l'espace de travail",
+              description: `${message}. Veuillez recharger la page avant de continuer.`,
+              variant: "destructive",
+            });
+
+            // Prevent further cleaning operations in this broken state.
+            state.setIsSwitchingDataset(true);
           }
         } else {
           state.setVersionMeta(null);
@@ -417,6 +457,15 @@ export function useNettoyageData(state: NettoyageState, projectId: string) {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [state.activeDatasetId, isEditingVersion]);
 
+  const [alertThresholds, setAlertThresholds] = useState<Partial<AlertThresholds> | undefined>(undefined);
+
+  useEffect(() => {
+    if (!effectiveDatasetId) return;
+    dataService.getAlertConfig(projectId, effectiveDatasetId)
+      .then((cfg) => setAlertThresholds(mapAlertConfig(cfg)))
+      .catch(() => setAlertThresholds(undefined));
+  }, [projectId, effectiveDatasetId]);
+
   // Keep ref current on every render (mutable write, no re-render triggered).
   cleanupCtxRef.current = {
     versionId,
@@ -460,6 +509,7 @@ export function useNettoyageData(state: NettoyageState, projectId: string) {
     cleanupWorkspace,
     columnsError,
     retryColumnsLoad,
+    alertThresholds,
   };
 }
 

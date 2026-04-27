@@ -13,6 +13,7 @@ import {
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent } from '@/components/ui/card';
 import { PageSkeleton } from '@/components/ui/loading-skeleton';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { Progress } from '@/components/ui/progress';
 import { staggerContainer, staggerItem } from '@/components/ui/page-transition';
 import { useToast } from '@/hooks/use-toast';
@@ -20,71 +21,7 @@ import { AppLayout } from '@/layouts/AppLayout';
 import { trainingService } from '@/services/trainingService';
 import type { ModelResult, TrainingSession } from '@/types';
 import { generateTrainingReportPdf } from '@/utils/trainingReportPdf';
-
-type NormalizableModelResult = ModelResult & {
-  modelId?: unknown;
-  model_id?: unknown;
-  is_saved?: unknown;
-  is_active?: unknown;
-};
-
-type NormalizableTrainingSession = TrainingSession & {
-  activeModelId?: unknown;
-  active_model_id?: unknown;
-};
-
-function normalizeId(value: unknown): string {
-  return String(value ?? '').trim();
-}
-
-function normalizeSessionResult(result: ModelResult, index: number): ModelResult {
-  const source = result as NormalizableModelResult;
-  const id = normalizeId(source.id ?? source.modelId ?? source.model_id);
-  const fallbackId = normalizeId(result.modelType) || `model-${index + 1}`;
-  return {
-    ...result,
-    id: id || fallbackId,
-    isSaved: Boolean(source.isSaved ?? source.is_saved),
-    isActive: Boolean(source.isActive ?? source.is_active),
-  };
-}
-
-function normalizeSession(data: TrainingSession): TrainingSession {
-  const source = data as NormalizableTrainingSession;
-  const activeModelId = normalizeId(source.activeModelId ?? source.active_model_id) || null;
-
-  return {
-    ...data,
-    activeModelId,
-    results: (data.results ?? []).map((result, index) => normalizeSessionResult(result, index)),
-  };
-}
-
-function getSavedIdsFromSession(data: TrainingSession): Set<string> {
-  return new Set(
-    (data.results ?? [])
-      .filter((result) => Boolean(result.isSaved))
-      .map((result) => normalizeId(result.id))
-      .filter(Boolean),
-  );
-}
-
-function getActiveIdFromSession(data: TrainingSession): string | null {
-  const explicitActiveId = normalizeId((data as NormalizableTrainingSession).activeModelId);
-  if (explicitActiveId) return explicitActiveId;
-
-  const activeResult = (data.results ?? []).find((result) =>
-    Boolean((result as NormalizableModelResult).isActive ?? (result as NormalizableModelResult).is_active),
-  );
-  if (!activeResult) return null;
-
-  return normalizeId(activeResult.id);
-}
-
-function toComparableScore(value: unknown): number {
-  const score = Number(value);
-  return Number.isFinite(score) ? score : Number.NEGATIVE_INFINITY;
-}
+import { selectBestModel } from '@/utils/metricUtils';
 
 function getDownloadErrorMessage(format: ReportDownloadFormat, error: unknown): string {
   const fallback =
@@ -117,6 +54,7 @@ export function TrainingResultsPage() {
   const [preferredReportFormat, setPreferredReportFormat] =
     useState<ReportDownloadFormat>('json');
   const [downloadingFormat, setDownloadingFormat] = useState<ReportDownloadFormat | null>(null);
+  const [silentPollFailed, setSilentPollFailed] = useState(false);
 
   const sessionId = useMemo(() => String(searchParams.get('session') || '').trim(), [searchParams]);
 
@@ -131,19 +69,21 @@ export function TrainingResultsPage() {
 
       try {
         if (!silent) setIsLoading(true);
-        const raw = await trainingService.getSession(String(projectId), sessionId);
-        const data = normalizeSession(raw);
+        const data = await trainingService.getSession(String(projectId), sessionId);
         setSession(data);
         setError(null);
-        setSavedModelIds(getSavedIdsFromSession(data));
-        setActiveModelId(getActiveIdFromSession(data));
+        setSilentPollFailed(false);
+        setSavedModelIds(new Set(data.results.filter((r) => r.isSaved).map((r) => r.id)));
+        setActiveModelId(data.activeModelId ?? null);
       } catch (err: unknown) {
         const message =
           err instanceof Error
             ? err.message
             : "Impossible de charger les résultats d'entraînement.";
         setError(message);
-        if (!silent) {
+        if (silent) {
+          setSilentPollFailed(true);
+        } else {
           toast({ title: 'Erreur', description: message, variant: 'destructive' });
         }
       } finally {
@@ -168,68 +108,74 @@ export function TrainingResultsPage() {
     return () => window.clearInterval(timer);
   }, [session, loadSession]);
 
-  const handleSaveModel = async (modelId: string) => {
-    if (!session || !projectId) return;
-    const normalizedModelId = normalizeId(modelId);
-    if (!normalizedModelId || savingModelIds.has(normalizedModelId)) return;
+  const handleSaveModel = useCallback(
+    async (modelId: string) => {
+      if (!session || !projectId) return;
+      if (!modelId || savingModelIds.has(modelId)) return;
 
-    const isCurrentlySaved = savedModelIds.has(normalizedModelId);
-    setSavingModelIds((previous) => {
-      const next = new Set(previous);
-      next.add(normalizedModelId);
-      return next;
-    });
-    setSavedModelIds((previous) => {
-      const next = new Set(previous);
-      if (isCurrentlySaved) next.delete(normalizedModelId);
-      else next.add(normalizedModelId);
-      return next;
-    });
-
-    try {
-      if (isCurrentlySaved) {
-        await trainingService.unsaveModel(String(projectId), session.id, normalizedModelId);
-        if (activeModelId === normalizedModelId) setActiveModelId(null);
-        toast({
-          title: 'Modèle retiré',
-          description: 'Le modèle a été retiré des modèles sauvegardés.',
-        });
-      } else {
-        const response = await trainingService.saveModel(
-          String(projectId),
-          session.id,
-          normalizedModelId,
-        );
-        const resolvedModelId = normalizeId(response.modelId ?? normalizedModelId);
-        if (response.isNowActive) setActiveModelId(resolvedModelId || normalizedModelId);
-        else if (!activeModelId) setActiveModelId(resolvedModelId || normalizedModelId);
-        toast({
-          title: 'Modèle sauvegardé',
-          description: 'Ce modèle est maintenant disponible pour les prédictions.',
-        });
-      }
-    } catch (err: unknown) {
+      const isCurrentlySaved = savedModelIds.has(modelId);
+      setSavingModelIds((previous) => new Set(previous).add(modelId));
       setSavedModelIds((previous) => {
         const next = new Set(previous);
-        if (isCurrentlySaved) next.add(normalizedModelId);
-        else next.delete(normalizedModelId);
+        if (isCurrentlySaved) next.delete(modelId);
+        else next.add(modelId);
         return next;
       });
 
-      toast({
-        title: 'Erreur',
-        description:
-          err instanceof Error ? err.message : "Échec de l'enregistrement du modèle.",
-        variant: 'destructive',
-      });
-    } finally {
-      setSavingModelIds((previous) => {
-        const next = new Set(previous);
-        next.delete(normalizedModelId);
-        return next;
-      });
-    }
-  };
+      try {
+        if (isCurrentlySaved) {
+          await trainingService.unsaveModel(String(projectId), session.id, modelId);
+          if (activeModelId === modelId) setActiveModelId(null);
+          toast({
+            title: 'Modèle retiré',
+            description: 'Le modèle a été retiré des modèles sauvegardés.',
+          });
+        } else {
+          const response = await trainingService.saveModel(
+            String(projectId),
+            session.id,
+            modelId,
+          );
+          const resolvedId = response.modelId != null ? String(response.modelId) : modelId;
+          if (resolvedId !== modelId) {
+            setSavedModelIds((previous) => {
+              const next = new Set(previous);
+              next.delete(modelId);
+              next.add(resolvedId);
+              return next;
+            });
+          }
+          if (response.isNowActive) setActiveModelId(resolvedId);
+          else if (!activeModelId) setActiveModelId(resolvedId);
+          toast({
+            title: 'Modèle sauvegardé',
+            description: 'Ce modèle est maintenant disponible pour les prédictions.',
+          });
+        }
+      } catch (err: unknown) {
+        setSavedModelIds((previous) => {
+          const next = new Set(previous);
+          if (isCurrentlySaved) next.add(modelId);
+          else next.delete(modelId);
+          return next;
+        });
+
+        toast({
+          title: 'Erreur',
+          description:
+            err instanceof Error ? err.message : "Échec de l'enregistrement du modèle.",
+          variant: 'destructive',
+        });
+      } finally {
+        setSavingModelIds((previous) => {
+          const next = new Set(previous);
+          next.delete(modelId);
+          return next;
+        });
+      }
+    },
+    [session, projectId, savedModelIds, savingModelIds, activeModelId, toast],
+  );
 
   const handleDownloadReport = useCallback(
     async (format: ReportDownloadFormat) => {
@@ -245,7 +191,7 @@ export function TrainingResultsPage() {
           }
 
           await waitForNextPaint();
-          generateTrainingReportPdf(session);
+          await generateTrainingReportPdf(session, String(projectId));
         } else {
           await trainingService.downloadResultsAndSaveToDisk(String(projectId), session.id);
         }
@@ -262,16 +208,14 @@ export function TrainingResultsPage() {
     [downloadingFormat, projectId, session, toast],
   );
 
-  const bestModel = useMemo<ModelResult | null>(() => {
-    if (!session?.results?.length) return null;
-    return session.results.reduce((best, current) =>
-      toComparableScore(current.testScore) > toComparableScore(best.testScore) ? current : best,
-    );
+  const { bestModel, hasMixedMetrics } = useMemo(() => {
+    if (!session?.results?.length) return { bestModel: null, hasMixedMetrics: false };
+    const result = selectBestModel(session.results, session.config?.metrics?.[0]);
+    return {
+      bestModel: result ?? null,
+      hasMixedMetrics: result === null,
+    };
   }, [session]);
-
-  const isRegression = session?.config?.taskType === 'regression';
-  const isCustomConfig = session?.config?.configMode === 'manual';
-  const selectedMetrics = isCustomConfig ? (session?.config?.metrics ?? null) : null;
 
   if (isLoading) {
     return (
@@ -307,6 +251,7 @@ export function TrainingResultsPage() {
   const progressValue = Math.max(0, Math.min(100, Number(session.progress ?? 0)));
   const isRunning = session.status === 'queued' || session.status === 'running';
   const hasResults = session.results.length > 0;
+  const isRegression = session.config?.taskType === 'regression';
 
   return (
     <AppLayout>
@@ -353,6 +298,23 @@ export function TrainingResultsPage() {
                     <Badge variant="secondary" className="shrink-0">
                       {session.status}
                     </Badge>
+                    {silentPollFailed && (
+                      <TooltipProvider>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <span
+                              data-testid="silent-poll-failed"
+                              className="inline-flex h-2 w-2 shrink-0 rounded-full bg-amber-500"
+                              aria-label="Mise à jour automatique échouée"
+                            />
+                          </TooltipTrigger>
+                          <TooltipContent side="top" className="max-w-xs text-xs">
+                            Dernière mise à jour automatique a échoué — les données affichées
+                            peuvent être obsolètes.
+                          </TooltipContent>
+                        </Tooltip>
+                      </TooltipProvider>
+                    )}
                   </div>
 
                   <Progress
@@ -388,7 +350,29 @@ export function TrainingResultsPage() {
             </motion.div>
           ) : null}
 
-          {bestModel ? (
+          {hasMixedMetrics ? (
+            <motion.div variants={staggerItem}>
+              <Card className="border-amber-300/60 bg-amber-50/60 dark:border-amber-700/40 dark:bg-amber-950/20" role="alert">
+                <CardContent className="flex items-start gap-3 py-4">
+                  <AlertTriangle
+                    className="mt-0.5 h-5 w-5 shrink-0 text-amber-600 dark:text-amber-400"
+                    aria-hidden="true"
+                  />
+                  <div>
+                    <p className="font-medium text-amber-800 dark:text-amber-300">
+                      Métriques primaires hétérogènes
+                    </p>
+                    <p className="mt-1 text-sm text-muted-foreground">
+                      Les modèles de cette session utilisent des métriques primaires différentes.
+                      Le classement automatique est désactivé pour éviter une comparaison de scores incompatibles.
+                    </p>
+                  </div>
+                </CardContent>
+              </Card>
+            </motion.div>
+          ) : null}
+
+          {hasResults ? (
             <motion.div variants={staggerItem}>
               <ResultsOverview
                 session={session}
@@ -418,16 +402,15 @@ export function TrainingResultsPage() {
               <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
                 {session.results.map((result, index) => (
                   <ModelResultCard
-                    key={normalizeId(result.id) || `${result.modelType}-${index}`}
+                    key={result.id || `${result.modelType}-${index}`}
                     result={result}
                     index={index}
                     isBestModel={result === bestModel}
-                    isRegression={isRegression ?? false}
-                    isActive={normalizeId(result.id) === activeModelId}
-                    isSaved={savedModelIds.has(normalizeId(result.id))}
-                    isSaving={savingModelIds.has(normalizeId(result.id))}
-                    defaultExpanded={false}
-                    displayMetrics={selectedMetrics}
+                    sessionId={sessionId}
+                    projectId={String(projectId)}
+                    isActive={result.id === activeModelId}
+                    isSaved={savedModelIds.has(result.id)}
+                    isSaving={savingModelIds.has(result.id)}
                     onSaveModel={handleSaveModel}
                   />
                 ))}

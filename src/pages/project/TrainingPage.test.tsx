@@ -18,6 +18,7 @@ vi.mock("@/services/trainingService", () => ({
     startTraining: vi.fn(),
     getSession: vi.fn(),
     validateTraining: vi.fn(),
+    getSessions: vi.fn().mockResolvedValue([]),
   },
 }));
 
@@ -34,33 +35,6 @@ vi.mock("@/components/training/wizard/Step1DatasetTarget", () => ({
   },
 }));
 
-vi.mock("@/components/training/wizard/Step2SplitStrategy", () => ({
-  Step2SplitStrategy: () => <div>Mock Step2</div>,
-}));
-
-vi.mock("@/components/training/wizard/Step3ColumnPreprocessing", () => ({
-  Step3ColumnPreprocessing: ({
-    onValidationStateChange,
-  }: {
-    onValidationStateChange?: (state: {
-      hasErrors: boolean;
-      errorCount: number;
-      warningCount: number;
-      isValidating: boolean;
-    }) => void;
-  }) => {
-    useEffect(() => {
-      onValidationStateChange?.({
-        hasErrors: true,
-        errorCount: 2,
-        warningCount: 0,
-        isValidating: false,
-      });
-    }, [onValidationStateChange]);
-    return <div>Mock Step3</div>;
-  },
-}));
-
 vi.mock("@/components/training/wizard/Step4Models", () => ({
   Step4Models: () => <div>Mock Step4</div>,
 }));
@@ -73,8 +47,12 @@ vi.mock("@/components/training/wizard/Step6Summary", () => ({
   Step6Summary: () => <div>Mock Step6</div>,
 }));
 
+vi.mock("@/components/training/wizard/AutoMLConfigPanel", () => ({
+  AutoMLConfigPanel: () => <div>Mock AutoML</div>,
+}));
+
 describe("TrainingPage", () => {
-  it("disables Next on step 3 when blocking errors are reported", async () => {
+  it("mode dialog opens on step 0 and manual mode navigates to step 1 with Suivant disabled", async () => {
     render(
       <MemoryRouter initialEntries={["/projects/123/versions/1/training"]}>
         <Routes>
@@ -83,16 +61,28 @@ describe("TrainingPage", () => {
       </MemoryRouter>
     );
 
-    const getNextButton = () => screen.getByRole("button", { name: /suivant/i });
+    // After Step1 mock fires onConfigChange({ targetColumn: "Outcome" }), canGoNext becomes true
+    // and the button label is "Choisir le mode" (not "Suivant") when trainingMode === null
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: /choisir le mode/i })).toBeEnabled()
+    );
 
-    await waitFor(() => expect(getNextButton()).toBeEnabled());
-    fireEvent.click(getNextButton());
-    await waitFor(() => expect(screen.getByText("Mock Step2")).toBeInTheDocument());
+    // Open mode selection dialog
+    fireEvent.click(screen.getByRole("button", { name: /choisir le mode/i }));
 
-    fireEvent.click(getNextButton());
-    await waitFor(() => expect(screen.getByText("Mock Step3")).toBeInTheDocument());
-    await waitFor(() => expect(getNextButton()).toBeDisabled());
+    // ModeDialog shows two cards — click the "Mode manuel" card heading
+    await waitFor(() =>
+      expect(screen.getByRole("heading", { name: /mode manuel/i })).toBeInTheDocument()
+    );
+    fireEvent.click(screen.getByRole("heading", { name: /mode manuel/i }));
 
-    expect(screen.getByText(/corrigez les erreurs.*(step|etape)\s*3/i)).toBeInTheDocument();
+    // After selecting manual mode, wizard advances to step 1 (Step4Models)
+    await waitFor(
+      () => expect(screen.getByText("Mock Step4")).toBeInTheDocument(),
+      { timeout: 2000 }
+    );
+
+    // "Suivant" is disabled at step 1 because no models have been selected yet
+    expect(screen.getByRole("button", { name: /suivant/i })).toBeDisabled();
   });
 });

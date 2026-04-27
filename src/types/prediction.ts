@@ -1,3 +1,5 @@
+import type { PrimaryMetric } from '@/types/training/results';
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Active model
 // ─────────────────────────────────────────────────────────────────────────────
@@ -30,8 +32,8 @@ export interface SavedModelSummary {
   featureNames: string[];
   threshold: number;
   trainedAt: string;
-  testScore?: number;
-  primaryMetric?: string | null;
+  primaryMetric: PrimaryMetric | null;
+  testScore: number | null;
   trainingTime?: number;
 }
 

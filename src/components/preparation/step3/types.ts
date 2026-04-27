@@ -41,7 +41,6 @@ export type Step3ColumnRowData = {
   hasNegativeValues: boolean;
   categoricalImputation: TrainingPreprocessingDefaults["categoricalImputation"];
   categoricalEncoding: TrainingPreprocessingDefaults["categoricalEncoding"];
-  ordinalOrder: string[];
   hasExplicitCategoricalConfig: boolean;
   /** Per-column advanced param overrides (undefined = uses global default) */
   knnNeighbors: number | undefined;

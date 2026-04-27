@@ -3,11 +3,12 @@
  * Comprend : Cleaning card, Actions card, et tous les modaux (substitution,
  * renommage, target, save-name, alerts, inspector).
  */
-import React from "react";
+import React, { useState } from "react";
 import { motion } from "framer-motion";
 import {
   Settings2, Eraser, Save, Undo2, Trash2,
   Type as TypeIcon, RefreshCw, BookmarkPlus,
+  ChevronsUpDown, X, Plus,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 
@@ -17,8 +18,8 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
 import { Modal } from "@/components/ui/modal";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 
 import { ColumnSelector } from "@/components/nettoyage/ColumnSelector";
 import { AlertsModal } from "@/components/nettoyage/AlertsModal";
@@ -41,6 +42,24 @@ export function ColumnSchemaSection({ state, data, actions, projectId }: ColumnS
   const { toast } = useToast();
 
   const disableProcessingActions = state.isLoading || state.isSwitchingDataset || !data.effectiveDatasetId;
+
+  // ── Rename modal local state ───────────────────────────────────────────────
+  const [renamePickerOpen, setRenamePickerOpen] = useState(false);
+  const [renameSearch, setRenameSearch] = useState("");
+  const [renameSelectedCol, setRenameSelectedCol] = useState("");
+  const [renameNewName, setRenameNewName] = useState("");
+
+  const renameFilteredCols = state.columns.filter(
+    (c) => !renameSearch || c.toLowerCase().includes(renameSearch.toLowerCase()),
+  );
+
+  const handleRenameAdd = () => {
+    const trimmed = renameNewName.trim();
+    if (!renameSelectedCol || !trimmed || trimmed === renameSelectedCol) return;
+    state.setRenameMap({ ...state.renameMap, [renameSelectedCol]: trimmed });
+    setRenameSelectedCol("");
+    setRenameNewName("");
+  };
 
   return (
     <>
@@ -66,6 +85,7 @@ export function ColumnSchemaSection({ state, data, actions, projectId }: ColumnS
           </CardHeader>
           <CardContent className="relative z-10">
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+              {/* Col 1 — Row 1 */}
               <Button
                 variant="outline"
                 className="w-full justify-start text-destructive hover:bg-destructive/5 hover:border-destructive/30"
@@ -76,9 +96,10 @@ export function ColumnSchemaSection({ state, data, actions, projectId }: ColumnS
                 Supprimer colonnes sélectionnées
               </Button>
 
+              {/* Col 2 — Row 1 */}
               <Button
                 variant="outline"
-                className="w-full justify-start hover:bg-primary/5 sm:col-start-2 sm:row-start-1"
+                className="w-full justify-start hover:bg-primary/5"
                 disabled={disableProcessingActions}
                 onClick={() =>
                   actions.runCleaning(
@@ -91,7 +112,23 @@ export function ColumnSchemaSection({ state, data, actions, projectId }: ColumnS
                 Supprimer doublons {state.selectedColumns.length ? "(subset)" : "(tout)"}
               </Button>
 
-              <div className="flex items-center gap-2 px-1 sm:col-start-2 sm:row-start-2">
+              {/* Col 1 — Row 2 */}
+              <Button
+                variant="outline"
+                className="w-full justify-start hover:bg-primary/5"
+                disabled={disableProcessingActions}
+                onClick={() =>
+                  actions.runCleaning(
+                    state.selectedColumns.length ? "Lignes vides supprimées (subset)" : "Lignes vides supprimées",
+                    "drop_empty_rows",
+                  )
+                }
+              >
+                Supprimer lignes vides {state.selectedColumns.length ? "(subset)" : ""}
+              </Button>
+
+              {/* Col 2 — Row 2 */}
+              <div className="flex items-center gap-2 px-1">
                 <span className="text-xs text-muted-foreground font-medium">Conserver :</span>
                 <Select
                   value={state.dupKeep}
@@ -106,47 +143,51 @@ export function ColumnSchemaSection({ state, data, actions, projectId }: ColumnS
                 </Select>
               </div>
 
+              {/* Col 1 — Row 3 */}
               <Button
                 variant="outline"
-                className="w-full justify-start hover:bg-primary/5 sm:col-start-1 sm:row-start-2"
+                className="w-full justify-start hover:bg-primary/5"
                 disabled={disableProcessingActions}
                 onClick={() =>
                   actions.runCleaning(
-                    state.selectedColumns.length ? "Lignes vides supprimées (subset)" : "Lignes vides supprimées",
-                    "drop_empty_rows",
+                    state.selectedColumns.length ? "Colonnes vides supprimées (subset)" : "Colonnes vides supprimées",
+                    "drop_empty_cols",
                   )
                 }
               >
-                Supprimer lignes vides {state.selectedColumns.length ? "(subset)" : ""}
+                Supprimer colonnes vides {state.selectedColumns.length ? "(subset)" : ""}
               </Button>
 
+              {/* Col 2 — Row 3 */}
               <Button
                 variant="outline"
-                className="w-full justify-start hover:bg-primary/5 sm:col-start-2 sm:row-start-3"
+                className="w-full justify-start hover:bg-primary/5"
                 disabled={disableProcessingActions}
                 onClick={() =>
                   actions.runCleaning(
-                    state.selectedColumns.length ? "Espaces supprimés (strip)" : "Espaces supprimés (strip) (auto colonnes texte)",
+                    state.selectedColumns.length ? "Espaces inutiles supprimés (sélection)" : "Espaces inutiles supprimés (colonnes texte)",
                     "strip_whitespace",
                   )
                 }
               >
                 <TypeIcon className="h-4 w-4 mr-2" />
-                Supprimer espaces {state.selectedColumns.length ? "(sélection)" : "(auto)"}
+                Supprimer espaces inutiles {state.selectedColumns.length ? "(sélection)" : "(auto)"}
               </Button>
 
+              {/* Col 1 — Row 4 */}
               <Button
                 variant="outline"
-                className="w-full justify-start hover:bg-primary/5 sm:col-start-1 sm:row-start-3"
+                className="w-full justify-start hover:bg-primary/5"
                 disabled={disableProcessingActions}
-                onClick={() => state.setShowRenameModal(true)}
+                onClick={() => { state.setRenameMap({}); state.setShowRenameModal(true); }}
               >
-                Renommer colonnes (JSON)
+                Renommer colonnes
               </Button>
 
+              {/* Col 2 — Row 4 */}
               <Button
                 variant="outline"
-                className="w-full justify-start hover:bg-primary/5 sm:col-start-2 sm:row-start-4"
+                className="w-full justify-start hover:bg-primary/5"
                 disabled={disableProcessingActions}
                 onClick={actions.openSubstitution}
               >
@@ -154,7 +195,7 @@ export function ColumnSchemaSection({ state, data, actions, projectId }: ColumnS
                 Substitution de valeurs
               </Button>
 
-              <div className="sm:col-span-2 sm:row-start-5">
+              <div className="sm:col-span-2">
                 <ColumnSelector
                   key={`clean-${data.effectiveDatasetId ?? "x"}`}
                   columns={state.columns}
@@ -165,8 +206,8 @@ export function ColumnSchemaSection({ state, data, actions, projectId }: ColumnS
                 />
               </div>
 
-              <p className="sm:col-span-2 sm:row-start-6 text-[11px] text-muted-foreground/70 leading-relaxed">
-                Astuce : pour <b>doublons</b>, <b>lignes vides</b> et <b>strip</b>, si aucune colonne n'est sélectionnée, l'action s'applique sur toutes.
+              <p className="sm:col-span-2 text-[11px] text-muted-foreground/70 leading-relaxed">
+                Astuce : pour <b>doublons</b>, <b>lignes/colonnes vides</b> et <b>strip</b>, si aucune colonne n'est sélectionnée, l'action s'applique sur toutes.
                 Pour la <b>substitution</b>, tu choisis une colonne dans le modal.
               </p>
             </div>
@@ -279,27 +320,109 @@ export function ColumnSchemaSection({ state, data, actions, projectId }: ColumnS
       </Modal>
 
       {/* Renommage */}
-      <Modal isOpen={state.showRenameModal} onClose={() => state.setShowRenameModal(false)} title="Renommer colonnes" size="xl">
-        <div className="space-y-3">
-          <p className="text-sm text-muted-foreground">
-            Donne un mapping JSON: <code>{"{ \"Old\": \"new\" }"}</code>. Exemple : renommer <code>BP(mmHg)</code> → <code>bp_mmhg</code>.
-          </p>
-          <Textarea value={state.renameText} onChange={(e) => state.setRenameText(e.target.value)} className="min-h-[200px]" />
-          <div className="flex justify-end gap-2">
+      <Modal
+        isOpen={state.showRenameModal}
+        onClose={() => state.setShowRenameModal(false)}
+        title="Renommer colonnes"
+        size="lg"
+      >
+        <div className="space-y-4">
+          {/* Sélecteur + input */}
+          <div className="flex items-center gap-2">
+            <Popover open={renamePickerOpen} onOpenChange={setRenamePickerOpen}>
+              <PopoverTrigger asChild>
+                <Button variant="outline" className="w-52 justify-between font-normal" size="sm">
+                  <span className="truncate">{renameSelectedCol || "Choisir une colonne…"}</span>
+                  <ChevronsUpDown className="h-3.5 w-3.5 ml-2 opacity-50 shrink-0" />
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent className="w-52 p-0" align="start">
+                <div className="p-2 border-b">
+                  <Input
+                    placeholder="Rechercher…"
+                    value={renameSearch}
+                    onChange={(e) => setRenameSearch(e.target.value)}
+                    className="h-7 text-sm"
+                    autoFocus
+                  />
+                </div>
+                <div className="max-h-48 overflow-y-auto py-1">
+                  {renameFilteredCols.length === 0 ? (
+                    <p className="px-3 py-2 text-xs text-muted-foreground">Aucun résultat</p>
+                  ) : (
+                    renameFilteredCols.map((col) => (
+                      <button
+                        key={col}
+                        className="w-full text-left px-3 py-1.5 text-sm hover:bg-muted transition-colors truncate"
+                        onClick={() => {
+                          setRenameSelectedCol(col);
+                          setRenameSearch("");
+                          setRenamePickerOpen(false);
+                        }}
+                      >
+                        {col}
+                      </button>
+                    ))
+                  )}
+                </div>
+              </PopoverContent>
+            </Popover>
+
+            <span className="text-muted-foreground shrink-0">→</span>
+
+            <Input
+              className="flex-1 h-8 text-sm"
+              placeholder="Nouveau nom…"
+              value={renameNewName}
+              onChange={(e) => setRenameNewName(e.target.value)}
+              onKeyDown={(e) => { if (e.key === "Enter") handleRenameAdd(); }}
+            />
+
+            <Button size="sm" variant="outline" onClick={handleRenameAdd} disabled={!renameSelectedCol || !renameNewName.trim()}>
+              <Plus className="h-4 w-4" />
+            </Button>
+          </div>
+
+          {/* Liste des renommages en attente */}
+          {Object.keys(state.renameMap).length > 0 && (
+            <div className="space-y-1.5">
+              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">En attente</p>
+              <div className="max-h-48 overflow-y-auto space-y-1">
+                {Object.entries(state.renameMap).map(([old, next]) => (
+                  <div key={old} className="flex items-center gap-2 rounded-md border bg-muted/30 px-3 py-1.5 text-sm">
+                    <span className="font-medium truncate flex-1">{old}</span>
+                    <span className="text-muted-foreground shrink-0">→</span>
+                    <span className="truncate flex-1 text-primary font-medium">{next}</span>
+                    <button
+                      className="shrink-0 text-muted-foreground hover:text-destructive transition-colors"
+                      onClick={() => {
+                        const m = { ...state.renameMap };
+                        delete m[old];
+                        state.setRenameMap(m);
+                      }}
+                    >
+                      <X className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          <div className="flex justify-end gap-2 pt-1">
             <Button variant="outline" onClick={() => state.setShowRenameModal(false)}>Annuler</Button>
             <Button
               onClick={async () => {
-                const mapping = actions.parseRenameMapping();
-                if (!mapping) {
-                  toast({ title: "JSON invalide", description: 'Le mapping doit être un objet JSON { "old": "new" } avec des strings non vides.', variant: "destructive" });
+                if (!Object.keys(state.renameMap).length) {
+                  toast({ title: "Aucun renommage", description: "Ajoutez au moins un renommage.", variant: "destructive" });
                   return;
                 }
-                await actions.runCleaning("Colonnes renommées", "rename_columns" as any, { mapping }, []);
+                await actions.runCleaning("Colonnes renommées", "rename_columns" as any, { mapping: state.renameMap }, []);
                 state.setShowRenameModal(false);
               }}
-              disabled={disableProcessingActions}
+              disabled={disableProcessingActions || !Object.keys(state.renameMap).length}
             >
-              Appliquer
+              Appliquer ({Object.keys(state.renameMap).length})
             </Button>
           </div>
         </div>
@@ -344,35 +467,48 @@ export function ColumnSchemaSection({ state, data, actions, projectId }: ColumnS
       </Modal>
 
       {/* Nommer la version */}
-      <Modal
-        isOpen={state.showSaveNameModal}
-        onClose={() => state.setShowSaveNameModal(false)}
-        title="Nommer la version"
-        description="Donnez un nom à cette version nettoyée"
-        size="sm"
-        icon={<BookmarkPlus className="h-4 w-4" />}
-        footer={
-          <div className="flex justify-end gap-2.5">
-            <Button variant="outline" size="sm" onClick={() => state.setShowSaveNameModal(false)}>Annuler</Button>
-            <Button size="sm" onClick={actions.confirmSaveVersion} disabled={!state.saveVersionName.trim()}>
-              <Save className="h-3.5 w-3.5 mr-1.5" />
-              Enregistrer
-            </Button>
-          </div>
-        }
-      >
-        <div className="space-y-1.5">
-          <label className="text-sm font-medium">Nom de la version</label>
-          <Input
-            value={state.saveVersionName}
-            onChange={(e) => state.setSaveVersionName(e.target.value)}
-            placeholder="ex : patients_cleaned_v2"
-            onKeyDown={(e) => { if (e.key === "Enter" && state.saveVersionName.trim()) actions.confirmSaveVersion(); }}
-            autoFocus
-          />
-          <p className="text-[11px] text-muted-foreground">Le système suggère un nom par défaut. Vous pouvez le modifier librement.</p>
-        </div>
-      </Modal>
+      {(() => {
+        const trimmed = state.saveVersionName.trim();
+        const isDuplicateName = trimmed
+          ? state.versions.some((v) => v.name.trim().toLowerCase() === trimmed.toLowerCase())
+          : false;
+        return (
+          <Modal
+            isOpen={state.showSaveNameModal}
+            onClose={() => state.setShowSaveNameModal(false)}
+            title="Nommer la version"
+            description="Donnez un nom à cette version nettoyée"
+            size="sm"
+            icon={<BookmarkPlus className="h-4 w-4" />}
+            footer={
+              <div className="flex justify-end gap-2.5">
+                <Button variant="outline" size="sm" onClick={() => state.setShowSaveNameModal(false)}>Annuler</Button>
+                <Button size="sm" onClick={actions.confirmSaveVersion} disabled={!trimmed || isDuplicateName}>
+                  <Save className="h-3.5 w-3.5 mr-1.5" />
+                  Enregistrer
+                </Button>
+              </div>
+            }
+          >
+            <div className="space-y-1.5">
+              <label className="text-sm font-medium">Nom de la version</label>
+              <Input
+                value={state.saveVersionName}
+                onChange={(e) => state.setSaveVersionName(e.target.value)}
+                placeholder="ex : patients_cleaned_v2"
+                onKeyDown={(e) => { if (e.key === "Enter" && trimmed && !isDuplicateName) actions.confirmSaveVersion(); }}
+                autoFocus
+                className={isDuplicateName ? "border-destructive focus-visible:ring-destructive" : ""}
+              />
+              {isDuplicateName ? (
+                <p className="text-[11px] text-destructive">Ce nom est déjà utilisé par une autre version.</p>
+              ) : (
+                <p className="text-[11px] text-muted-foreground">Le système suggère un nom par défaut. Vous pouvez le modifier librement.</p>
+              )}
+            </div>
+          </Modal>
+        );
+      })()}
 
       {/* Inspector modal (externalisé) */}
       <InspectorModal
@@ -381,13 +517,12 @@ export function ColumnSchemaSection({ state, data, actions, projectId }: ColumnS
         col={state.inspectedCol}
         tab={state.inspectorTab}
         onTabChange={state.setInspectorTab}
-        previewRows={state.previewRows}
         dtypes={state.dtypes}
         metaMap={state.columnMetaMap}
         kindOverrides={state.kindOverrides}
         verifiedCategorical={state.verifiedCategorical}
+        projectId={projectId}
         effectiveDatasetId={data.effectiveDatasetId}
-        page={state.page}
         disableActions={disableProcessingActions}
         onRefresh={() => { if (!data.effectiveDatasetId) return; void data.refreshProcessing(data.effectiveDatasetId, state.page); }}
         onRunCleaning={actions.runCleaning}
@@ -404,6 +539,7 @@ export function ColumnSchemaSection({ state, data, actions, projectId }: ColumnS
         verifiedCategorical={state.verifiedCategorical}
         kindOverrides={state.kindOverrides}
         dismissedAlertKeys={state.dismissedAlertKeys}
+        thresholds={data.alertThresholds}
         disableActions={disableProcessingActions}
         onDismissAlert={actions.dismissAlert}
         onVerifyCategorical={actions.verifyCategorical}

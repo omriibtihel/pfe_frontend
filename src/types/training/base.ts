@@ -13,7 +13,10 @@ export type ModelType =
   | 'logreg'
   | 'logisticregression'
   | 'naivebayes'
-  | 'ridge';
+  | 'ridge'
+  | 'mlp'
+  | 'elasticnet'
+  | 'lasso';
 export type MetricType =
   | 'accuracy'
   | 'precision'
@@ -48,7 +51,7 @@ export type NumericImputationStrategy = 'none' | 'mean' | 'median' | 'most_frequ
 export type CategoricalImputationStrategy = 'none' | 'most_frequent' | 'constant';
 export type CategoricalEncodingStrategy = 'none' | 'onehot' | 'ordinal' | 'label';
 export type NumericScalingStrategy = 'none' | 'standard' | 'minmax' | 'robust' | 'maxabs';
-export type NumericPowerTransformStrategy = 'none' | 'yeo_johnson' | 'box_cox';
+export type NumericPowerTransformStrategy = 'none' | 'log' | 'sqrt' | 'yeo_johnson' | 'box_cox';
 export type TrainingColumnType = 'numeric' | 'categorical' | 'ordinal';
 export type TrainingColumnTypeSelection = 'auto' | TrainingColumnType;
 export type TrainingBalancingStrategy =

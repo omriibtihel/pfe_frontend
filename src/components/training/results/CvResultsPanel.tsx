@@ -2,6 +2,7 @@ import { Layers, Target } from 'lucide-react';
 
 import { Badge } from '@/components/ui/badge';
 import type { CvFoldResult, CvMetricsSummary } from '@/types';
+import { formatMetricValue } from '@/utils/metricUtils';
 
 const METRIC_TOOLTIPS: Record<string, string> = {
   roc_auc: 'Aire sous la courbe ROC. Mesure la capacité à distinguer les classes (1 = parfait, 0.5 = aléatoire).',
@@ -13,6 +14,11 @@ const METRIC_TOOLTIPS: Record<string, string> = {
   precision: 'Parmi les cas prédits positifs, proportion qui sont réellement positifs.',
   recall: 'Parmi tous les cas positifs, proportion correctement détectée (sensibilité).',
 };
+
+const METRIC_PRIORITY = [
+  "roc_auc", "f1", "pr_auc", "accuracy", "precision", "recall",
+  "r2", "rmse", "mae", "mse"
+];
 
 // eslint-disable-next-line react-refresh/only-export-components
 export function fmtMetric(v: number | undefined | null): string {
@@ -56,8 +62,16 @@ export function CvResultsPanel({
     ? flattenMetrics(cvTestMetrics as Record<string, unknown>)
     : {};
 
-  const topMetricKeys = [...meanEntries]
-    .sort(([, a], [, b]) => b - a)
+  const sortedMetrics = [...meanEntries].sort((a, b) => {
+    const ai = METRIC_PRIORITY.indexOf(a[0]?.toLowerCase());
+    const bi = METRIC_PRIORITY.indexOf(b[0]?.toLowerCase());
+    if (ai === -1 && bi === -1) return 0;
+    if (ai === -1) return 1;
+    if (bi === -1) return -1;
+    return ai - bi;
+  });
+
+  const topMetricKeys = sortedMetrics
     .slice(0, 4)
     .map(([k]) => k);
 
@@ -118,7 +132,7 @@ export function CvResultsPanel({
                 </td>
                 {topMetricKeys.map((k) => (
                   <td key={k} className="px-3 py-2 text-center font-semibold text-primary">
-                    {fmtMetric(cvSummary.mean?.[k])}
+                    {formatMetricValue(cvSummary.mean?.[k], k)}
                   </td>
                 ))}
               </tr>
@@ -132,7 +146,7 @@ export function CvResultsPanel({
                 </td>
                 {topMetricKeys.map((k) => (
                   <td key={k} className="px-3 py-2 text-center text-muted-foreground">
-                    {fmtMetric(cvSummary.std?.[k])}
+                    {formatMetricValue(cvSummary.std?.[k], k)}
                   </td>
                 ))}
               </tr>
@@ -150,7 +164,7 @@ export function CvResultsPanel({
                   return (
                     <td key={k} className="px-3 py-2 text-center text-muted-foreground">
                       {mn != null && mx != null
-                        ? `${fmtMetric(mn)}–${fmtMetric(mx)}`
+                        ? `${formatMetricValue(mn, k)}–${formatMetricValue(mx, k)}`
                         : '—'}
                     </td>
                   );
@@ -167,7 +181,7 @@ export function CvResultsPanel({
                   </td>
                   {topMetricKeys.map((k) => (
                     <td key={k} className="px-3 py-2 text-center font-semibold text-emerald-700 dark:text-emerald-400">
-                      {fmtMetric(holdoutFlat[k])}
+                      {formatMetricValue(holdoutFlat[k], k)}
                     </td>
                   ))}
                 </tr>
@@ -241,7 +255,7 @@ export function CvResultsPanel({
                       </td>
                       {topMetricKeys.map((k) => (
                         <td key={k} className="px-2 py-1.5">
-                          {fr.status === 'ok' ? fmtMetric(flat[k] as number | null) : '—'}
+                          {fr.status === 'ok' ? formatMetricValue(flat[k] as number | null, k) : '—'}
                         </td>
                       ))}
                     </tr>

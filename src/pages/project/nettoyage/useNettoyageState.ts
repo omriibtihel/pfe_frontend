@@ -4,7 +4,20 @@
  */
 import { useState } from "react";
 
-import type { ColumnMeta, ColumnKind } from "@/services/dataService";
+const PAGESIZE_STORAGE_KEY = "nettoyage_pageSize";
+export const PAGE_SIZE_OPTIONS = [25, 50, 100] as const;
+export type PageSizeOption = (typeof PAGE_SIZE_OPTIONS)[number];
+
+function readStoredPageSize(): PageSizeOption {
+  try {
+    const n = Number(localStorage.getItem(PAGESIZE_STORAGE_KEY));
+    return (PAGE_SIZE_OPTIONS as readonly number[]).includes(n) ? (n as PageSizeOption) : 25;
+  } catch {
+    return 25;
+  }
+}
+
+import type { ColumnMeta, ColumnKind, VersionUI } from "@/services/dataService";
 import type { ProcessingOperation } from "@/types";
 import type { DatasetOut as DatasetListItem } from "@/services/datasetService";
 
@@ -27,6 +40,7 @@ export function useNettoyageState() {
     operations: string[];
   } | null>(null);
   const [datasets, setDatasets] = useState<DatasetListItem[]>([]);
+  const [versions, setVersions] = useState<VersionUI[]>([]);
   const [activeDatasetId, setActiveDatasetId] = useState<number | null>(null);
   const [workspaceDatasetId, setWorkspaceDatasetId] = useState<number | null>(null);
 
@@ -39,8 +53,13 @@ export function useNettoyageState() {
 
   // ── Pagination ────────────────────────────────────────────────────────────
   const [page, setPage] = useState(1);
-  const pageSize = 25;
+  const [pageSize, setPageSizeRaw] = useState<PageSizeOption>(readStoredPageSize);
   const [totalRows, setTotalRows] = useState(0);
+
+  const setPageSize = (size: PageSizeOption) => {
+    try { localStorage.setItem(PAGESIZE_STORAGE_KEY, String(size)); } catch {}
+    setPageSizeRaw(size);
+  };
 
   // ── Loading flags ─────────────────────────────────────────────────────────
   const [isLoading, setIsLoading] = useState(true);
@@ -63,8 +82,11 @@ export function useNettoyageState() {
 
   // ── Cleaning modals ───────────────────────────────────────────────────────
   const [showRenameModal, setShowRenameModal] = useState(false);
-  const [renameText, setRenameText] = useState<string>("{\n  \"OldName\": \"new_name\"\n}");
+  const [renameMap, setRenameMap] = useState<Record<string, string>>({});
   const [dupKeep, setDupKeep] = useState<"first" | "last">("first");
+
+  // ── Dirty session (unsaved cleaning ops in current session) ──────────────
+  const [hasDirtySession, setHasDirtySession] = useState(false);
 
   // ── Save version modal ────────────────────────────────────────────────────
   const [showSaveNameModal, setShowSaveNameModal] = useState(false);
@@ -101,6 +123,7 @@ export function useNettoyageState() {
     // dataset / version
     versionMeta, setVersionMeta,
     datasets, setDatasets,
+    versions, setVersions,
     activeDatasetId, setActiveDatasetId,
     workspaceDatasetId, setWorkspaceDatasetId,
     // data content
@@ -111,7 +134,7 @@ export function useNettoyageState() {
     columnMetaMap, setColumnMetaMap,
     // pagination
     page, setPage,
-    pageSize,
+    pageSize, setPageSize,
     totalRows, setTotalRows,
     // loading
     isLoading, setIsLoading,
@@ -131,8 +154,10 @@ export function useNettoyageState() {
     toggleColumn, resetSelections, sanitizeSelections,
     // cleaning modals
     showRenameModal, setShowRenameModal,
-    renameText, setRenameText,
+    renameMap, setRenameMap,
     dupKeep, setDupKeep,
+    // dirty session
+    hasDirtySession, setHasDirtySession,
     // save version
     showSaveNameModal, setShowSaveNameModal,
     saveVersionName, setSaveVersionName,

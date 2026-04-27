@@ -2,7 +2,7 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { motion } from "framer-motion";
 import { useParams } from "react-router-dom";
-import { AlertTriangle, Info, GitBranch, X, RefreshCw } from "lucide-react";
+import { AlertTriangle, Info, GitBranch, X, RefreshCw, Download } from "lucide-react";
 
 import { AppLayout } from "@/layouts/AppLayout";
 import { Button } from "@/components/ui/button";
@@ -10,9 +10,8 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { DataTable } from "@/components/ui/data-table";
-import { Download } from "lucide-react";
 
-import { useNettoyageState } from "./nettoyage/useNettoyageState";
+import { useNettoyageState, PAGE_SIZE_OPTIONS } from "./nettoyage/useNettoyageState";
 import { useNettoyageData, normalizeKind, inferKindFallback, kindLabel, kindBadgeClass } from "./nettoyage/useNettoyageData";
 import { useNettoyageActions } from "./nettoyage/useNettoyageActions";
 import { useUnsavedOpsGuard } from "./nettoyage/useUnsavedOpsGuard";
@@ -284,7 +283,29 @@ export function NettoyagePage() {
                       </span>
                     </CardDescription>
                   </div>
-                  <div className="flex gap-2">
+                  <div className="flex items-center gap-2">
+                    <Select
+                      value={String(state.pageSize)}
+                      onValueChange={(v) => {
+                        const newSize = Number(v) as typeof PAGE_SIZE_OPTIONS[number];
+                        state.setPageSize(newSize);
+                        if (data.effectiveDatasetId) {
+                          void data.refreshProcessing(data.effectiveDatasetId, 1, newSize);
+                        }
+                      }}
+                      disabled={disabled}
+                    >
+                      <SelectTrigger className="h-8 w-[90px] text-xs">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {PAGE_SIZE_OPTIONS.map((n) => (
+                          <SelectItem key={n} value={String(n)} className="text-xs">
+                            {n} lignes
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
                     <Button
                       variant="outline" size="sm"
                       disabled={disabled || state.page <= 1}

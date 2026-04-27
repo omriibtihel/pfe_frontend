@@ -618,7 +618,7 @@ export function TrainingPage() {
                     : s.status === "running" ? "text-primary"
                     : "text-muted-foreground";
                   const date = s.createdAt ? new Date(s.createdAt).toLocaleString("fr-FR", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" }) : "—";
-                  const displayName = (s.config as Record<string, unknown> | undefined)?.name as string | undefined;
+                  const displayName = (s.config as unknown as Record<string, unknown> | undefined)?.name as string | undefined;
                   const isRenaming = renamingSessionId === sid;
                   return (
                     <div
@@ -642,7 +642,7 @@ export function TrainingPage() {
                                       setPastSessions((prev) =>
                                         prev.map((ps) =>
                                           String(ps.id) === sid
-                                            ? { ...ps, config: { ...(ps.config as Record<string, unknown>), name: trimmed } }
+                                            ? { ...ps, config: { ...(ps.config as unknown as Record<string, unknown>), name: trimmed } as unknown as TrainingConfig }
                                             : ps
                                         )
                                       );

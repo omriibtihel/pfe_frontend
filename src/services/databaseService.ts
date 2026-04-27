@@ -62,6 +62,12 @@ export type DatasetProfileOut = {
       unique: number;
       top_values: Array<{ value: string; count: number }>;
     } | null;
+
+    parasites?: {
+      count: number;
+      distinct: string[];
+      convertible_ratio: number;
+    } | null;
   }>;
 };
 
@@ -114,18 +120,34 @@ export type PearsonOut = { x: string; y: string; r: number | null; n: number };
 export type NormalityColResult = {
   col: string;
   n: number;
-  mean: number;
-  std: number;
-  skewness: number;
-  kurtosis: number;
-  test_used: "shapiro" | "dagostino";
-  stat: number;
-  p_value: number;
-  is_normal: boolean;
+  mean: number | null;
+  std: number | null;
+  skewness: number | null;
+  excess_kurtosis: number | null;
+  test_used: "shapiro" | "dagostino" | "anderson" | "";
+  stat: number | null;
+  p_value: number | null;
+  p_value_corrected: number | null;
+  is_normal_statistical: boolean;
+  is_normal_practical: boolean;
+  distribution_shape:
+    | "symmetric"
+    | "approximately_symmetric"
+    | "right_skewed"
+    | "left_skewed"
+    | "heavy_tailed"
+    | "unknown";
+  skewness_level: "mild" | "moderate" | "severe" | "";
+  has_non_positive: boolean;
+  recommended_transform: "none" | "log" | "sqrt" | "yeo_johnson" | "box_cox";
+  error: string | null;
 };
 
 export type NormalityTestOut = {
   results: NormalityColResult[];
+  correction_applied: boolean;
+  k_tested: number;
+  columns_skipped: string[];
 };
 
 // ── Private QS builders (reused by both dataset and version methods) ──────────

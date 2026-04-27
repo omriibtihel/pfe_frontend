@@ -5,16 +5,12 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import type { ModelResult, TrainingSession } from '@/types';
-import {
-  buildClassificationView,
-  toNumber,
-  toPercent,
-  toSeconds,
-} from './trainingResultsHelpers';
+import { toNumber, toPercent, toSeconds } from './trainingResultsHelpers';
+import { formatMetricValue } from '@/utils/metricUtils';
 
 interface ResultsOverviewProps {
   session: TrainingSession;
-  bestModel: ModelResult;
+  bestModel: ModelResult | null | undefined;
   savedModelIds: Set<string>;
   onSaveModel: (id: string) => void;
 }
@@ -26,17 +22,9 @@ export function ResultsOverview({
   onSaveModel,
 }: ResultsOverviewProps) {
   const isRegression = session.config.taskType === 'regression';
-  const isSaved = savedModelIds.has(bestModel.id);
+  const isSaved = bestModel ? savedModelIds.has(bestModel.id) : false;
 
-  const classView = useMemo(
-    () => (!isRegression ? buildClassificationView(bestModel) : null),
-    [isRegression, bestModel],
-  );
-
-  const completedCount = useMemo(
-    () => session.results.filter((r) => r.status === 'completed' || r.trainScore != null).length,
-    [session.results],
-  );
+  const completedCount = session.results.length;
 
   const avgTime = useMemo(() => {
     const valid = session.results.filter((r) => r.trainingTime != null && r.trainingTime > 0);
@@ -44,10 +32,13 @@ export function ResultsOverview({
     return valid.reduce((s, r) => s + r.trainingTime, 0) / valid.length;
   }, [session.results]);
 
-  const bestScoreLabel = bestModel.primaryMetric ?? (isRegression ? 'R²' : 'Accuracy');
-  const bestScoreDisplay = isRegression
-    ? toNumber(bestModel.testScore)
-    : toPercent(bestModel.testScore);
+  const _pmStatus = bestModel?.primaryMetric.status ?? 'success';
+  const primaryDisplayValue = !bestModel || _pmStatus !== 'success'
+    ? '—'
+    : formatMetricValue(
+        bestModel.primaryMetric.value ?? bestModel.testScore,
+        bestModel.primaryMetric.name,
+      );
 
   return (
     <section aria-labelledby="overview-heading" className="space-y-3">
@@ -63,41 +54,67 @@ export function ResultsOverview({
               <Trophy className="h-7 w-7 text-amber-600 dark:text-amber-400" />
             </div>
 
-            <div className="min-w-0 flex-1">
-              <p className="mb-0.5 text-xs font-semibold uppercase tracking-wide text-amber-700 dark:text-amber-400">
-                Meilleur modèle
-              </p>
-              <p className="text-xl font-bold">{bestModel.modelType.toUpperCase()}</p>
-              <div className="mt-1 flex items-center gap-2 flex-wrap">
-                <span className="text-sm text-muted-foreground">
-                  {bestScoreLabel}&nbsp;:{' '}
-                  <span className="font-semibold text-amber-700 dark:text-amber-400">
-                    {bestScoreDisplay}
-                  </span>
-                </span>
-                {!isRegression && classView?.rocAuc != null && (
-                  <span className="text-sm text-muted-foreground">
-                    ROC AUC&nbsp;: <span className="font-semibold">{toPercent(classView.rocAuc)}</span>
-                  </span>
-                )}
-                {bestModel.trainingTime != null && (
-                  <Badge variant="outline" className="text-xs">
-                    {toSeconds(bestModel.trainingTime)}
-                  </Badge>
-                )}
-              </div>
-            </div>
+            {bestModel ? (
+              <>
+                <div className="min-w-0 flex-1">
+                  <p className="mb-0.5 text-xs font-semibold uppercase tracking-wide text-amber-700 dark:text-amber-400">
+                    Meilleur modèle
+                  </p>
+                  <p className="text-xl font-bold">{bestModel.modelType.toUpperCase()}</p>
+                  <div className="mt-1 flex items-center gap-2 flex-wrap">
+                    <span className="text-sm text-muted-foreground">
+                      {bestModel.primaryMetric.displayName}&nbsp;:{' '}
+                      <span className="font-semibold text-amber-700 dark:text-amber-400">
+                        {primaryDisplayValue}
+                      </span>
+                    </span>
+                    {!isRegression && bestModel.metrics.rocAuc != null && (
+                      <span className="text-sm text-muted-foreground">
+                        AUC-ROC&nbsp;:{' '}
+                        <span className="font-semibold">{toPercent(bestModel.metrics.rocAuc)}</span>
+                      </span>
+                    )}
+                    {bestModel.trainingTime != null && (
+                      <Badge variant="outline" className="text-xs">
+                        {toSeconds(bestModel.trainingTime)}
+                      </Badge>
+                    )}
+                    {bestModel.evaluationSource && (
+                      <span className="text-xs text-muted-foreground">
+                        Source&nbsp;: {bestModel.evaluationSource.label}
+                        {!bestModel.evaluationSource.isIndependentTest && (
+                          <span className="text-orange-500 ml-1">
+                            (pas de test indépendant)
+                          </span>
+                        )}
+                      </span>
+                    )}
+                  </div>
+                </div>
 
-            <Button
-              onClick={() => onSaveModel(bestModel.id)}
-              size="sm"
-              variant={isSaved ? 'secondary' : 'default'}
-              className={!isSaved ? 'shrink-0 bg-amber-600 text-white hover:bg-amber-700' : 'shrink-0'}
-              aria-label={isSaved ? 'Modèle déjà sauvegardé' : `Sauvegarder ${bestModel.modelType.toUpperCase()}`}
-            >
-              <Star className={`mr-1.5 h-4 w-4 ${isSaved ? 'fill-current' : ''}`} aria-hidden="true" />
-              {isSaved ? 'Sauvegardé' : 'Sauvegarder'}
-            </Button>
+                <Button
+                  onClick={() => onSaveModel(bestModel.id)}
+                  size="sm"
+                  variant={isSaved ? 'secondary' : 'default'}
+                  className={!isSaved ? 'shrink-0 bg-amber-600 text-white hover:bg-amber-700' : 'shrink-0'}
+                  aria-label={
+                    isSaved ? 'Modèle déjà sauvegardé' : `Sauvegarder ${bestModel.modelType.toUpperCase()}`
+                  }
+                >
+                  <Star className={`mr-1.5 h-4 w-4 ${isSaved ? 'fill-current' : ''}`} aria-hidden="true" />
+                  {isSaved ? 'Sauvegardé' : 'Sauvegarder'}
+                </Button>
+              </>
+            ) : (
+              <div className="min-w-0 flex-1">
+                <p className="mb-0.5 text-xs font-semibold uppercase tracking-wide text-amber-700 dark:text-amber-400">
+                  Meilleur modèle
+                </p>
+                <p className="text-sm text-muted-foreground">
+                  Aucun score d'évaluation disponible pour cette session.
+                </p>
+              </div>
+            )}
           </CardContent>
         </Card>
 
@@ -116,25 +133,13 @@ export function ResultsOverview({
               value={toSeconds(avgTime)}
             />
           )}
-          {!isRegression && classView && (
-            <>
-              <StatChip label="F1 (meilleur)" value={toPercent(classView.f1Main)} accent />
-              <StatChip
-                label="Type"
-                value={
-                  classView.classificationType === 'binary'
-                    ? 'Binaire'
-                    : classView.classificationType === 'multiclass'
-                      ? 'Multi-classes'
-                      : 'Classification'
-                }
-              />
-            </>
+          {bestModel && !isRegression && bestModel.metrics.f1 != null && (
+            <StatChip label="F1 (meilleur)" value={toPercent(bestModel.metrics.f1)} accent />
           )}
-          {isRegression && (
+          {bestModel && isRegression && (
             <>
-              <StatChip label="RMSE (meilleur)" value={toNumber(bestModel.metrics?.rmse)} accent />
-              <StatChip label="MAE (meilleur)" value={toNumber(bestModel.metrics?.mae)} />
+              <StatChip label="RMSE (meilleur)" value={toNumber(bestModel.metrics.rmse)} accent />
+              <StatChip label="MAE (meilleur)" value={toNumber(bestModel.metrics.mae)} />
             </>
           )}
         </div>

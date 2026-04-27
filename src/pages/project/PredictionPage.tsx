@@ -43,6 +43,16 @@ import { predictionService } from '@/services/predictionService';
 import { trainingService } from '@/services/trainingService';
 import type { PredictionResponse, SavedModelSummary } from '@/types';
 
+const formatScore = (
+  score: number | null | undefined,
+  model: SavedModelSummary,
+): string => {
+  if (score === null || score === undefined) return '—';
+  const direction = model.primaryMetric?.direction;
+  const isRegression = model.taskType === 'regression' || direction === 'lower_is_better';
+  return isRegression ? score.toFixed(4) : `${(score * 100).toFixed(1)}%`;
+};
+
 export function PredictionPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
@@ -274,7 +284,7 @@ export function PredictionPage() {
                         {modelsForSelectedVersion.map((model) => {
                           const scoreLabel =
                             model.testScore != null
-                              ? ` — ${(model.testScore * 100).toFixed(1)}%${model.primaryMetric ? ` ${model.primaryMetric}` : ''}`
+                              ? ` — ${formatScore(model.testScore, model)}${model.primaryMetric ? ` ${model.primaryMetric.displayName ?? model.primaryMetric.name}` : ''}`
                               : '';
                           return (
                             <SelectItem key={model.id} value={model.id}>
@@ -339,8 +349,8 @@ export function PredictionPage() {
                     {selectedModel.testScore != null && (
                       <ModelDetailRow
                         icon={<Target className="h-3 w-3" />}
-                        label={selectedModel.primaryMetric ?? 'Score'}
-                        value={`${(selectedModel.testScore * 100).toFixed(1)}%`}
+                        label={selectedModel.primaryMetric?.displayName ?? selectedModel.primaryMetric?.name ?? 'Score'}
+                        value={formatScore(selectedModel.testScore, selectedModel)}
                         highlight
                       />
                     )}

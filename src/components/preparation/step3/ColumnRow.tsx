@@ -30,7 +30,6 @@ interface ColumnRowProps {
   onNumericPowerTransformChange: (value: TrainingPreprocessingDefaults["numericPowerTransform"]) => void;
   onNumericScalingChange: (value: TrainingPreprocessingDefaults["numericScaling"]) => void;
   onCategoricalEncodingChange: (value: TrainingPreprocessingDefaults["categoricalEncoding"]) => void;
-  onOrdinalOrderChange: (rawInput: string) => void;
   onToggleExpanded: () => void;
   onKnnNeighborsChange: (v: number | undefined) => void;
   onConstantFillNumericChange: (v: number | undefined) => void;
@@ -84,7 +83,6 @@ export function ColumnRow({
   onNumericPowerTransformChange,
   onNumericScalingChange,
   onCategoricalEncodingChange,
-  onOrdinalOrderChange,
   onToggleExpanded,
   onKnnNeighborsChange,
   onConstantFillNumericChange,
@@ -318,7 +316,7 @@ export function ColumnRow({
                   ))}
                 </SelectContent>
               </Select>
-              {row.numericPowerTransform !== "none" && row.numericScaling === "none" && (
+              {(row.numericPowerTransform === "yeo_johnson" || row.numericPowerTransform === "box_cox") && row.numericScaling === "none" && (
                 <p className="text-[10px] text-amber-600">
                   z-score implicite (standardize=True)
                 </p>
@@ -370,22 +368,11 @@ export function ColumnRow({
           )}
         </TableCell>
 
-        <TableCell className="w-56">
-          {row.effectiveType === "ordinal" ? (
-            <Input
-              value={row.ordinalOrder.join(", ")}
-              placeholder="faible, moyen, eleve"
-              onChange={(event) => onOrdinalOrderChange(event.target.value)}
-            />
-          ) : (
-            <span className="text-xs text-muted-foreground">N/A</span>
-          )}
-        </TableCell>
       </TableRow>
 
       {hasIssues && isExpanded && (
         <TableRow className="bg-muted/20">
-          <TableCell colSpan={9}>
+          <TableCell colSpan={8}>
             <div className="space-y-1 pl-1">
               {row.issues.map((issue) => (
                 <p

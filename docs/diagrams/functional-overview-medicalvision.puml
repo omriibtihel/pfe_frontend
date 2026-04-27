@@ -1,0 +1,53 @@
+@startuml
+title Vue fonctionnelle generale - MedicalVision
+
+skinparam dpi 180
+skinparam shadowing false
+skinparam backgroundColor #FFFFFF
+skinparam defaultFontName Arial
+skinparam defaultFontSize 13
+skinparam roundCorner 14
+skinparam ArrowColor #475569
+
+skinparam activity {
+  BackgroundColor #EFF6FF
+  BorderColor #2563EB
+  FontColor #0F172A
+  StartColor #2563EB
+  EndColor #2563EB
+}
+
+start
+
+:Acces au systeme;
+note right
+  Inscription, authentification,
+  validation des comptes et profil.
+end note
+
+:Gestion des projets medicaux;
+note right
+  Creation et suivi des espaces
+  de travail medical.
+end note
+
+:Importation et organisation\ndes datasets;
+
+:Exploration, visualisation\net nettoyage des donnees;
+
+:Versionnement des donnees;
+note right
+  Conservation des etats exploitables :
+  donnees brutes, nettoyees ou preparees.
+end note
+
+:Preparation pour\nl'apprentissage automatique;
+
+:Entrainement et evaluation\ndes modeles IA;
+
+:Activation du meilleur modele;
+
+:Prediction et export\ndes resultats;
+
+stop
+@enduml

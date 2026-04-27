@@ -55,16 +55,23 @@ const {
     non_normal_ratio: 1,
     avg_skewness: 1.2,
     highly_skewed_count: 1,
+    columns_capped: false,
+    columns_capped_count: 0,
+    transform_suggestions: { age: "yeo_johnson" },
     column_distribution: {
       age: {
-        is_normal: false,
+        is_normal_practical: false,
         skewness: 1.2,
         abs_skewness: 1.2,
+        excess_kurtosis: 0.5,
         n: 100,
         test_used: "shapiro",
         p_value: 0.01,
         has_missing: false,
-        has_negative: false,
+        has_non_positive: false,
+        skewness_level: "moderate",
+        distribution_shape: "right_skewed",
+        recommended_transform: "yeo_johnson",
       },
     },
   };
@@ -74,12 +81,12 @@ const {
     getCapabilitiesMock: vi.fn(async () => ({ preprocessingCapabilities: caps })),
     getColumnsMock: vi.fn(async () => cols),
     profileDatasetMock: vi.fn(async () => datasetProfile),
-    validateTrainingMock: vi.fn(async () => ({
+    validateTrainingMock: vi.fn(async (_projectId: string, _cfg: unknown) => ({
       normalized_config: {},
       effective_preprocessing_by_column: {},
-      warnings: [],
-      errors: [],
-      error_details: [],
+      warnings: [] as string[],
+      errors: [] as string[],
+      error_details: [] as Array<{ column: string; severity: string; code: string; message: string }>,
       previewTransformed: {
         columns: ["num__age"],
         rows: [[1]],
@@ -174,16 +181,23 @@ describe("Step3ColumnPreprocessing", () => {
       non_normal_ratio: 1,
       avg_skewness: 1.2,
       highly_skewed_count: 1,
+      columns_capped: false,
+      columns_capped_count: 0,
+      transform_suggestions: { age: "yeo_johnson" },
       column_distribution: {
         age: {
-          is_normal: false,
+          is_normal_practical: false,
           skewness: 1.2,
           abs_skewness: 1.2,
+          excess_kurtosis: 0.5,
           n: 100,
           test_used: "shapiro",
           p_value: 0.01,
           has_missing: false,
-          has_negative: false,
+          has_non_positive: false,
+          skewness_level: "moderate",
+          distribution_shape: "right_skewed",
+          recommended_transform: "yeo_johnson",
         },
       },
     });
@@ -212,23 +226,39 @@ describe("Step3ColumnPreprocessing", () => {
   });
 
   it("filters rows with search and status filters", async () => {
-    render(<Step3ColumnPreprocessing projectId="123" config={makeConfig()} onConfigChange={vi.fn()} />);
+    // city (categorical) with categoricalEncoding "none" → local error, so Erreurs filter shows it
+    render(
+      <Step3ColumnPreprocessing
+        projectId="123"
+        config={makeConfig({
+          defaults: {
+            numericImputation: "none",
+            numericPowerTransform: "none",
+            numericScaling: "none",
+            categoricalImputation: "none",
+            categoricalEncoding: "none",
+          },
+          columns: {},
+        })}
+        onConfigChange={vi.fn()}
+      />
+    );
 
     await waitFor(() => expect(screen.getByTestId("column-row-age")).toBeInTheDocument());
 
-    fireEvent.change(screen.getByPlaceholderText(/search columns/i), {
+    fireEvent.change(screen.getByPlaceholderText(/rechercher une colonne/i), {
       target: { value: "ag" },
     });
 
     expect(screen.getByTestId("column-row-age")).toBeInTheDocument();
     expect(screen.queryByTestId("column-row-city")).not.toBeInTheDocument();
 
-    fireEvent.change(screen.getByPlaceholderText(/search columns/i), {
+    fireEvent.change(screen.getByPlaceholderText(/rechercher une colonne/i), {
       target: { value: "" },
     });
-    fireEvent.click(screen.getByRole("button", { name: /with errors/i }));
+    fireEvent.click(screen.getByRole("button", { name: /erreurs/i }));
 
-    expect(screen.getByTestId("column-row-city")).toBeInTheDocument();
+    await waitFor(() => expect(screen.getByTestId("column-row-city")).toBeInTheDocument());
     expect(screen.queryByTestId("column-row-age")).not.toBeInTheDocument();
   });
 
@@ -311,15 +341,31 @@ describe("Step3ColumnPreprocessing", () => {
   });
 
   it("shows inline local error for categorical column with encoding none", async () => {
-    render(<Step3ColumnPreprocessing projectId="123" config={makeConfig()} onConfigChange={vi.fn()} />);
+    // categoricalEncoding "none" for categorical column triggers a local error
+    render(
+      <Step3ColumnPreprocessing
+        projectId="123"
+        config={makeConfig({
+          defaults: {
+            numericImputation: "none",
+            numericPowerTransform: "none",
+            numericScaling: "none",
+            categoricalImputation: "none",
+            categoricalEncoding: "none",
+          },
+          columns: {},
+        })}
+        onConfigChange={vi.fn()}
+      />
+    );
 
     await waitFor(() => expect(screen.getByTestId("column-row-city")).toBeInTheDocument());
-
-    expect(screen.getByLabelText("status-city-error")).toBeInTheDocument();
+    await waitFor(() => expect(screen.getByLabelText("status-city-error")).toBeInTheDocument());
     expect(screen.getByText(/configuration invalide/i)).toBeInTheDocument();
   });
 
   it("shows local ordinal error when order is missing", async () => {
+    // city forced to ordinal type but inherits "none" encoding from defaults → local error
     render(
       <Step3ColumnPreprocessing
         projectId="123"
@@ -329,12 +375,11 @@ describe("Step3ColumnPreprocessing", () => {
             numericPowerTransform: "none",
             numericScaling: "none",
             categoricalImputation: "most_frequent",
-            categoricalEncoding: "ordinal",
+            categoricalEncoding: "none",
           },
           columns: {
             city: {
               type: "ordinal",
-              categoricalEncoding: "ordinal",
             },
           },
         })}
@@ -345,7 +390,7 @@ describe("Step3ColumnPreprocessing", () => {
     await waitFor(() => expect(screen.getByLabelText("status-city-error")).toBeInTheDocument());
 
     fireEvent.click(screen.getByLabelText("toggle-issues-city"));
-    expect(screen.getAllByText(/ordre explicite/i).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/invalide/i).length).toBeGreaterThan(0);
   });
 
   it("renders server validation issue inline per column", async () => {
@@ -362,6 +407,18 @@ describe("Step3ColumnPreprocessing", () => {
           message: "NaN detected in age",
         },
       ],
+      previewTransformed: { columns: [], rows: [] },
+      previewMeta: {
+        fittedOn: "train",
+        subset: "train",
+        mode: "head",
+        n: 0,
+        splitSeed: 42,
+        fromCache: false,
+        trainSize: 0,
+        valSize: 0,
+        testSize: 0,
+      },
     });
 
     render(

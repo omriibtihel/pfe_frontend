@@ -16,6 +16,7 @@ import { Input } from "@/components/ui/input";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 
 import type { ColumnMeta } from "@/services/dataService";
+import { normalizeKind, inferKindFallback, kindLabel, kindBadgeClass } from "@/pages/project/nettoyage/useNettoyageData";
 
 const TYPE_FILTERS: { key: string; label: string }[] = [
   { key: "numeric", label: "Num" },
@@ -26,72 +27,6 @@ const TYPE_FILTERS: { key: string; label: string }[] = [
   { key: "id", label: "ID" },
   { key: "other", label: "Other" },
 ];
-
-function normalizeDType(dt?: string) {
-  return (dt ?? "").toLowerCase();
-}
-function looksNumericDType(dt?: string) {
-  const s = normalizeDType(dt);
-  return (
-    s.includes("int") ||
-    s.includes("float") ||
-    s.includes("double") ||
-    s.includes("number") ||
-    s.includes("numeric") ||
-    s.includes("uint")
-  );
-}
-function normalizeKind(kind?: string): string {
-  const k = String(kind ?? "other").toLowerCase();
-  if (k === "bool" || k === "boolean") return "binary";
-  return k;
-}
-function inferKindFallback(_col: string, dtype?: string): string {
-  const dt = normalizeDType(dtype);
-  if (dt.includes("bool")) return "binary";
-  if (dt.includes("datetime") || dt.includes("date") || dt.includes("time")) return "datetime";
-  if (looksNumericDType(dt)) return "numeric";
-  if (dt.includes("object") || dt.includes("string")) return "categorical";
-  return "other";
-}
-function kindLabel(kind: string) {
-  const k = normalizeKind(kind);
-  switch (k) {
-    case "numeric":
-      return "Num";
-    case "categorical":
-      return "Cat";
-    case "datetime":
-      return "Date";
-    case "binary":
-      return "Bin";
-    case "text":
-      return "Text";
-    case "id":
-      return "ID";
-    default:
-      return "Other";
-  }
-}
-function kindBadgeClass(kind: string) {
-  const k = normalizeKind(kind);
-  switch (k) {
-    case "numeric":
-      return "border-blue-500/20 bg-blue-500/10 text-blue-700 dark:text-blue-300";
-    case "categorical":
-      return "border-violet-500/20 bg-violet-500/10 text-violet-700 dark:text-violet-300";
-    case "datetime":
-      return "border-amber-500/20 bg-amber-500/10 text-amber-700 dark:text-amber-300";
-    case "binary":
-      return "border-emerald-500/20 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300";
-    case "text":
-      return "border-pink-500/20 bg-pink-500/10 text-pink-700 dark:text-pink-300";
-    case "id":
-      return "border-slate-500/20 bg-slate-500/10 text-slate-700 dark:text-slate-300";
-    default:
-      return "border-muted-foreground/20 bg-muted/30 text-muted-foreground";
-  }
-}
 
 export function ColumnSelector({
   columns,

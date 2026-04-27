@@ -1,5 +1,6 @@
 import type {
   AutoMLConfig,
+  FeatureEngineeringConfig,
   TrainingBalancingConfig,
   TrainingBalancingStrategy,
   TrainingConfig,
@@ -46,6 +47,7 @@ export type TrainingStartPayload = {
   preprocessing: TrainingPreprocessingConfig;
   modelHyperparams: ModelHyperparams;
   customCode: string;
+  featureEngineering: FeatureEngineeringConfig;
 };
 
 export type AutoMLStartPayload = {
@@ -150,6 +152,19 @@ function normalizeBalancingConfig(config: TrainingConfig): TrainingBalancingConf
   };
 }
 
+function sanitizeFeatureEngineering(
+  fe: FeatureEngineeringConfig | null | undefined
+): FeatureEngineeringConfig {
+  const features = (fe?.features ?? [])
+    .map((f) => ({
+      name: String(f?.name ?? "").trim(),
+      expression: String(f?.expression ?? "").trim(),
+      enabled: f?.enabled ?? true,
+    }))
+    .filter((f) => f.name.length > 0 && f.expression.length > 0);
+  return { features };
+}
+
 // ── Exported builders ─────────────────────────────────────────────────────────
 
 export function assertStartConfig(config: TrainingConfig): string {
@@ -204,7 +219,7 @@ export function toTrainingStartPayload(config: TrainingConfig): TrainingStartPay
     preprocessing,
     modelHyperparams,
     customCode: config.customCode ?? "",
-    featureEngineering: config.featureEngineering ?? { features: [] },
+    featureEngineering: sanitizeFeatureEngineering(config.featureEngineering),
   };
 }
 

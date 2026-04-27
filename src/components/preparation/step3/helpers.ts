@@ -24,7 +24,6 @@ export function toValidationRows(rows: BaseRow[]): Step3ColumnValidationState[] 
     numericScaling: row.numericScaling,
     categoricalImputation: row.categoricalImputation,
     categoricalEncoding: row.categoricalEncoding,
-    ordinalOrder: row.ordinalOrder,
     hasExplicitCategoricalConfig: row.hasExplicitCategoricalConfig,
     hasNegativeValues: row.hasNegativeValues,
   }));
@@ -39,6 +38,8 @@ export function labelForMethod(value: string): string {
     maxabs: "MaxAbs",
     onehot: "One-Hot",
     knn: "KNN",
+    log: "log(x) — X > 0",
+    sqrt: "√x — X ≥ 0",
     yeo_johnson: "Yeo-Johnson (λ optimal)",
     box_cox: "Box-Cox (X > 0)",
   };
@@ -83,13 +84,7 @@ export function clonePreprocessingConfig(
   return {
     defaults: { ...preprocessing.defaults },
     columns: Object.fromEntries(
-      Object.entries(preprocessing.columns).map(([columnName, cfg]) => [
-        columnName,
-        {
-          ...(cfg ?? {}),
-          ...(Array.isArray(cfg?.ordinalOrder) ? { ordinalOrder: [...cfg.ordinalOrder] } : {}),
-        },
-      ])
+      Object.entries(preprocessing.columns).map(([columnName, cfg]) => [columnName, { ...(cfg ?? {}) }])
     ),
   };
 }
@@ -98,10 +93,6 @@ export function cleanColumnConfig(
   cfg: TrainingPreprocessingColumnConfig
 ): TrainingPreprocessingColumnConfig | null {
   const next: TrainingPreprocessingColumnConfig = { ...cfg };
-  if (!Array.isArray(next.ordinalOrder) || next.ordinalOrder.length === 0) {
-    delete next.ordinalOrder;
-  }
-
   if (next.use === undefined) delete next.use;
   if (next.type === undefined) delete next.type;
   if (next.numericImputation === undefined) delete next.numericImputation;
@@ -113,11 +104,3 @@ export function cleanColumnConfig(
   return Object.keys(next).length ? next : null;
 }
 
-export function parseOrdinalOrder(value: string): string[] {
-  const out: string[] = [];
-  for (const part of String(value ?? "").split(",")) {
-    const item = part.trim();
-    if (item && !out.includes(item)) out.push(item);
-  }
-  return out;
-}

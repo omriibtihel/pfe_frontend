@@ -22,17 +22,30 @@ export type AlertItem =
   | { type: 'likely_id';         severity: 'warning'; column: string }
   | { type: 'high_outliers';     severity: 'warning'; column: string; pct: number }
   | { type: 'moderate_outliers'; severity: 'info';    column: string; pct: number }
-  | { type: 'highly_skewed';     severity: 'info';    column: string; skewness: number };
+  | { type: 'highly_skewed';     severity: 'info';    column: string; skewness: number }
+  | { type: 'parasite_values';  severity: 'error';   column: string; count: number; distinct: string[]; convertible_ratio: number };
 
-// ── Thresholds (all in one place for easy tuning) ─────────────────────────────
+// ── Thresholds ────────────────────────────────────────────────────────────────
 
-const MISSING_HIGH_THRESHOLD    = 0.20;   // > 20 % → suggest drop
-const MISSING_LOW_THRESHOLD     = 0.05;   // 5–20 % → suggest imputation
-const HIGH_CARDINALITY_RATIO    = 0.90;   // > 90 % unique-per-non-missing
-const HIGH_CARDINALITY_MIN_UNIQ = 10;     // require at least 10 unique values
-const OUTLIER_HIGH_THRESHOLD    = 0.15;   // > 15 % → warning
-const OUTLIER_MODERATE_THRESHOLD = 0.05;  // 5–15 % → info
-const SKEWNESS_THRESHOLD        = 2.0;    // |skew| > 2 → info
+export type AlertThresholds = {
+  missingHigh: number;        // > N → suggest drop
+  missingLow: number;         // N–missingHigh → suggest imputation
+  highCardinalityRatio: number;   // unique/nonMissing > N
+  highCardinalityMinUniq: number; // require at least N unique values
+  outlierHigh: number;        // > N → warning
+  outlierModerate: number;    // N–outlierHigh → info
+  skewness: number;           // |skew| > N → info
+};
+
+export const ALERT_THRESHOLDS: AlertThresholds = {
+  missingHigh:          0.20,
+  missingLow:           0.05,
+  highCardinalityRatio: 0.90,
+  highCardinalityMinUniq: 10,
+  outlierHigh:          0.15,
+  outlierModerate:      0.05,
+  skewness:             2.0,
+};
 
 const SEVERITY_ORDER: Record<AlertSeverity, number> = { error: 0, warning: 1, info: 2 };
 
@@ -42,7 +55,9 @@ export function buildAlerts(
   metaMap: Record<string, ColumnMeta>,
   verifiedCategorical: Set<string>,
   kindOverrides: Record<string, ColumnKind>,
+  thresholds?: Partial<AlertThresholds>,
 ): AlertItem[] {
+  const t = { ...ALERT_THRESHOLDS, ...thresholds };
   const alerts: AlertItem[] = [];
 
   for (const [col, meta] of Object.entries(metaMap)) {
@@ -69,9 +84,9 @@ export function buildAlerts(
 
     // ── 3. Missing-value thresholds ───────────────────────────────────────
     if (unique > 1) {  // skip if already flagged as constant
-      if (missingPct > MISSING_HIGH_THRESHOLD) {
+      if (missingPct > t.missingHigh) {
         alerts.push({ type: 'missing_high', severity: 'warning', column: col, missingPct });
-      } else if (missingPct > MISSING_LOW_THRESHOLD) {
+      } else if (missingPct > t.missingLow) {
         alerts.push({ type: 'missing_low', severity: 'info', column: col, missingPct });
       }
     }
@@ -80,8 +95,8 @@ export function buildAlerts(
     if (
       (kind === 'categorical' || kind === 'text') &&
       nonMissing > 0 &&
-      unique > HIGH_CARDINALITY_MIN_UNIQ &&
-      unique / nonMissing > HIGH_CARDINALITY_RATIO
+      unique > t.highCardinalityMinUniq &&
+      unique / nonMissing > t.highCardinalityRatio
     ) {
       const pct = Math.round((unique / nonMissing) * 100);
       alerts.push({ type: 'high_cardinality', severity: 'warning', column: col, unique, nonMissing, pct });
@@ -101,10 +116,10 @@ export function buildAlerts(
     // ── 7. Outliers (numeric-only) ────────────────────────────────────────
     const outlierRatio = meta.outlier_ratio ?? null;
     if (outlierRatio !== null) {
-      if (outlierRatio > OUTLIER_HIGH_THRESHOLD) {
+      if (outlierRatio > t.outlierHigh) {
         const pct = Math.round(outlierRatio * 100);
         alerts.push({ type: 'high_outliers', severity: 'warning', column: col, pct });
-      } else if (outlierRatio > OUTLIER_MODERATE_THRESHOLD) {
+      } else if (outlierRatio > t.outlierModerate) {
         const pct = Math.round(outlierRatio * 100);
         alerts.push({ type: 'moderate_outliers', severity: 'info', column: col, pct });
       }
@@ -112,8 +127,20 @@ export function buildAlerts(
 
     // ── 8. Skewness (numeric-only) ────────────────────────────────────────
     const skewness = meta.skewness ?? null;
-    if (skewness !== null && Math.abs(skewness) > SKEWNESS_THRESHOLD && unique > 1) {
+    if (skewness !== null && Math.abs(skewness) > t.skewness && unique > 1) {
       alerts.push({ type: 'highly_skewed', severity: 'info', column: col, skewness });
+    }
+
+    // ── 9. Parasite values (non-numeric values in a mostly-numeric column) ─
+    if (meta.parasites && meta.parasites.count > 0) {
+      alerts.push({
+        type: 'parasite_values',
+        severity: 'error',
+        column: col,
+        count: meta.parasites.count,
+        distinct: meta.parasites.distinct,
+        convertible_ratio: meta.parasites.convertible_ratio,
+      });
     }
   }
 
@@ -136,8 +163,9 @@ export function countVisibleAlerts(
   verifiedCategorical: Set<string>,
   kindOverrides: Record<string, ColumnKind>,
   dismissedAlertKeys: Set<string>,
+  thresholds?: Partial<AlertThresholds>,
 ): number {
-  return buildAlerts(metaMap, verifiedCategorical, kindOverrides)
+  return buildAlerts(metaMap, verifiedCategorical, kindOverrides, thresholds)
     .filter((a) => !dismissedAlertKeys.has(alertKey(a)))
     .length;
 }

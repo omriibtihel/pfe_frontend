@@ -1,4 +1,8 @@
-import type { DetailedClassificationMetrics, ModelResult } from '@/types';
+import type {
+  DetailedClassificationMetrics,
+  ExplainabilityData,
+  ModelResultDetail,
+} from '@/types';
 
 export const modelColors: Record<string, string> = {
   lightgbm: 'from-blue-500 to-blue-600',
@@ -78,6 +82,8 @@ export type ClassificationView = {
   warnings: string[];
 };
 
+// ── Formatting helpers (model-agnostic) ──────────────────────────────────────
+
 export function toPercent(value?: number | null): string {
   if (!Number.isFinite(value)) return '-';
   return `${(Number(value) * 100).toFixed(1)}%`;
@@ -127,6 +133,10 @@ export const WARNING_LABELS: Record<string, string> = {
     'Optimisation du seuil ignorée : aucune donnée de validation.',
   threshold_optimization_skipped_predict_proba_not_available:
     'Optimisation du seuil ignorée : predict_proba non disponible.',
+  threshold_calibrated_on_train_data_may_be_optimistic:
+    'Seuil calibré sur les données d\'entraînement — valeur optimiste (aucun jeu de validation disponible).',
+  threshold_optimization_disabled_multiclass:
+    'Optimisation du seuil désactivée : non supportée pour la classification multiclasse.',
 };
 
 export function humanizeWarning(key: string): string {
@@ -138,11 +148,15 @@ export function truncateFeatureLabel(value: string, max = 24): string {
   return `${value.slice(0, max - 3)}...`;
 }
 
+// ── Detail-view helpers — require ModelResultDetail (from /details endpoint) ─
+
 export function buildFeatureImportanceChartData(
-  result: ModelResult,
+  explainability: ExplainabilityData,
   topN = 8,
 ): FeatureImportanceChartRow[] {
-  const source = Array.isArray(result.featureImportance) ? result.featureImportance : [];
+  const source = Array.isArray(explainability.featureImportance)
+    ? explainability.featureImportance
+    : [];
   const cleaned = source
     .map((item) => ({
       feature: String(item?.feature ?? '').trim(),
@@ -169,80 +183,35 @@ export function buildFeatureImportanceChartData(
   }));
 }
 
-export function getPreprocessingSummary(result: ModelResult): string {
-  const p = (result.preprocessing ?? {}) as Record<string, unknown>;
-  const defaults = (p.defaults ?? {}) as Record<string, unknown>;
-  const effectiveByColumn = (p.effectiveByColumn ?? {}) as Record<string, unknown>;
-  const droppedColumns = Array.isArray(p.droppedColumns) ? p.droppedColumns : [];
-
-  if (Object.keys(defaults).length || Object.keys(effectiveByColumn).length || droppedColumns.length) {
-    const parts: string[] = [];
-    if (Object.keys(defaults).length) {
-      parts.push(
-        `Defaults: numImp=${String(defaults.numericImputation ?? '-')}, numScale=${String(defaults.numericScaling ?? '-')}, catImp=${String(defaults.categoricalImputation ?? '-')}, catEnc=${String(defaults.categoricalEncoding ?? '-')}`,
-      );
-    }
-    if (Object.keys(effectiveByColumn).length) {
-      parts.push(`effectiveByColumn: ${Object.keys(effectiveByColumn).length}`);
-    }
-    if (droppedColumns.length) parts.push(`dropped: ${droppedColumns.length}`);
-    return parts.join(' | ');
-  }
-
-  const selected = (p.selectedMethods ?? {}) as Record<string, unknown>;
-  const legacy = (selected.legacy ?? {}) as Record<string, unknown>;
-  const imputation = ((legacy.imputation ?? selected.imputation) ?? {}) as Record<string, unknown>;
-  const encoding = ((legacy.encoding ?? selected.encoding) ?? {}) as Record<string, unknown>;
-  const scaling = ((legacy.scaling ?? selected.scaling) ?? {}) as Record<string, unknown>;
-
-  const parts: string[] = [];
-  const numImp = String(selected.numericImputation ?? imputation.numeric ?? '').trim();
-  const catImp = String(selected.categoricalImputation ?? imputation.categorical ?? '').trim();
-  const catEnc = String(selected.categoricalEncoding ?? encoding.categorical ?? '').trim();
-  const numScaling = String(selected.numericScaling ?? scaling.numeric ?? '').trim();
-
-  if (numImp) parts.push(`Imp(num): ${numImp}`);
-  if (catImp) parts.push(`Imp(cat): ${catImp}`);
-  if (catEnc) parts.push(`Enc(cat): ${catEnc}`);
-  if (numScaling) parts.push(`Norm(num): ${numScaling}`);
-
-  return parts.join(' | ');
-}
-
-export function getDetailedMetrics(result: ModelResult): DetailedClassificationMetrics {
+export function getDetailedMetrics(result: ModelResultDetail): DetailedClassificationMetrics {
   const candidate = result.metricsDetailed;
   if (!candidate || typeof candidate !== 'object') return {};
-  return candidate;
+  return candidate as DetailedClassificationMetrics;
 }
 
-export function getClassificationType(result: ModelResult): ClassificationType {
+export function getClassificationType(result: ModelResultDetail): ClassificationType {
   const detailed = getDetailedMetrics(result);
   const rawType = String(detailed?.meta?.classification_type ?? '').trim().toLowerCase();
   if (rawType === 'binary' || rawType === 'multiclass' || rawType === 'multilabel') return rawType;
 
-  const hasPos =
-    Number.isFinite(Number(result.metrics?.precision_pos)) ||
-    Number.isFinite(Number(result.metrics?.recall_pos));
-  if (hasPos) return 'binary';
-
-  const cm = Array.isArray(result.confusionMatrix) ? result.confusionMatrix : [];
+  const cm = Array.isArray(result.analysis?.confusionMatrix) ? result.analysis.confusionMatrix : [];
   if (cm.length === 2 && Array.isArray(cm[0]) && cm[0].length === 2) return 'binary';
   if (cm.length > 2) return 'multiclass';
   return 'unknown';
 }
 
 export function buildConfusionPayload(
-  result: ModelResult,
+  result: ModelResultDetail,
   detailed: DetailedClassificationMetrics,
 ): ConfusionPayload {
   const rawPayload = detailed?.confusion_matrix;
   const rawMatrix = Array.isArray(rawPayload?.matrix)
     ? rawPayload.matrix
-    : Array.isArray(result.confusionMatrix)
-      ? result.confusionMatrix
+    : Array.isArray(result.analysis?.confusionMatrix)
+      ? result.analysis.confusionMatrix
       : [];
 
-  const matrix = rawMatrix
+  const matrix = (rawMatrix ?? [])
     .filter((row) => Array.isArray(row))
     .map((row) =>
       row.map((v) => {
@@ -252,13 +221,14 @@ export function buildConfusionPayload(
     );
 
   const rawLabels = Array.isArray(rawPayload?.labels) ? rawPayload.labels : [];
-  const labels = (rawLabels.length === matrix.length ? rawLabels : matrix.map((_, idx) => idx)).map((v) => String(v));
+  const labels = (rawLabels.length === matrix.length ? rawLabels : matrix.map((_, idx) => idx)).map(
+    (v) => String(v),
+  );
 
   return { labels, matrix };
 }
 
 export function buildAveragesRows(
-  result: ModelResult,
   detailed: DetailedClassificationMetrics,
 ): AverageRow[] {
   const macro = (detailed?.averaged?.macro ?? {}) as Record<string, unknown>;
@@ -269,23 +239,23 @@ export function buildAveragesRows(
     {
       key: 'macro',
       label: 'Macro',
-      precision: toFiniteNumber(macro.precision ?? result.metrics?.precision_macro),
-      recall: toFiniteNumber(macro.recall ?? result.metrics?.recall_macro),
-      f1: toFiniteNumber(macro.f1 ?? result.metrics?.f1_macro),
+      precision: toFiniteNumber(macro.precision),
+      recall: toFiniteNumber(macro.recall),
+      f1: toFiniteNumber(macro.f1),
     },
     {
       key: 'weighted',
       label: 'Weighted',
-      precision: toFiniteNumber(weighted.precision ?? result.metrics?.precision_weighted),
-      recall: toFiniteNumber(weighted.recall ?? result.metrics?.recall_weighted),
-      f1: toFiniteNumber(weighted.f1 ?? result.metrics?.f1_weighted),
+      precision: toFiniteNumber(weighted.precision),
+      recall: toFiniteNumber(weighted.recall),
+      f1: toFiniteNumber(weighted.f1),
     },
     {
       key: 'micro',
       label: 'Micro',
-      precision: toFiniteNumber(micro.precision ?? result.metrics?.precision_micro),
-      recall: toFiniteNumber(micro.recall ?? result.metrics?.recall_micro),
-      f1: toFiniteNumber(micro.f1 ?? result.metrics?.f1_micro),
+      precision: toFiniteNumber(micro.precision),
+      recall: toFiniteNumber(micro.recall),
+      f1: toFiniteNumber(micro.f1),
     },
   ];
 
@@ -310,35 +280,31 @@ export function buildPerClassRows(detailed: DetailedClassificationMetrics): PerC
     .sort((a, b) => a.label.localeCompare(b.label));
 }
 
-export function buildClassificationView(result: ModelResult): ClassificationView {
+export function buildClassificationView(result: ModelResultDetail): ClassificationView {
   const detailed = getDetailedMetrics(result);
   const global = (detailed?.global ?? {}) as Record<string, unknown>;
   const binary = (detailed?.binary ?? {}) as Record<string, unknown>;
   const macro = (detailed?.averaged?.macro ?? {}) as Record<string, unknown>;
   const classificationType = getClassificationType(result);
 
-  const precisionPos = toFiniteNumber(binary.precision_pos ?? result.metrics?.precision_pos);
-  const recallPos = toFiniteNumber(binary.recall_pos ?? result.metrics?.recall_pos);
-  const f1Pos = toFiniteNumber(binary.f1_pos ?? result.metrics?.f1_pos);
+  const precisionPos = toFiniteNumber(binary.precision_pos);
+  const recallPos = toFiniteNumber(binary.recall_pos);
+  const f1Pos = toFiniteNumber(binary.f1_pos);
 
-  const macroPrecision = toFiniteNumber(
-    macro.precision ?? result.metrics?.precision_macro ?? result.metrics?.precision,
-  );
-  const macroRecall = toFiniteNumber(
-    macro.recall ?? result.metrics?.recall_macro ?? result.metrics?.recall,
-  );
-  const macroF1 = toFiniteNumber(
-    macro.f1 ?? result.metrics?.f1_macro ?? result.metrics?.f1,
-  );
+  const macroPrecision = toFiniteNumber(macro.precision);
+  const macroRecall = toFiniteNumber(macro.recall);
+  const macroF1 = toFiniteNumber(macro.f1);
 
   const isBinary = classificationType === 'binary';
 
-  const balancingWarnings: unknown[] = Array.isArray((result.balancing as Record<string, unknown>)?.warnings)
+  const balancingWarnings: unknown[] = Array.isArray(
+    (result.balancing as Record<string, unknown> | null | undefined)?.warnings,
+  )
     ? ((result.balancing as Record<string, unknown>).warnings as unknown[])
     : [];
 
   const warnings = toUniqueWarnings([
-    ...((Array.isArray(result.metricsWarnings) ? result.metricsWarnings : []) as unknown[]),
+    ...((Array.isArray(result.analysis?.metricsWarnings) ? result.analysis.metricsWarnings : []) as unknown[]),
     ...((Array.isArray(detailed?.warnings) ? detailed.warnings : []) as unknown[]),
     ...balancingWarnings,
   ]);
@@ -348,15 +314,15 @@ export function buildClassificationView(result: ModelResult): ClassificationView
   return {
     classificationType,
     positiveLabel: positiveRaw == null ? null : String(positiveRaw),
-    accuracy: toFiniteNumber(global.accuracy ?? result.metrics?.accuracy),
-    rocAuc: toFiniteNumber(global.roc_auc ?? result.metrics?.roc_auc),
-    prAuc: toFiniteNumber(global.pr_auc ?? result.metrics?.pr_auc),
+    accuracy: toFiniteNumber(global.accuracy),
+    rocAuc: toFiniteNumber(global.roc_auc),
+    prAuc: toFiniteNumber(global.pr_auc),
     precisionMain: isBinary ? precisionPos : macroPrecision,
     recallMain: isBinary ? recallPos : macroRecall,
     f1Main: isBinary ? f1Pos : macroF1,
-    balancedAccuracy: toFiniteNumber(global.balanced_accuracy ?? result.metrics?.balanced_accuracy),
-    specificity: toFiniteNumber(global.specificity ?? result.metrics?.specificity),
-    averages: buildAveragesRows(result, detailed),
+    balancedAccuracy: toFiniteNumber(global.balanced_accuracy),
+    specificity: toFiniteNumber(global.specificity),
+    averages: buildAveragesRows(detailed),
     perClass: buildPerClassRows(detailed),
     confusion: buildConfusionPayload(result, detailed),
     warnings,

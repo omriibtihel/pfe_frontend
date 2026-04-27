@@ -1,0 +1,152 @@
+@startuml
+title Diagramme general de classes - MedicalVision
+
+left to right direction
+skinparam dpi 180
+skinparam shadowing false
+skinparam backgroundColor #FFFFFF
+skinparam defaultFontName Arial
+skinparam defaultFontSize 12
+skinparam roundCorner 10
+skinparam classAttributeIconSize 0
+skinparam linetype ortho
+
+skinparam package {
+  BackgroundColor #FFFFFF
+  BorderColor #CBD5E1
+  FontColor #0F172A
+}
+
+skinparam class {
+  BackgroundColor #F8FAFC
+  BorderColor #2563EB
+  FontColor #0F172A
+  HeaderBackgroundColor #DBEAFE
+  ArrowColor #475569
+}
+
+skinparam enum {
+  BackgroundColor #FFF7ED
+  BorderColor #EA580C
+  HeaderBackgroundColor #FED7AA
+}
+
+package "Gestion des utilisateurs" {
+  enum RoleUtilisateur {
+    ADMIN
+    DOCTOR
+  }
+
+  enum StatutCompte {
+    PENDING
+    APPROVED
+    REJECTED
+  }
+
+  class Utilisateur <<entity>> {
+    +id: int
+    +nomComplet: string
+    +email: string
+    +role: RoleUtilisateur
+    +statut: StatutCompte
+    +specialite: string
+    +etablissement: string
+  }
+}
+
+package "Gestion des projets et donnees" {
+  class Projet <<entity>> {
+    +id: int
+    +nom: string
+    +description: text
+    +type: string
+    +dateCreation: datetime
+  }
+
+  class Dataset <<entity>> {
+    +id: int
+    +nomOriginal: string
+    +cheminFichier: string
+    +taille: bigint
+    +variableCible: string
+    +dateImport: datetime
+  }
+
+  class VersionDataset <<entity>> {
+    +id: int
+    +nom: string
+    +cheminFichier: string
+    +operations: text
+    +configurationPreparation: text
+    +predictible: bool
+    +dateCreation: datetime
+  }
+
+  class OperationNettoyage <<entity>> {
+    +id: int
+    +type: string
+    +description: string
+    +colonnes: json
+    +parametres: json
+    +dateExecution: datetime
+  }
+}
+
+package "Apprentissage automatique" {
+  class SessionEntrainement <<entity>> {
+    +id: int
+    +statut: string
+    +progression: int
+    +configuration: json
+    +dateDebut: datetime
+    +dateFin: datetime
+  }
+
+  class ModeleEntraine <<entity>> {
+    +id: int
+    +typeModele: string
+    +typeTache: string
+    +estSauvegarde: bool
+    +metriques: json
+    +artefacts: json
+    +dateCreation: datetime
+  }
+
+  class AuditEquilibrage <<entity>> {
+    +id: uuid
+    +ratioDesequilibre: float
+    +strategieAppliquee: string
+    +metriqueOptimisee: string
+    +dateCreation: datetime
+  }
+}
+
+Utilisateur "1" -- "0..*" Projet : possede
+Projet "1" -- "0..*" Dataset : contient
+Projet "1" --> "0..1" Dataset : dataset actif
+
+Dataset "1" -- "0..*" VersionDataset : genere
+Dataset "1" -- "0..*" OperationNettoyage : subit
+Utilisateur "0..1" -- "0..*" OperationNettoyage : execute
+
+VersionDataset "1" -- "0..*" SessionEntrainement : utilisee par
+Projet "1" -- "0..*" SessionEntrainement : regroupe
+SessionEntrainement "1" -- "0..*" ModeleEntraine : produit
+SessionEntrainement "1" -- "0..*" AuditEquilibrage : documente
+
+Projet "1" -- "0..*" ModeleEntraine : possede
+Projet "1" --> "0..1" ModeleEntraine : modele actif
+
+RoleUtilisateur "1" <- "0..*" Utilisateur : role
+StatutCompte "1" <- "0..*" Utilisateur : statut
+
+note bottom of VersionDataset
+  Une version represente un etat exploitable des donnees :
+  donnees brutes, nettoyees ou preparees pour l'apprentissage.
+end note
+
+note bottom of ModeleEntraine
+  Un modele sauvegarde peut etre active dans un projet
+  puis utilise pour effectuer des predictions.
+end note
+@enduml

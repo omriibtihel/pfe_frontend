@@ -13,12 +13,14 @@ import { Badge }   from '@/components/ui/badge';
 
 import type { ColumnKind, CleaningAction } from '@/services/dataService';
 import type { ColumnMeta }                 from '@/services/dataService';
+import { ParasiteValueBadges }             from '@/components/shared/ParasiteValueBadges';
 import {
   buildAlerts,
   alertKey,
   countVisibleAlerts,
   type AlertItem,
   type AlertSeverity,
+  type AlertThresholds,
 } from './alertRules';
 
 // Re-export for the NettoyagePage badge counter
@@ -198,6 +200,11 @@ function alertContent(alert: AlertItem): { title: string; description: string } 
         title: 'Distribution très asymétrique',
         description: `"${alert.column}" : asymétrie de ${alert.skewness.toFixed(2)}. Envisage une transformation (log, Yeo-Johnson) dans l'étape de préparation.`,
       };
+    case 'parasite_values':
+      return {
+        title: 'Valeurs non-numériques dans une colonne numérique',
+        description: `"${alert.column}" contient ${alert.count} valeur${alert.count > 1 ? 's' : ''} suspecte${alert.count > 1 ? 's' : ''} — probablement des valeurs manquantes déguisées.`,
+      };
   }
 }
 
@@ -213,6 +220,7 @@ function AlertActions(props: ActionProps) {
     case 'high_outliers':
     case 'moderate_outliers':
     case 'highly_skewed':
+    case 'parasite_values':
       return <ActionsDismissOnly onDismiss={props.onDismiss} />;
     case 'high_cardinality':
       return <ActionsHighCardinality {...props} alert={alert} />;
@@ -230,6 +238,15 @@ function AlertCard({ alert, ...props }: ActionProps) {
         <div className="min-w-0 flex-1">
           <p className="text-sm font-semibold">{title}</p>
           <p className="mt-1 text-xs text-muted-foreground">{description}</p>
+          {alert.type === 'parasite_values' && (
+            <div className="mt-2">
+              <ParasiteValueBadges
+                count={alert.count}
+                distinct={alert.distinct}
+                convertible_ratio={alert.convertible_ratio}
+              />
+            </div>
+          )}
           <AlertActions {...props} alert={alert} />
         </div>
         <Badge variant="outline" className={`text-[10px] ${SEVERITY_BADGE_CLASS[alert.severity]}`}>
@@ -250,6 +267,7 @@ export interface AlertsModalProps {
   verifiedCategorical: Set<string>;
   kindOverrides: Record<string, ColumnKind>;
   dismissedAlertKeys: Set<string>;
+  thresholds?: Partial<AlertThresholds>;
 
   disableActions: boolean;
 
@@ -267,6 +285,7 @@ export function AlertsModal({
   verifiedCategorical,
   kindOverrides,
   dismissedAlertKeys,
+  thresholds,
   disableActions,
   onDismissAlert,
   onVerifyCategorical,
@@ -275,9 +294,9 @@ export function AlertsModal({
   onRunCleaning,
 }: AlertsModalProps) {
   const visibleAlerts = useMemo(
-    () => buildAlerts(metaMap, verifiedCategorical, kindOverrides)
+    () => buildAlerts(metaMap, verifiedCategorical, kindOverrides, thresholds)
             .filter((a) => !dismissedAlertKeys.has(alertKey(a))),
-    [metaMap, verifiedCategorical, kindOverrides, dismissedAlertKeys],
+    [metaMap, verifiedCategorical, kindOverrides, dismissedAlertKeys, thresholds],
   );
 
   const errorCount   = visibleAlerts.filter((a) => a.severity === 'error').length;

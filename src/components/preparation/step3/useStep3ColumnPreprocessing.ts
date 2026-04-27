@@ -163,14 +163,13 @@ export function useStep3ColumnPreprocessing({
           numericScaling: cfg.numericScaling ?? preprocessing.defaults.numericScaling,
           categoricalImputation: cfg.categoricalImputation ?? preprocessing.defaults.categoricalImputation,
           categoricalEncoding: cfg.categoricalEncoding ?? preprocessing.defaults.categoricalEncoding,
-          ordinalOrder: Array.isArray(cfg.ordinalOrder) ? cfg.ordinalOrder : [],
           hasExplicitCategoricalConfig:
             typeof cfg.categoricalEncoding === "string" || typeof cfg.categoricalImputation === "string",
           knnNeighbors: cfg.knnNeighbors,
           constantFillNumeric: cfg.constantFillNumeric,
           constantFillCategorical: cfg.constantFillCategorical,
           globalAdvancedParams,
-          hasNegativeValues: columnProfile?.column_distribution?.[column.name]?.has_negative ?? false,
+          hasNegativeValues: columnProfile?.column_distribution?.[column.name]?.has_non_positive ?? false,
         };
       }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -348,7 +347,6 @@ export function useStep3ColumnPreprocessing({
       const row = rowsByName[name];
       const next = { ...(nextColumns[name] ?? {}) };
       if (type === "auto") delete next.type; else next.type = type;
-      if ((type === "auto" ? row?.inferredType : type) !== "ordinal") delete next.ordinalOrder;
       const updated = cleanColumnConfig(next);
       if (updated) nextColumns[name] = updated; else delete nextColumns[name];
     }
@@ -361,7 +359,6 @@ export function useStep3ColumnPreprocessing({
     for (const name of selectedColumnNames) {
       if (rowsByName[name]?.effectiveType === "numeric") continue;
       const next = { ...(nextColumns[name] ?? {}), categoricalEncoding: encoding };
-      if (encoding !== "ordinal") delete next.ordinalOrder;
       const updated = cleanColumnConfig(next);
       if (updated) nextColumns[name] = updated; else delete nextColumns[name];
     }
@@ -457,6 +454,7 @@ export function useStep3ColumnPreprocessing({
     counts,
     issuesList,
     options,
+    serverResult,
     preprocessing,
     isValidating,
     lastValidatedAt,

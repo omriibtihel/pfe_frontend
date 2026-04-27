@@ -1,9 +1,9 @@
-import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import { Check, ChevronDown, Loader2, RefreshCcw, Search, SlidersHorizontal, X as XIcon } from "lucide-react";
+import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Separator } from "@/components/ui/separator";
 import { useToast } from "@/hooks/use-toast";
@@ -449,9 +449,6 @@ export default function CorrelationHeatmap({
                               ))}
                             </div>
                           </div>
-                          <p className="md:col-span-2 text-xs text-muted-foreground">
-                            Corrélation ≠ causalité. À interpréter avec le contexte métier.
-                          </p>
                         </div>
                       ) : null}
                     </div>

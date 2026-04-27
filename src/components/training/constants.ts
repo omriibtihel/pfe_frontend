@@ -2,15 +2,23 @@ import type { ModelType } from '@/types';
 
 /** Display labels for model types. */
 export const MODEL_LABELS: Record<ModelType, string> = {
+  automl: 'AutoML',
   lightgbm: 'LightGBM',
   xgboost: 'XGBoost',
+  catboost: 'CatBoost',
   randomforest: 'Random Forest',
+  extratrees: 'Extra Trees',
+  gradientboosting: 'Gradient Boosting',
   svm: 'SVM',
   knn: 'KNN',
   decisiontree: 'Arbre de décision',
   logreg: 'Rég. Logistique',
   logisticregression: 'Rég. Logistique',
   naivebayes: 'Naïf Bayésien',
+  ridge: 'Ridge Regression',
+  mlp: 'MLP (Réseau de neurones)',
+  elasticnet: 'Elastic Net',
+  lasso: 'Lasso',
 };
 
 export type HoldoutPreset = {

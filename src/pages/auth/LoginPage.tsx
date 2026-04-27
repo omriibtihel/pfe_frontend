@@ -16,7 +16,9 @@ const formVariants = {
   visible: { transition: { staggerChildren: 0.09, delayChildren: 0.1 } },
 };
 
-const fieldVariants = {
+// Cast to silence framer-motion's strict Easing type — runtime accepts the cubic-bezier array.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const fieldVariants: any = {
   hidden: { opacity: 0, y: 10 },
   visible: { opacity: 1, y: 0, transition: { duration: 0.35, ease: [0.22, 1, 0.36, 1] } },
 };

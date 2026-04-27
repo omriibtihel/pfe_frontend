@@ -1,4 +1,5 @@
 import type { SavedModelSummary } from "@/types";
+import { metricDirection } from "@/utils/metricUtils";
 
 export type SavedModelVersionGroup = {
   id: string;
@@ -39,8 +40,13 @@ function compareModels(a: SavedModelSummary, b: SavedModelSummary): number {
   const trainedAtDiff = toTimestamp(b.trainedAt) - toTimestamp(a.trainedAt);
   if (trainedAtDiff !== 0) return trainedAtDiff;
 
-  const scoreDiff = toComparableScore(b.testScore) - toComparableScore(a.testScore);
-  if (scoreDiff !== 0) return scoreDiff;
+  const metricName = a.primaryMetric?.name ?? b.primaryMetric?.name ?? "accuracy";
+  const direction = metricDirection(metricName);
+  const nullVal = direction === "lower_is_better" ? Infinity : -Infinity;
+  const aScore = a.testScore ?? nullVal;
+  const bScore = b.testScore ?? nullVal;
+  const cmp = direction === "lower_is_better" ? aScore - bScore : bScore - aScore;
+  if (cmp !== 0) return cmp;
 
   return a.modelType.localeCompare(b.modelType);
 }

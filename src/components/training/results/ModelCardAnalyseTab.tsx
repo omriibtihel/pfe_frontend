@@ -12,44 +12,62 @@ import {
 } from 'recharts';
 
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import type { CvFoldResult, CvMetricsSummary, ModelResult, ResidualAnalysisData } from '@/types';
+import type { ModelResultDetail, ResidualAnalysisData } from '@/types';
 import { CvResultsPanel } from './CvResultsPanel';
 import { GridSearchResultsPanel } from './GridSearchResultsPanel';
 import type { ClassificationView } from './trainingResultsHelpers';
-import { toPercent } from './trainingResultsHelpers';
+import { humanizeWarning, toPercent } from './trainingResultsHelpers';
 
 interface ModelCardAnalyseTabProps {
-  result: ModelResult;
+  result: ModelResultDetail;
   isRegression: boolean;
   classView: ClassificationView | null;
 }
 
 export function ModelCardAnalyseTab({ result, isRegression, classView }: ModelCardAnalyseTabProps) {
+  const cv = result.analysis.crossValidation;
+  const gs = result.analysis.gridSearch;
+
+  const allWarnings = [
+    ...(Array.isArray(result.analysis?.metricsWarnings) ? result.analysis.metricsWarnings : []),
+    ...(Array.isArray(classView?.warnings) ? classView.warnings : []),
+  ].filter((v, i, arr) => v && arr.indexOf(v) === i);
+
   return (
     <div className="space-y-4">
-      {result.isCV && result.cvSummary && (
+      {allWarnings.length > 0 && (
+        <div className="flex flex-col gap-1">
+          {allWarnings.map((w) => (
+            <p key={w} className="rounded-md border border-amber-300/60 bg-amber-50/60 px-2.5 py-1.5 text-xs text-amber-800 dark:border-amber-700/40 dark:bg-amber-950/20 dark:text-amber-300">
+              ⚠ {humanizeWarning(w)}
+            </p>
+          ))}
+        </div>
+      )}
+
+      {result.isCV && cv?.cvSummary && (
         <section aria-label="Résultats de validation croisée">
           <CvResultsPanel
-            cvSummary={result.cvSummary as CvMetricsSummary}
-            cvFoldResults={(result.cvFoldResults ?? []) as CvFoldResult[]}
-            kFolds={result.kFoldsUsed as number | undefined}
+            cvSummary={cv.cvSummary}
+            cvFoldResults={cv.cvFoldResults ?? []}
+            kFolds={cv.kFoldsUsed ?? undefined}
             hasHoldoutTest={result.hasHoldoutTest}
-            cvTestMetrics={result.cvTestMetrics as Record<string, unknown> | null | undefined}
-            cvMeanMetrics={result.cvMeanMetrics as Record<string, number> | null | undefined}
+            cvTestMetrics={cv.cvTestMetrics}
+            cvMeanMetrics={cv.cvMeanMetrics as Record<string, number> | null | undefined}
           />
         </section>
       )}
 
-      {result.gridSearch?.enabled && (
+      {gs?.enabled && (
         <section
           aria-label={
-            result.gridSearch.searchType === 'random'
+            gs.searchType === 'random'
               ? 'Résultats RandomizedSearch'
               : 'Résultats GridSearch'
           }
         >
           <GridSearchResultsPanel
-            gridSearch={result.gridSearch}
+            gridSearch={gs}
             hyperparams={result.hyperparams ?? undefined}
           />
         </section>
@@ -227,10 +245,19 @@ export function ModelCardAnalyseTab({ result, isRegression, classView }: ModelCa
         </section>
       )}
 
-      {isRegression &&
-        result.residualAnalysis &&
+      {isRegression && !result.analysis.residualAnalysis && (
         (() => {
-          const ra = result.residualAnalysis as ResidualAnalysisData;
+          const w = result.analysis.artifactWarnings?.find((a) => a.artifact === 'residual_analysis');
+          return w ? (
+            <ArtifactUnavailable label="Analyse des résidus" reason={`${w.error} : ${w.detail}`} />
+          ) : null;
+        })()
+      )}
+
+      {isRegression &&
+        result.analysis.residualAnalysis &&
+        (() => {
+          const ra = result.analysis.residualAnalysis as ResidualAnalysisData;
           const histData = ra.histogram.counts.map((count, i) => ({
             x: (ra.histogram.bin_edges[i] + ra.histogram.bin_edges[i + 1]) / 2,
             count,
@@ -385,5 +412,13 @@ function LegendDot({ color, label }: { color: string; label: string }) {
       <div className={`h-2.5 w-2.5 rounded-sm ${color}`} aria-hidden="true" />
       {label}
     </div>
+  );
+}
+
+function ArtifactUnavailable({ label, reason }: { label: string; reason: string }) {
+  return (
+    <p className="py-1 text-xs text-muted-foreground">
+      <span className="font-medium">{label} —</span> Calcul impossible : {reason}
+    </p>
   );
 }

@@ -157,8 +157,8 @@ export interface TrainingConfig {
   taskType: TaskType;
   models: ModelType[];
   /** "none" | "grid" | "random" — replaces useGridSearch. Defaults to "none". */
-  searchType: SearchType;
-  nIterRandomSearch: number;
+  searchType?: SearchType;
+  nIterRandomSearch?: number;
   /** @deprecated Use searchType instead. Kept for backward compat. */
   useGridSearch: boolean;
   useClassWeight?: boolean;
@@ -215,14 +215,18 @@ export interface DatasetFeatureTypes {
 }
 
 export interface ColumnDistributionStat {
-  is_normal: boolean;
+  is_normal_practical: boolean;
   skewness: number;
   abs_skewness: number;
+  excess_kurtosis: number;
   n: number;
-  test_used: 'shapiro' | 'dagostino';
+  test_used: 'shapiro' | 'dagostino' | 'anderson';
   p_value: number;
   has_missing: boolean;
-  has_negative: boolean;
+  has_non_positive: boolean;
+  skewness_level: 'mild' | 'moderate' | 'severe';
+  distribution_shape: 'symmetric' | 'approximately_symmetric' | 'right_skewed' | 'left_skewed' | 'heavy_tailed';
+  recommended_transform: 'none' | 'log' | 'sqrt' | 'yeo_johnson' | 'box_cox';
 }
 
 export interface DatasetProfile {
@@ -246,7 +250,10 @@ export interface DatasetProfile {
   non_normal_ratio: number;
   avg_skewness: number;
   highly_skewed_count: number;
-  // Per-column stats: {colName: {is_normal, skewness, abs_skewness, n, test_used, p_value, has_missing}}
+  columns_capped: boolean;
+  columns_capped_count: number;
+  transform_suggestions: Record<string, string>;
+  // Per-column stats keyed by column name
   column_distribution: Record<string, ColumnDistributionStat>;
 }
 

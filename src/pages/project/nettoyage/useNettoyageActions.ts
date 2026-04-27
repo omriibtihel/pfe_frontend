@@ -28,8 +28,8 @@ export function useNettoyageActions(state: NettoyageState, data: NettoyageData, 
 
   // ── Alert count ─────────────────────────────────────────────────────────────
   const alertCount = useMemo(
-    () => countVisibleAlerts(state.columnMetaMap, state.verifiedCategorical, state.kindOverrides, state.dismissedAlertKeys),
-    [state.columnMetaMap, state.verifiedCategorical, state.kindOverrides, state.dismissedAlertKeys],
+    () => countVisibleAlerts(state.columnMetaMap, state.verifiedCategorical, state.kindOverrides, state.dismissedAlertKeys, data.alertThresholds),
+    [state.columnMetaMap, state.verifiedCategorical, state.kindOverrides, state.dismissedAlertKeys, data.alertThresholds],
   );
 
   // ── Core cleaning runner ────────────────────────────────────────────────────
@@ -64,6 +64,7 @@ export function useNettoyageActions(state: NettoyageState, data: NettoyageData, 
         columns: safeCols,
         params: { ...params, action },
       });
+      if (!data.isEditingVersion) state.setHasDirtySession(true);
       await data.refreshProcessing(data.effectiveDatasetId, 1);
       const colInfo = safeCols.length ? ` sur ${safeCols.join(", ")}` : "";
       toast({ title: "Opération appliquée", description: `${description}${colInfo}` });
@@ -81,6 +82,7 @@ export function useNettoyageActions(state: NettoyageState, data: NettoyageData, 
         toast({ title: "Rien à annuler", description: "Aucune opération trouvée.", variant: "destructive" });
         return;
       }
+      if (!data.isEditingVersion) state.setHasDirtySession(true);
       await data.refreshProcessing(data.effectiveDatasetId, 1);
       toast({ title: "Opération annulée" });
     } catch (error) {
@@ -154,6 +156,18 @@ export function useNettoyageActions(state: NettoyageState, data: NettoyageData, 
 
   const confirmSaveVersion = async () => {
     if (!data.effectiveDatasetId) return;
+    const trimmedName = state.saveVersionName.trim();
+    const isDuplicate = state.versions.some(
+      (v) => v.name.trim().toLowerCase() === trimmedName.toLowerCase(),
+    );
+    if (isDuplicate) {
+      toast({
+        title: "Nom déjà utilisé",
+        description: `Une version nommée "${trimmedName}" existe déjà dans ce projet.`,
+        variant: "destructive",
+      });
+      return;
+    }
     state.setShowSaveNameModal(false);
     state.setIsSavingProcessed(true);
     try {
@@ -162,6 +176,8 @@ export function useNettoyageActions(state: NettoyageState, data: NettoyageData, 
       });
       const newVersionId = (out as any)?.version_id ?? (out as any)?.id;
       const savedName = (out as any)?.name ?? state.saveVersionName.trim();
+      state.setHasDirtySession(false);
+      await data.refreshVersions();
       toast({
         title: "Version enregistrée",
         description: newVersionId ? `"${savedName}" (version #${newVersionId}) ajoutée à l'historique.` : "Version ajoutée à l'historique.",
@@ -171,22 +187,6 @@ export function useNettoyageActions(state: NettoyageState, data: NettoyageData, 
     } finally {
       state.setIsSavingProcessed(false);
     }
-  };
-
-  // ── Rename parsing ──────────────────────────────────────────────────────────
-  const parseRenameMapping = (): Record<string, string> | null => {
-    try {
-      const obj = JSON.parse(state.renameText);
-      if (!obj || typeof obj !== "object" || Array.isArray(obj)) return null;
-      const mapping: Record<string, string> = {};
-      for (const [k, v] of Object.entries(obj)) {
-        if (typeof k !== "string" || typeof v !== "string") return null;
-        const kk = k.trim(); const vv = (v as string).trim();
-        if (!kk || !vv) return null;
-        mapping[kk] = vv;
-      }
-      return Object.keys(mapping).length ? mapping : null;
-    } catch { return null; }
   };
 
   // ── Schema actions ──────────────────────────────────────────────────────────
@@ -310,6 +310,13 @@ export function useNettoyageActions(state: NettoyageState, data: NettoyageData, 
   // ── Navigation ──────────────────────────────────────────────────────────────
   const navigateToVersions = () => navigate(`/projects/${projectId}/versions`);
 
+  /** Passe en mode édition d'une version spécifique. */
+  const navigateToVersion = (versionId: number) =>
+    navigate(`/projects/${projectId}/nettoyage?version=${versionId}`);
+
+  /** Quitte le mode édition et revient au mode dataset normal. */
+  const exitVersionMode = () => navigate(`/projects/${projectId}/nettoyage`);
+
   return {
     openInspector,
     alertCount,
@@ -319,7 +326,6 @@ export function useNettoyageActions(state: NettoyageState, data: NettoyageData, 
     handleSave,
     commitVersion,
     confirmSaveVersion,
-    parseRenameMapping,
     dismissAlert,
     verifyCategorical,
     setOverride,
@@ -327,6 +333,8 @@ export function useNettoyageActions(state: NettoyageState, data: NettoyageData, 
     openSubstitution,
     applySubstitution,
     navigateToVersions,
+    navigateToVersion,
+    exitVersionMode,
   };
 }
 

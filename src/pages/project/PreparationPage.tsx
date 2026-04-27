@@ -118,64 +118,64 @@ export function PreparationPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [projectId]);
 
-  // When version changes, load saved prep config from localStorage
+  // When version changes, load prep config — backend first, localStorage as fallback
   useEffect(() => {
     if (!selectedVersionId) return;
 
-    const saved = loadPrepConfig(projectId, selectedVersionId);
-    if (saved) {
-      setPrepConfig(saved);
-      setSavedVersionId(selectedVersionId);
-      setIsSaved(true);
+    const load = async () => {
+      // 1. Essayer le backend (source de vérité)
+      const backendConfig = await dataService.getPrepConfig(projectId, selectedVersionId);
+      if (backendConfig) {
+        const cfg = backendConfig as unknown as PrepConfig;
+        setPrepConfig(cfg);
+        savePrepConfig(projectId, selectedVersionId, cfg); // mettre à jour le cache local
+        setSavedVersionId(selectedVersionId);
+        setIsSaved(true);
+        setActiveTab("split");
+        return;
+      }
+
+      // 2. Fallback localStorage
+      const saved = loadPrepConfig(projectId, selectedVersionId);
+      if (saved) {
+        setPrepConfig(saved);
+        setSavedVersionId(selectedVersionId);
+        setIsSaved(true);
+        setActiveTab("split");
+        return;
+      }
+
+      // 3. Aucune config sauvegardée : initialiser avec la target de la version
       setActiveTab("split");
-    } else {
-      setActiveTab("split");
-      // Load the saved target column from backend as default
-      const loadTarget = async () => {
-        try {
-          // Find dataset id from active dataset
-          const active = await databaseService.getActiveDataset(projectId);
-          if (active.active_dataset_id) {
-            const targetData = await databaseService.getDatasetTarget(
-              projectId,
-              active.active_dataset_id
-            );
-            setPrepConfig({
-              ...DEFAULT_PREP_CONFIG,
-              datasetVersionId: selectedVersionId,
-              targetColumn: targetData.target_column ?? "",
-              preprocessing: { ...DEFAULT_TRAINING_PREPROCESSING },
-              balancing: { ...DEFAULT_TRAINING_BALANCING },
-            });
-          } else {
-            setPrepConfig({
-              ...DEFAULT_PREP_CONFIG,
-              datasetVersionId: selectedVersionId,
-            });
-          }
-        } catch {
+      setIsSaved(false);
+      setSavedVersionId(null);
+
+      const version = versions.find((v) => String(v.id) === selectedVersionId);
+      if (version?.targetColumn) {
+        setPrepConfig({ ...DEFAULT_PREP_CONFIG, datasetVersionId: selectedVersionId, targetColumn: version.targetColumn });
+        return;
+      }
+
+      try {
+        const active = await databaseService.getActiveDataset(projectId);
+        if (active.active_dataset_id) {
+          const targetData = await databaseService.getDatasetTarget(projectId, active.active_dataset_id);
           setPrepConfig({
             ...DEFAULT_PREP_CONFIG,
             datasetVersionId: selectedVersionId,
+            targetColumn: targetData.target_column ?? "",
+            preprocessing: { ...DEFAULT_TRAINING_PREPROCESSING },
+            balancing: { ...DEFAULT_TRAINING_BALANCING },
           });
+        } else {
+          setPrepConfig({ ...DEFAULT_PREP_CONFIG, datasetVersionId: selectedVersionId });
         }
-      };
-
-      // Try to get target from the version metadata
-      const version = versions.find((v) => String(v.id) === selectedVersionId);
-      if (version?.targetColumn) {
-        setPrepConfig({
-          ...DEFAULT_PREP_CONFIG,
-          datasetVersionId: selectedVersionId,
-          targetColumn: version.targetColumn,
-        });
-      } else {
-        loadTarget();
+      } catch {
+        setPrepConfig({ ...DEFAULT_PREP_CONFIG, datasetVersionId: selectedVersionId });
       }
+    };
 
-      setIsSaved(false);
-      setSavedVersionId(null);
-    }
+    load();
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedVersionId]);
 
@@ -220,16 +220,26 @@ export function PreparationPage() {
     setIsSaved(false);
   }, []);
 
-  const handleSave = () => {
+  const handleSave = async () => {
     if (!selectedVersionId) return;
-    const toSave: PrepConfig = {
-      ...prepConfig,
-      datasetVersionId: selectedVersionId,
-    };
+    const toSave: PrepConfig = { ...prepConfig, datasetVersionId: selectedVersionId };
+
+    // 1. Écriture locale immédiate (rapide)
     savePrepConfig(projectId, selectedVersionId, toSave);
     setSavedVersionId(selectedVersionId);
     setIsSaved(true);
-    toast({ title: "Configuration enregistrée", description: "La configuration de préparation ML a été sauvegardée." });
+
+    // 2. Persistance backend (source de vérité)
+    try {
+      await dataService.savePrepConfigToBackend(projectId, selectedVersionId, toSave as unknown as Record<string, unknown>);
+      toast({ title: "Configuration enregistrée", description: "La configuration de préparation ML a été sauvegardée." });
+    } catch {
+      toast({
+        title: "Config enregistrée localement",
+        description: "La synchronisation serveur a échoué. La config sera utilisée depuis ce navigateur.",
+        variant: "destructive",
+      });
+    }
   };
 
   if (isLoading) return <AppLayout><PageSkeleton /></AppLayout>;

@@ -1,8 +1,10 @@
 import { useEffect, useState } from 'react';
-import { Target, X } from 'lucide-react';
+import { AlertCircle, Target, X } from 'lucide-react';
+import { ParasiteValueBadges } from '@/components/shared/ParasiteValueBadges';
 import {
   BarChart,
   Bar,
+  Cell,
   XAxis,
   YAxis,
   Tooltip,
@@ -149,18 +151,26 @@ export function ColumnDetailPanel({
             <div className="space-y-1.5 overflow-auto max-h-52">
               {col.topValues.map((tv) => {
                 const pct = totalRows ? (tv.count / totalRows) * 100 : 0;
+                const isParasite = !!col.parasites?.distinct.includes(tv.value);
                 return (
-                  <div key={tv.value} className="flex items-center gap-2 text-sm">
-                    <span className="w-28 truncate text-xs" title={tv.value}>
+                  <div
+                    key={tv.value}
+                    className={`flex items-center gap-2 text-sm rounded px-1 ${isParasite ? 'bg-red-50 dark:bg-red-950/30' : ''}`}
+                  >
+                    <span
+                      className={`w-28 truncate text-xs font-medium flex items-center gap-1 ${isParasite ? 'text-red-600 dark:text-red-400' : ''}`}
+                      title={tv.value}
+                    >
+                      {isParasite && <AlertCircle className="h-3 w-3 flex-shrink-0" />}
                       {tv.value || '(vide)'}
                     </span>
                     <div className="flex-1 h-2 rounded-full bg-muted overflow-hidden">
                       <div
-                        className="h-full rounded-full bg-primary/60"
+                        className={`h-full rounded-full ${isParasite ? 'bg-red-500' : 'bg-primary/60'}`}
                         style={{ width: `${Math.min(100, pct)}%` }}
                       />
                     </div>
-                    <span className="text-xs text-muted-foreground w-16 text-right">
+                    <span className={`text-xs w-16 text-right ${isParasite ? 'text-red-500 font-semibold' : 'text-muted-foreground'}`}>
                       {tv.count} ({pct.toFixed(1)}%)
                     </span>
                   </div>
@@ -169,6 +179,17 @@ export function ColumnDetailPanel({
             </div>
           </div>
         )}
+
+      {/* Parasite values */}
+      {col.parasites && col.parasites.count > 0 && (
+        <div className="mb-4">
+          <ParasiteValueBadges
+            count={col.parasites.count}
+            distinct={col.parasites.distinct}
+            convertible_ratio={col.parasites.convertible_ratio}
+          />
+        </div>
+      )}
 
       {/* Distribution chart */}
       {(col.kind === 'numeric' || col.kind === 'categorical' || col.kind === 'text') && (
@@ -199,7 +220,17 @@ export function ColumnDetailPanel({
                   labelStyle={{ fontSize: 11 }}
                   contentStyle={{ fontSize: 11 }}
                 />
-                <Bar dataKey="count" radius={[3, 3, 0, 0]} fill="hsl(221,83%,53%)" />
+                <Bar dataKey="count" radius={[3, 3, 0, 0]}>
+                  {(chartData ?? []).map((entry) => {
+                    const isParasite = !!col.parasites?.distinct.includes(entry.label);
+                    return (
+                      <Cell
+                        key={entry.label}
+                        fill={isParasite ? 'hsl(0,84%,60%)' : 'hsl(221,83%,53%)'}
+                      />
+                    );
+                  })}
+                </Bar>
               </BarChart>
             </ResponsiveContainer>
           ) : (

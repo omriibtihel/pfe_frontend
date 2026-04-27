@@ -39,7 +39,9 @@ import { Modal } from "@/components/ui/modal";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 
-const fade = {
+// Cast to silence framer-motion's strict Easing type — runtime accepts the string.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const fade: any = {
   initial: { opacity: 0, y: 16 },
   animate: { opacity: 1, y: 0 },
   transition: { duration: 0.45, ease: "easeOut" },
