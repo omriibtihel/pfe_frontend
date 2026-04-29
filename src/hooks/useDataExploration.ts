@@ -6,6 +6,8 @@ import databaseService, {
   DatasetProfileOut,
 } from '@/services/databaseService';
 
+// Each project has at most one source dataset — use list()[0] as the active one.
+
 export type ExplorationData = {
   datasets: DatasetOut[];
   activeDatasetId: number | null;
@@ -41,11 +43,7 @@ export function useDataExploration(projectId: string): ExplorationData & Explora
         const ds = await datasetService.list(projectId);
         setDatasets(ds as DatasetOut[]);
 
-        const active = await databaseService.getActiveDataset(projectId);
-        const chosen =
-          opts?.forceDatasetId ??
-          active.active_dataset_id ??
-          (ds?.[0]?.id ?? null);
+        const chosen = opts?.forceDatasetId ?? (ds?.[0]?.id ?? null);
 
         setActiveDatasetId(chosen);
 
@@ -90,7 +88,6 @@ export function useDataExploration(projectId: string): ExplorationData & Explora
       setOverview(null);
       setProfile(null);
       setTargetColumnState(null);
-      await databaseService.setActiveDataset(projectId, datasetId);
       await reload({ forceDatasetId: datasetId });
     },
     [projectId, reload],

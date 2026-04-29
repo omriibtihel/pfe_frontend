@@ -23,8 +23,8 @@ type UseDebouncedValidationResult = {
 };
 
 function isAbortError(error: unknown): boolean {
-  const msg = String((error as any)?.message ?? "").toLowerCase();
-  return msg.includes("abort") || msg.includes("canceled") || msg.includes("cancelled");
+  const msg = error instanceof Error ? error.message : String(error ?? "");
+  return /abort|cancel(l)?ed/i.test(msg);
 }
 
 export function useDebouncedValidation({
@@ -78,7 +78,7 @@ export function useDebouncedValidation({
         setLastValidatedAt(new Date().toISOString());
       } catch (error: unknown) {
         if (seq !== sequenceRef.current || controller.signal.aborted || isAbortError(error)) return;
-        setValidationError(String((error as any)?.message ?? "Validation serveur indisponible."));
+        setValidationError(error instanceof Error ? error.message : "Validation serveur indisponible.");
       } finally {
         if (seq === sequenceRef.current && !controller.signal.aborted) {
           setIsValidating(false);

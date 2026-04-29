@@ -18,7 +18,11 @@ type Props = {
 
 export function HistPanel({ histCol, histBars, histBins, histOut, chartLoading, profile }: Props) {
   const hasData = histOut && histBars.length > 0;
-  const numStats = profile?.profiles.find((c) => c.name === histCol)?.numeric;
+  const colProfile = profile?.profiles.find((c) => c.name === histCol);
+  const numStats = colProfile?.numeric;
+  const plottedCount = histOut?.rows.reduce((s, b) => s + b.count, 0) ?? 0;
+  const totalRows = profile?.shape.rows ?? plottedCount;
+  const missingCount = colProfile?.missing ?? Math.max(0, totalRows - plottedCount);
 
   const stats = numStats
     ? [
@@ -50,7 +54,7 @@ export function HistPanel({ histCol, histBars, histBins, histOut, chartLoading, 
           <>
             <ChartHeader
               title={`Distribution — ${shortLabel(histCol, 30)}`}
-              subtitle={`${histBins} bins · ${histOut!.rows.reduce((s, b) => s + b.count, 0).toLocaleString("fr-FR")} valeurs`}
+              subtitle={`${histBins} bins · ${plottedCount.toLocaleString("fr-FR")} valeurs non nulles sur ${totalRows.toLocaleString("fr-FR")} lignes`}
             />
             <ResponsiveContainer width="100%" height={420}>
               <BarChart data={histBars} margin={{ top: 10, right: 20, bottom: 60, left: 20 }}>
@@ -82,7 +86,9 @@ export function HistPanel({ histCol, histBars, histBins, histOut, chartLoading, 
           <div className="flex items-center gap-2 px-1">
             <span className="h-3 w-3 rounded-sm shrink-0" style={{ backgroundColor: "hsl(262, 83%, 58%)" }} />
             <span className="text-xs font-semibold truncate flex-1" title={histCol}>{histCol}</span>
-            <span className="text-[10px] text-muted-foreground shrink-0">Statistiques descriptives</span>
+            <span className="text-[10px] text-muted-foreground shrink-0">
+              Dataset complet{missingCount > 0 ? ` - ${missingCount.toLocaleString("fr-FR")} valeurs manquantes exclues` : ""}
+            </span>
           </div>
           <div className="grid grid-cols-4 sm:grid-cols-8 gap-2">
             {stats.map(({ label, v, d }) => (

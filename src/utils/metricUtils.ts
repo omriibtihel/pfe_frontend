@@ -2,6 +2,14 @@ export const LOWER_IS_BETTER = new Set([
   "rmse", "mae", "mse", "log_loss", "brier_score"
 ]);
 
+/**
+ * Metrics that live on a 0–1 (or −∞–1 for R²) scale and must NOT be
+ * multiplied by 100.  Formatting them as percentages is misleading.
+ */
+export const RATIO_METRICS = new Set([
+  "r2", "roc_auc", "pr_auc", "average_precision",
+]);
+
 export type MetricDirection = "lower_is_better" | "higher_is_better";
 
 export function metricDirection(metricName: string): MetricDirection {
@@ -70,6 +78,8 @@ export function selectBestModel<T extends {
 /**
  * Format a primary metric value for display.
  * Uses metric direction — never assumes taskType.
+ * RATIO_METRICS (r2, roc_auc, pr_auc, average_precision) → plain decimal, 3 sig figs, no %
+ *   Negative R² additionally appends " (worse than baseline)".
  * lower_is_better → raw decimal (4 decimal places)
  * higher_is_better → percentage (1 decimal place)
  * null/undefined → "—"
@@ -79,6 +89,14 @@ export function formatMetricValue(
   metricName: string | null | undefined,
 ): string {
   if (value === null || value === undefined || !isFinite(value)) return "—";
+  const key = (metricName ?? "").toLowerCase();
+  if (RATIO_METRICS.has(key)) {
+    const formatted = Number(value.toPrecision(3)).toString();
+    if (key === "r2" && value < 0) {
+      return `${formatted} (worse than baseline)`;
+    }
+    return formatted;
+  }
   const dir = metricDirection(metricName ?? "accuracy");
   return dir === "lower_is_better"
     ? value.toFixed(4)

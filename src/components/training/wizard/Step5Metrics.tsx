@@ -1,15 +1,12 @@
 import { useEffect, useMemo } from "react";
 import { motion } from "framer-motion";
-import { BarChart3, Info, SlidersHorizontal, TrendingUp } from "lucide-react";
+import { BarChart3, Info, TrendingUp } from "lucide-react";
 import { MedHelp } from "@/components/ui/med-help";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Switch } from "@/components/ui/switch";
 import { cn } from "@/lib/utils";
 import type { MetricType, TrainingConfig } from "@/types";
 
@@ -262,9 +259,9 @@ export function Step5Metrics({ config, onConfigChange }: Step5Props) {
 
   useEffect(() => {
     if (hasUnsupportedMetrics) {
-      onConfigChange({ metrics: selectedMetrics });
+      onConfigChange({ metrics: allMetrics });
     }
-  }, [hasUnsupportedMetrics, onConfigChange, selectedMetrics]);
+  }, [hasUnsupportedMetrics, onConfigChange, allMetrics]);
 
   const metricDetails = useMemo(() => {
     const lookup = new Map<MetricType, MetricOption>();
@@ -280,8 +277,6 @@ export function Step5Metrics({ config, onConfigChange }: Step5Props) {
     config.taskType === "classification"
       ? recommendedClassificationMetrics
       : recommendedRegressionMetrics;
-
-  const positiveLabelValue = config.positiveLabel == null ? "" : String(config.positiveLabel);
 
   const applyMetrics = (nextMetrics: MetricType[]) => {
     const unique = Array.from(new Set(nextMetrics)).filter((metric) => allowedMetricSet.has(metric));
@@ -476,66 +471,6 @@ export function Step5Metrics({ config, onConfigChange }: Step5Props) {
           {selectedMetrics.length === 0 && (
             <p className="text-sm text-destructive">Selectionnez au moins une metrique.</p>
           )}
-        </CardContent>
-      </Card>
-
-      <Card className="glass-premium shadow-card">
-        <CardHeader className="pb-3">
-          <CardTitle className="flex items-center gap-2 text-base">
-            <div className="rounded-xl bg-secondary/10 p-2">
-              <SlidersHorizontal className="h-4 w-4 text-secondary" />
-            </div>
-            Paramètres supplémentaires
-          </CardTitle>
-        </CardHeader>
-
-        <CardContent className="space-y-4">
-          {config.taskType === "classification" && (
-            <div className="rounded-xl border border-border/60 p-4">
-              <div className="flex items-center gap-1.5">
-                <Label htmlFor="positive-label-input" className="text-sm font-semibold">
-                  Résultat d'intérêt clinique
-                </Label>
-                <MedHelp title="Résultat d'intérêt clinique" side="top">
-                  <p>Indiquez quelle valeur de votre colonne cible représente le cas <em>positif</em> (la maladie, l'événement ou le résultat que vous cherchez à prédire).</p>
-                  <p className="mt-1">Ex : si votre colonne « Diagnostic » contient « Sain » et « Malade », entrez <strong>Malade</strong>.</p>
-                  <p className="mt-1">Cela permet de calculer correctement la sensibilité, la VPP et les autres métriques orientées vers la détection de cas positifs.</p>
-                </MedHelp>
-              </div>
-              <p className="mt-1 text-xs text-muted-foreground">
-                Valeur dans votre colonne cible qui représente le cas « positif » (la maladie ou l'événement à détecter).
-              </p>
-              <Input
-                id="positive-label-input"
-                value={positiveLabelValue}
-                onChange={(e) =>
-                  onConfigChange({
-                    positiveLabel: e.target.value.trim() ? e.target.value : null,
-                  })
-                }
-                placeholder="Ex : Malade, Oui, Positif, 1"
-                className="mt-2"
-              />
-            </div>
-          )}
-
-          <div className="rounded-xl border border-border/60 p-4">
-            <div className="flex items-start justify-between gap-4">
-              <div>
-                <Label htmlFor="training-debug-toggle" className="cursor-pointer text-sm font-semibold">
-                  Logs détaillés (débogage)
-                </Label>
-                <p className="mt-1 text-xs text-muted-foreground">
-                  Génère des informations techniques détaillées pour le support ou l'audit technique. Non nécessaire pour un usage courant.
-                </p>
-              </div>
-              <Switch
-                id="training-debug-toggle"
-                checked={Boolean(config.trainingDebug)}
-                onCheckedChange={(checked) => onConfigChange({ trainingDebug: Boolean(checked) })}
-              />
-            </div>
-          </div>
         </CardContent>
       </Card>
     </div>

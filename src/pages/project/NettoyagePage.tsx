@@ -326,7 +326,7 @@ export function NettoyagePage() {
               <CardContent className="pt-4">
                 <div className="w-full overflow-x-auto rounded-xl border border-border/50">
                   <div className="min-w-[900px]">
-                    <DataTable data={state.previewRows} columns={tableColumns as any} pageSize={state.pageSize} />
+                    <DataTable data={state.previewRows} columns={tableColumns} pageSize={state.pageSize} />
                   </div>
                 </div>
                 {state.columns.length > 10 && (

@@ -417,7 +417,7 @@ export function ColumnSchemaSection({ state, data, actions, projectId }: ColumnS
                   toast({ title: "Aucun renommage", description: "Ajoutez au moins un renommage.", variant: "destructive" });
                   return;
                 }
-                await actions.runCleaning("Colonnes renommées", "rename_columns" as any, { mapping: state.renameMap }, []);
+                await actions.runCleaning("Colonnes renommées", "rename_columns", { mapping: state.renameMap }, []);
                 state.setShowRenameModal(false);
               }}
               disabled={disableProcessingActions || !Object.keys(state.renameMap).length}

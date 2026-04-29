@@ -112,6 +112,14 @@ export const MODEL_CATALOG: ModelCatalogEntry[] = [
     Icon: BarChart3,
     supportedTasks: ["regression"],
   },
+  {
+    value: "ridge",
+    label: "Ridge Regression",
+    desc: "Régression L2 — stabilise les coefficients sur variables corrélées",
+    clinicalTip: "Linear regression with L2 regularisation. Shrinks coefficients toward zero without eliminating them — well suited for datasets with many correlated features. Unlike Lasso, Ridge keeps all variables in the model. Régression uniquement.",
+    Icon: BarChart3,
+    supportedTasks: ["regression"],
+  },
 ];
 
 export const GRID_SCORING_OPTIONS: Array<{ value: GridScoringOption; label: string; desc: string }> = [

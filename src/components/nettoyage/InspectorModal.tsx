@@ -131,7 +131,7 @@ export function InspectorModal({
   effectiveDatasetId: number | null;
   disableActions: boolean;
   onRefresh: () => void;
-  onRunCleaning: (description: string, action: CleaningAction, params?: Record<string, any>, overrideColumns?: string[]) => Promise<void> | void;
+  onRunCleaning: (description: string, action: CleaningAction, params?: Record<string, unknown>, overrideColumns?: string[]) => Promise<void> | void;
   onSetOverride: (col: string, kind: ColumnKind) => Promise<void> | void;
   onClearOverride: (col: string) => Promise<void> | void;
   onVerifyCategorical: (col: string, verified: boolean) => Promise<void> | void;
@@ -415,7 +415,7 @@ export function InspectorModal({
                     variant="destructive"
                     size="sm"
                     disabled={disableActions}
-                    onClick={() => void onRunCleaning("Suppression colonne (depuis inspector)", "drop_columns" as any, {}, [col])}
+                    onClick={() => void onRunCleaning("Suppression colonne (depuis inspector)", "drop_columns", {}, [col])}
                   >
                     <Trash2 className="h-4 w-4 mr-2" />
                     Supprimer la colonne

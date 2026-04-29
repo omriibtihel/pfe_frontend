@@ -22,7 +22,27 @@
  *
  * scale = width / value  →  maps any shifted stat to its pixel x position.
  */
-export function BoxPlotShape(props: any) {
+type BoxPlotShapeProps = {
+  x?: number;
+  y?: number;
+  width?: number;
+  height?: number;
+  value?: number;
+  s_min?: number;
+  s_p25?: number;
+  s_p50?: number;
+  s_p75?: number;
+  s_max?: number;
+  fill?: string;
+  showMean?: boolean;
+  showFences?: boolean;
+  shift?: number;
+  _mean?: number | null;
+  s_lf?: number | null;
+  s_uf?: number | null;
+};
+
+export function BoxPlotShape(props: BoxPlotShapeProps) {
   const {
     x, y, width, height, value,
     s_min, s_p25, s_p50, s_p75, s_max,

@@ -42,8 +42,6 @@ export type TrainingStartPayload = {
   groupColumn?: string;
   metrics: string[];
   positiveLabel?: string | number | null;
-  debug?: boolean;
-  trainingDebug?: boolean;
   preprocessing: TrainingPreprocessingConfig;
   modelHyperparams: ModelHyperparams;
   customCode: string;
@@ -214,8 +212,6 @@ export function toTrainingStartPayload(config: TrainingConfig): TrainingStartPay
     groupColumn: config.groupColumn ?? undefined,
     metrics: [...(config.metrics ?? [])].map((m) => String(m).trim()).filter(Boolean),
     positiveLabel: config.positiveLabel ?? undefined,
-    debug: Boolean(config.trainingDebug),
-    trainingDebug: Boolean(config.trainingDebug),
     preprocessing,
     modelHyperparams,
     customCode: config.customCode ?? "",

@@ -408,6 +408,7 @@ export function TrainingResultsPage() {
                     isBestModel={result === bestModel}
                     sessionId={sessionId}
                     projectId={String(projectId)}
+                    selectedMetrics={session.config?.metrics}
                     isActive={result.id === activeModelId}
                     isSaved={savedModelIds.has(result.id)}
                     isSaving={savingModelIds.has(result.id)}

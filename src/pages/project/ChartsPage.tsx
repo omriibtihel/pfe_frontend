@@ -81,7 +81,7 @@ export function ChartsPage() {
 
   const [pieCol,    setPieCol]    = useState("");
   const [histCol,   setHistCol]   = useState("");
-  const [histBins,  setHistBins]  = useState(20);
+  const [histBins,  setHistBins]  = useState(60);
 
   const [sx, setSx] = useState("");
   const [sy, setSy] = useState("");
@@ -139,12 +139,11 @@ export function ChartsPage() {
           datasetService.list(projectId),
           dataService.getVersions(projectId),
         ]);
-        setDatasets(dsList as any);
+        setDatasets(dsList);
         setVersions(vList);
 
-        const active  = await databaseService.getActiveDataset(projectId);
         const forced  = opts?.forceDatasetId ?? null;
-        const chosen = forced ?? active.active_dataset_id ?? (dsList?.[0]?.id ?? null);
+        const chosen = forced ?? (dsList?.[0]?.id ?? null);
         setActiveSource((prev) => prev ?? (chosen ? { kind: "dataset", id: chosen } : null));
 
         if (!chosen) { setOverview(null); setProfile(null); }
@@ -159,7 +158,7 @@ export function ChartsPage() {
         setIsLoading(false);
       }
     },
-    [projectId, toast, loadAnalytics],
+    [projectId, toast],
   );
 
   // Reload analytics when source changes
@@ -352,10 +351,21 @@ export function ChartsPage() {
     return base;
   }, [countsOut]);
 
-  const histBars = useMemo(
-    () => (histOut?.rows ?? []).map((b) => ({ bin: `${b.x0.toFixed(2)}–${b.x1.toFixed(2)}`, count: b.count })),
-    [histOut],
-  );
+  const histBars = useMemo(() => {
+    const fmtEdge = (v: number) => {
+      if (!Number.isFinite(v)) return "";
+      const abs = Math.abs(v);
+      const digits = abs >= 100 ? 1 : abs >= 1 ? 2 : 4;
+      return new Intl.NumberFormat("fr-FR", {
+        maximumFractionDigits: digits,
+      }).format(v);
+    };
+
+    return (histOut?.rows ?? []).map((b) => ({
+      bin: `${fmtEdge(b.x0)}-${fmtEdge(b.x1)}`,
+      count: b.count,
+    }));
+  }, [histOut]);
 
   const scatterPoints = useMemo(() => {
     const r = sampleOut?.rows ?? [];
@@ -463,7 +473,7 @@ export function ChartsPage() {
     });
     s += "</svg>";
     return s;
-  }, [heatmapData]);
+  }, []);
 
   const downloadSvgAsPng = useCallback((svgData: string, filename: string) => {
     const blob = new Blob([svgData], { type: "image/svg+xml" });
@@ -743,7 +753,7 @@ export function ChartsPage() {
                           <Select value={String(histBins)} onValueChange={(v) => setHistBins(Number(v))}>
                             <SelectTrigger className="rounded-xl"><SelectValue /></SelectTrigger>
                             <SelectContent>
-                              {[10, 15, 20, 30, 40, 60].map((b) => <SelectItem key={b} value={String(b)}>{b}</SelectItem>)}
+                              {[20, 40, 60, 100, 150, 200].map((b) => <SelectItem key={b} value={String(b)}>{b}</SelectItem>)}
                             </SelectContent>
                           </Select>
                         </div>
@@ -864,7 +874,7 @@ export function ChartsPage() {
                       Comptage : <b className="text-foreground">{shortLabel(pieCol)}</b> (Top {topK} + Autres)
                     </span>
                   )}
-                  {chartKind === "hist"    && histCol && <span className="text-sm text-muted-foreground">Distribution : <b className="text-foreground">{shortLabel(histCol)}</b> ({histBins} bins)</span>}
+                  {chartKind === "hist"    && histCol && <span className="text-sm text-muted-foreground">Distribution complète : <b className="text-foreground">{shortLabel(histCol)}</b> ({histBins} bins)</span>}
                   {chartKind === "scatter" && sx && sy  && <span className="text-sm text-muted-foreground">{shortLabel(sx)} vs {shortLabel(sy)} ({sampleN})</span>}
                   {chartKind === "bubble"  && bx && by && bz && <span className="text-sm text-muted-foreground">{shortLabel(bx)} vs {shortLabel(by)} | taille={shortLabel(bz)} ({sampleN} pts)</span>}
                   {chartKind === "boxplot" && boxplotInfo.data.length > 0 && <span className="text-sm text-muted-foreground">{boxplotInfo.data.length} colonne{boxplotInfo.data.length > 1 ? "s" : ""} · IQR [P25–P75]</span>}

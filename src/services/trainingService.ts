@@ -61,45 +61,6 @@ function _toSaveModelResponse(raw: RawRecord): SaveModelResponse {
   };
 }
 
-// Kept only to suppress: the backend now returns clean typed SavedModelSummary objects.
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
-function _toSavedModelSummary(raw: RawRecord): SavedModelSummary {
-  return {
-    id: String(raw["id"] ?? ""),
-    modelType: String(raw["modelType"] ?? ""),
-    taskType: (raw["taskType"] as "classification" | "regression") ?? "classification",
-    sessionId: String(raw["sessionId"] ?? ""),
-    datasetVersionId: raw["datasetVersionId"] != null ? String(raw["datasetVersionId"]) : null,
-    datasetVersionName:
-      raw["datasetVersionName"] != null
-        ? String(raw["datasetVersionName"])
-          : null,
-    isActive: Boolean(raw["isActive"] ?? raw["is_active"]),
-    isSaved: Boolean(raw["isSaved"] ?? raw["is_saved"]),
-    featureNames:
-      ((raw["featureNames"] ?? raw["feature_names"]) as string[] | undefined) ?? [],
-    threshold: (raw["threshold"] as number) ?? 0.5,
-    trainedAt: String(raw["trainedAt"] ?? raw["trained_at"] ?? ""),
-    testScore:
-      raw["testScore"] != null
-        ? (raw["testScore"] as number)
-        : raw["test_score"] != null
-          ? (raw["test_score"] as number)
-          : null,
-    primaryMetric: (() => {
-      const pm = raw["primaryMetric"] ?? raw["primary_metric"];
-      if (pm != null && typeof pm === 'object') return pm as import('@/types/training/results').PrimaryMetric;
-      return null;
-    })(),
-    trainingTime:
-      raw["trainingTime"] != null
-        ? (raw["trainingTime"] as number)
-        : raw["training_time"] != null
-          ? (raw["training_time"] as number)
-          : undefined,
-  };
-}
-
 export type TrainingPreprocessingCapabilities = {
   numericImputation: NumericImputationStrategy[];
   numericPowerTransform: NumericPowerTransformStrategy[];

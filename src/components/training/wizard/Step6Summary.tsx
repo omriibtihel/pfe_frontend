@@ -64,10 +64,11 @@ export function Step6Summary({ projectId, config, onStartTraining, onGoToResults
     const st = (s.status || "queued") as TrainStatus;
     setStatus(st);
 
-    const p = typeof (s as any).progress === "number" ? (s as any).progress : 0;
+    const session = s as { progress?: number; errorMessage?: string; error_message?: string };
+    const p = typeof session.progress === "number" ? session.progress : 0;
     setProgress(Math.max(0, Math.min(100, p)));
 
-    const err = (s as any).errorMessage || (s as any).error_message;
+    const err = session.errorMessage || session.error_message;
     if (err) setError(String(err));
 
     if (st === "succeeded" || st === "failed") stopPolling();
@@ -101,13 +102,13 @@ export function Step6Summary({ projectId, config, onStartTraining, onGoToResults
       if (seq !== validationSeqRef.current) return out;
       setValidation(out);
       return out;
-    } catch (e: any) {
+    } catch (e: unknown) {
       const fallback: TrainingValidationResponse = {
         normalized_config: {},
         effective_preprocessing_by_column: {},
         warnings: [],
         errors: showNetworkErrorInList
-          ? [String(e?.message || "Validation indisponible.")]
+          ? [e instanceof Error ? e.message : "Validation indisponible."]
           : [],
       };
       if (seq === validationSeqRef.current) {
@@ -184,17 +185,17 @@ export function Step6Summary({ projectId, config, onStartTraining, onGoToResults
 
     try {
       await refresh(sid);
-    } catch (e: any) {
+    } catch (e: unknown) {
       setStatus("failed");
-      setError(e?.message || "Erreur de suivi session.");
+      setError(e instanceof Error ? e.message : "Erreur de suivi session.");
       return;
     }
 
     stopPolling();
     pollingRef.current = window.setInterval(() => {
-      refresh(sid).catch((e: any) => {
+      refresh(sid).catch((e: unknown) => {
         setStatus("failed");
-        setError(e?.message || "Erreur de suivi session.");
+        setError(e instanceof Error ? e.message : "Erreur de suivi session.");
         stopPolling();
       });
     }, 1200);
@@ -246,7 +247,6 @@ export function Step6Summary({ projectId, config, onStartTraining, onGoToResults
     { label: "Balancing", value: balancingStrategy },
     { label: "Seuil optimise", value: applyThreshold ? "Oui" : "Non" },
     { label: "Classe positive", value: config.positiveLabel == null || String(config.positiveLabel).trim() === "" ? "-" : String(config.positiveLabel) },
-    { label: "Debug training", value: config.trainingDebug ? "Active" : "Desactive" },
     {
       label: "Optimisation HP",
       value:
@@ -313,87 +313,92 @@ export function Step6Summary({ projectId, config, onStartTraining, onGoToResults
         </CardContent>
       </Card>
 
-      <Card className="border-border/60">
-        <CardHeader className="pb-2">
-          <CardTitle className="text-sm flex items-center gap-2">
-            <ShieldAlert className="h-4 w-4 text-primary" />
-            Validation pre-lancement
-            {validating ? (
-              <Badge variant="outline" className="ml-auto text-xs">
-                Verification...
-              </Badge>
-            ) : (
-              <Badge variant={validation.errors.length ? "destructive" : "secondary"} className="ml-auto text-xs">
-                {validation.errors.length ? `${validation.errors.length} erreur(s)` : "OK"}
-              </Badge>
+      {(validating || !!validation.errors.length || !!validation.warnings.length) && (
+        <Card className="border-border/60">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm flex items-center gap-2">
+              <ShieldAlert className="h-4 w-4 text-primary" />
+              Validation pre-lancement
+              {validating ? (
+                <Badge variant="outline" className="ml-auto text-xs">
+                  Verification...
+                </Badge>
+              ) : (
+                <Badge
+                  variant={validation.errors.length ? "destructive" : "secondary"}
+                  className="ml-auto text-xs"
+                >
+                  {validation.errors.length
+                    ? `${validation.errors.length} erreur(s)`
+                    : `${validation.warnings.length} warning(s)`}
+                </Badge>
+              )}
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            {!!validation.errors.length && (
+              <div className="rounded-lg border border-destructive/30 bg-destructive/5 p-3">
+                <p className="text-xs font-semibold text-destructive mb-2">Erreurs bloquantes</p>
+                <div className="space-y-1">
+                  {validation.errors.map((msg, i) => (
+                    <p key={`${i}-${msg}`} className="text-xs text-destructive">
+                      - {msg}
+                    </p>
+                  ))}
+                </div>
+                {!!detailErrors.length && (
+                  <div className="mt-2 space-y-1 border-t border-destructive/20 pt-2">
+                    {detailErrors.map((d, i) => (
+                      <p key={`derr-${i}-${d.code ?? ""}-${d.message ?? ""}`} className="text-xs text-destructive">
+                        - [{d.code ?? "ERR"}]
+                        {d.model ? ` model=${d.model}` : ""}
+                        {d.column ? ` column=${d.column}` : ""}: {d.message}
+                      </p>
+                    ))}
+                  </div>
+                )}
+              </div>
             )}
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-3">
-          {!!validation.errors.length && (
-            <div className="rounded-lg border border-destructive/30 bg-destructive/5 p-3">
-              <p className="text-xs font-semibold text-destructive mb-2">Erreurs bloquantes</p>
-              <div className="space-y-1">
-                {validation.errors.map((msg, i) => (
-                  <p key={`${i}-${msg}`} className="text-xs text-destructive">
-                    - {msg}
-                  </p>
-                ))}
-              </div>
-              {!!detailErrors.length && (
-                <div className="mt-2 space-y-1 border-t border-destructive/20 pt-2">
-                  {detailErrors.map((d, i) => (
-                    <p key={`derr-${i}-${d.code ?? ""}-${d.message ?? ""}`} className="text-xs text-destructive">
-                      - [{d.code ?? "ERR"}]
-                      {d.model ? ` model=${d.model}` : ""}
-                      {d.column ? ` column=${d.column}` : ""}: {d.message}
+
+            {!!validation.warnings.length && (
+              <div className="rounded-lg border border-warning/30 bg-warning/5 p-3">
+                <p className="text-xs font-semibold mb-2">Warnings</p>
+                <div className="space-y-1">
+                  {validation.warnings.map((msg, i) => (
+                    <p key={`${i}-${msg}`} className="text-xs">
+                      - {msg}
                     </p>
                   ))}
                 </div>
-              )}
-            </div>
-          )}
-
-          {!!validation.warnings.length && (
-            <div className="rounded-lg border border-warning/30 bg-warning/5 p-3">
-              <p className="text-xs font-semibold mb-2">Warnings</p>
-              <div className="space-y-1">
-                {validation.warnings.map((msg, i) => (
-                  <p key={`${i}-${msg}`} className="text-xs">
-                    - {msg}
-                  </p>
-                ))}
+                {!!detailWarnings.length && (
+                  <div className="mt-2 space-y-1 border-t border-warning/20 pt-2">
+                    {detailWarnings.map((d, i) => (
+                      <p key={`dwarn-${i}-${d.code ?? ""}-${d.message ?? ""}`} className="text-xs">
+                        - [{d.code ?? "WARN"}]
+                        {d.model ? ` model=${d.model}` : ""}
+                        {d.column ? ` column=${d.column}` : ""}: {d.message}
+                      </p>
+                    ))}
+                  </div>
+                )}
               </div>
-              {!!detailWarnings.length && (
-                <div className="mt-2 space-y-1 border-t border-warning/20 pt-2">
-                  {detailWarnings.map((d, i) => (
-                    <p key={`dwarn-${i}-${d.code ?? ""}-${d.message ?? ""}`} className="text-xs">
-                      - [{d.code ?? "WARN"}]
-                      {d.model ? ` model=${d.model}` : ""}
-                      {d.column ? ` column=${d.column}` : ""}: {d.message}
-                    </p>
-                  ))}
-                </div>
-              )}
-            </div>
-          )}
+            )}
 
-          {!!Object.keys(validation.effective_preprocessing_by_column ?? {}).length && (
-            <div className="rounded-lg border border-border/60 bg-muted/30 p-3">
-              <p className="text-xs font-semibold mb-2">Effective preprocessing by column</p>
-              <pre className="text-[11px] overflow-auto max-h-56 font-mono">
-                {JSON.stringify(validation.effective_preprocessing_by_column, null, 2)}
-              </pre>
-            </div>
-          )}
-
-          {!validation.errors.length && !validation.warnings.length && !validating && (
-            <div className="rounded-lg border border-success/30 bg-success/5 p-3 text-xs">
-              Aucune erreur ni warning detecte.
-            </div>
-          )}
-        </CardContent>
-      </Card>
+            {!!Object.keys(validation.effective_preprocessing_by_column ?? {}).length && (
+              <details className="rounded-lg border border-border/60 bg-muted/30 p-3 group">
+                <summary className="text-xs font-semibold cursor-pointer select-none list-none flex items-center justify-between">
+                  <span>Effective preprocessing by column</span>
+                  <span className="text-muted-foreground text-[10px] group-open:hidden">Afficher</span>
+                  <span className="text-muted-foreground text-[10px] hidden group-open:inline">Masquer</span>
+                </summary>
+                <pre className="mt-2 text-[11px] overflow-auto max-h-56 font-mono">
+                  {JSON.stringify(validation.effective_preprocessing_by_column, null, 2)}
+                </pre>
+              </details>
+            )}
+          </CardContent>
+        </Card>
+      )}
 
       {status === "idle" && (
         <Button

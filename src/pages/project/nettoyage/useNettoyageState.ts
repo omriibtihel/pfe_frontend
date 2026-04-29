@@ -57,7 +57,7 @@ export function useNettoyageState() {
   const [totalRows, setTotalRows] = useState(0);
 
   const setPageSize = (size: PageSizeOption) => {
-    try { localStorage.setItem(PAGESIZE_STORAGE_KEY, String(size)); } catch {}
+    try { localStorage.setItem(PAGESIZE_STORAGE_KEY, String(size)); } catch { /* ignore quota/availability errors */ }
     setPageSizeRaw(size);
   };
 

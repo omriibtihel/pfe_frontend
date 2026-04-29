@@ -139,6 +139,28 @@ function buildDropEmptyRowsChips(_op: ProcessingOperation, r: OpResult | null): 
   return chips;
 }
 
+function buildDropEmptyColsChips(_op: ProcessingOperation, r: OpResult | null): Chip[] {
+  const chips: Chip[] = [];
+  const removed = r?.columns_removed ?? [];
+  const bc = r?.before_shape?.cols;
+  const ac = r?.after_shape?.cols;
+
+  if (removed.length > 0) {
+    chips.push(chip('count', `−${removed.length} ${plural(removed.length, 'colonne')} vide${removed.length > 1 ? 's' : ''}`, 'destructive'));
+    removed.slice(0, 3).forEach((c, i) =>
+      chips.push(chip(`col-${i}`, <span className="font-mono">{c}</span>))
+    );
+    if (removed.length > 3)
+      chips.push(chip('more', `+${removed.length - 3} autres`));
+    if (bc != null && ac != null)
+      chips.push(chip('shape', `${bc} → ${ac} col.`));
+  } else if (r) {
+    chips.push(chip('none', 'Aucune colonne vide', 'success'));
+  }
+
+  return chips;
+}
+
 function buildRenameColumnsChips(op: ProcessingOperation, r: OpResult | null): Chip[] {
   const chips: Chip[] = [];
   const mapping = resolveRenameMapping(r, op.params ?? {});
@@ -217,10 +239,27 @@ function buildSchemaChips(op: ProcessingOperation): Chip[] {
         <span className="font-medium">{String(p.kind)}</span>
       </>
     ), 'rename'));
+  } else if (schemaAction === 'clear_kind' && column) {
+    chips.push(chip('clear', (
+      <><span className="font-mono">{column}</span>{' '}type réinitialisé</>
+    ), 'warning'));
   } else if (schemaAction === 'verify_categorical' && column) {
+    const verified = p.verified !== false;
     chips.push(chip('verify', (
-      <><span className="font-mono">{column}</span>{' '}confirmé catégoriel</>
-    ), 'rename'));
+      <>
+        <span className="font-mono">{column}</span>{' '}
+        {verified ? 'confirmé catégoriel' : 'confirmation retirée'}
+      </>
+    ), verified ? 'rename' : 'warning'));
+  } else if (schemaAction === 'dismiss_alert') {
+    const key = p.alert_key ? String(p.alert_key) : null;
+    const dismissed = p.dismissed !== false;
+    chips.push(chip('alert', (
+      <>
+        {dismissed ? 'Alerte ignorée' : 'Alerte rétablie'}
+        {key ? <span className="ml-1 font-mono opacity-70">{key}</span> : null}
+      </>
+    ), dismissed ? 'warning' : 'default'));
   }
 
   return chips;
@@ -232,6 +271,7 @@ const ACTION_BUILDERS: Record<string, (op: ProcessingOperation, r: OpResult | nu
   drop_columns:    buildDropColumnsChips,
   drop_duplicates: buildDropDuplicatesChips,
   drop_empty_rows: buildDropEmptyRowsChips,
+  drop_empty_cols: buildDropEmptyColsChips,
   rename_columns:  buildRenameColumnsChips,
   substitute_values: buildSubstituteValuesChips,
   strip_whitespace:  buildStripWhitespaceChips,

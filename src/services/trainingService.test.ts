@@ -73,8 +73,8 @@ describe("toTrainingStartPayload", () => {
         },
       },
     });
-    expect((payload.preprocessing as any).numericImputation).toBeUndefined();
-    expect((payload.preprocessing as any).categoricalEncoding).toBeUndefined();
+    expect((payload.preprocessing as Record<string, unknown>).numericImputation).toBeUndefined();
+    expect((payload.preprocessing as Record<string, unknown>).categoricalEncoding).toBeUndefined();
     expect(payload.modelHyperparams).toEqual({});
   });
 });

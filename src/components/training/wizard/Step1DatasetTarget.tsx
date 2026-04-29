@@ -113,7 +113,6 @@ export function Step1DatasetTarget({ projectId, config, onConfigChange }: Step1P
       .getVersionColumnDistribution(projectId, config.datasetVersionId, config.targetColumn)
       .then(setDistribution)
       .catch(() => setDistribution(null));
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [projectId, config.datasetVersionId, config.targetColumn]);
 
   const handleVersionChange = useCallback((v: string) => {

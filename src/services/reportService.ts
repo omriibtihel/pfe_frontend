@@ -500,7 +500,8 @@ export function generateDatasetReport(input: ReportInput): void {
     y += h + 5;
   };
 
-  const getLastY = (): number => (doc as any).lastAutoTable?.finalY ?? y;
+  const getLastY = (): number =>
+    (doc as unknown as { lastAutoTable?: { finalY?: number } }).lastAutoTable?.finalY ?? y;
 
   // ── COVER PAGE ──────────────────────────────────────────────────────────────
 
@@ -1131,16 +1132,28 @@ export function generateDatasetReport(input: ReportInput): void {
         }
 
         const totalLabeled = classDistribution.reduce((s, c) => s + c.count, 0);
+        const maxCount = Math.max(...classDistribution.map((c) => c.count));
+        const minCount = Math.min(...classDistribution.map((c) => c.count));
+        const isBinary = classDistribution.length === 2;
         autoTable(doc, {
           startY: y,
           head: [['Classe', 'Effectif', 'Proportion', 'Représentation']],
           body: classDistribution.slice(0, 20).map(({ value, count }) => {
             const pct = totalLabeled > 0 ? (count / totalLabeled) * 100 : 0;
-            const level =
-              pct >= 40 ? 'Majoritaire'
-              : pct >= 20 ? 'Représentée'
-              : pct >= 10 ? 'Minoritaire'
-              : 'Très minoritaire';
+            let level: string;
+            if (isBinary) {
+              level = count === maxCount ? 'Majoritaire' : 'Minoritaire';
+            } else if (count === maxCount) {
+              level = 'Majoritaire';
+            } else if (count === minCount && pct < 10) {
+              level = 'Très minoritaire';
+            } else if (pct >= 20) {
+              level = 'Représentée';
+            } else if (pct >= 10) {
+              level = 'Minoritaire';
+            } else {
+              level = 'Très minoritaire';
+            }
             return [value, count.toLocaleString(), `${pct.toFixed(1)}%`, level];
           }),
           margin: { left: M, right: M },
@@ -1285,7 +1298,7 @@ export function generateDatasetReport(input: ReportInput): void {
       recs.push({
         priority: 'high',
         text: `Requalifier les zéros comme valeurs manquantes dans : ${zeroSuspects.slice(0, 4).join(', ')}${zeroSuspects.length > 4 ? '…' : ''}. ` +
-          `Un zéro biologiquement impossible (Glucose=0, BMI=0…) est un NaN masqué. Requalifiez avant d\'imputer.`,
+          `Un zéro biologiquement impossible (Glucose=0, BMI=0…) est un NaN masqué. Requalifiez avant d'imputer.`,
       });
     }
     if (targetAnalysis?.imbalanceRatio != null && targetAnalysis.imbalanceRatio > 3) {

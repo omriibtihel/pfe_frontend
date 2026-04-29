@@ -155,10 +155,10 @@ export function BalancingPanel({ projectId, config, onConfigChange }: BalancingP
         if (!mounted) return;
         setBalanceAnalysis(out);
         setBalanceError(null);
-      } catch (e: any) {
+      } catch (e: unknown) {
         if (!mounted) return;
         setBalanceAnalysis(null);
-        setBalanceError(String(e?.message || "Analyse du déséquilibre indisponible."));
+        setBalanceError(e instanceof Error ? e.message : "Analyse du déséquilibre indisponible.");
       } finally {
         if (mounted) setBalanceLoading(false);
       }

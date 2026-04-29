@@ -1,11 +1,8 @@
-import { useState } from "react";
 import type { TrainingConfig } from "@/types";
-import type { TrainingValidationPreviewMode, TrainingValidationPreviewSubset } from "@/types/training/base";
 import { DistributionInsightBanner } from "./step3/DistributionInsightBanner";
 import { DefaultsPanel } from "./step3/DefaultsPanel";
 import { IssuesPanel } from "./step3/IssuesPanel";
 import { ColumnsCard } from "./step3/ColumnsCard";
-import { PreviewPanel } from "./step3/PreviewPanel";
 import { useStep3ColumnPreprocessing } from "./step3/useStep3ColumnPreprocessing";
 import type { Step3ValidationState } from "./step3/types";
 
@@ -27,15 +24,11 @@ export function Step3ColumnPreprocessing({
   onValidationStateChange,
   serverValidationEnabled = true,
 }: Step3Props) {
-  const [previewSubset, setPreviewSubset] = useState<TrainingValidationPreviewSubset>('train');
-  const [previewMode, setPreviewMode] = useState<TrainingValidationPreviewMode>('head');
-  const [previewN, setPreviewN] = useState(50);
-
   const {
     loadingColumns, rows, visibleRows, filteredRows,
     selectedColumns, expandedIssueRows,
     counts, issuesList, options, preprocessing,
-    isValidating, lastValidatedAt, validationError, serverResult,
+    isValidating, lastValidatedAt, validationError,
     searchQuery, statusFilter, typeFilter,
     currentPage, totalPages, shouldPaginate, canUndo,
     setSearchQuery, setStatusFilter, setTypeFilter, resetFilters,
@@ -110,22 +103,6 @@ export function Step3ColumnPreprocessing({
         onToggleExpanded={toggleExpanded}
         onRegisterRowRef={registerRowRef}
         onUpdateColumnConfig={updateColumnConfig}
-      />
-
-      <PreviewPanel
-        previewColumns={serverResult?.previewTransformed?.columns ?? []}
-        previewRows={serverResult?.previewTransformed?.rows ?? []}
-        previewMeta={serverResult?.previewMeta ?? null}
-        isValidating={isValidating}
-        validationError={validationError}
-        previewSubset={previewSubset}
-        previewMode={previewMode}
-        previewN={previewN}
-        valSubsetAvailable={(serverResult?.previewMeta?.valSize ?? 0) > 0}
-        testSubsetAvailable={(serverResult?.previewMeta?.testSize ?? 0) > 0}
-        onPreviewSubsetChange={setPreviewSubset}
-        onPreviewModeChange={setPreviewMode}
-        onPreviewNChange={setPreviewN}
       />
     </div>
   );

@@ -5,9 +5,9 @@ import apiClient from "@/services/apiClient";
 // These tiny helpers force the expected return type at the service boundary.
 // ---------------------------------------------------------------------------
 const typedGet = <T,>(url: string) => apiClient.get(url) as unknown as Promise<T>;
-const typedPostJson = <T,>(url: string, body: any) =>
+const typedPostJson = <T,>(url: string, body: unknown) =>
   apiClient.postJson(url, body) as unknown as Promise<T>;
-const typedPutJson = <T,>(url: string, body: any) =>
+const typedPutJson = <T,>(url: string, body: unknown) =>
   apiClient.putJson(url, body) as unknown as Promise<T>;
 
 export type CorrelationOut = {
@@ -31,7 +31,7 @@ export type DatasetOverviewOut = {
   columns: string[];
   dtypes: Record<string, string>;
   missing: Record<string, number>;
-  preview: Record<string, any>[];
+  preview: Record<string, unknown>[];
 };
 
 export type DatasetProfileOut = {
@@ -71,9 +71,6 @@ export type DatasetProfileOut = {
   }>;
 };
 
-export type ActiveDatasetOut = { active_dataset_id: number | null };
-export type ActiveDatasetIn = { dataset_id: number };
-
 export type DatasetTargetOut = { target_column: string | null };
 export type DatasetTargetIn = { target_column: string | null };
 
@@ -109,7 +106,7 @@ export type ValueCountsOut = {
 
 export type SampleOut = {
   cols: string[];
-  rows: Record<string, any>[];
+  rows: Record<string, unknown>[];
 };
 
 export type PearsonOut = { x: string; y: string; r: number | null; n: number };
@@ -185,7 +182,7 @@ export type AnalyticsOverview = {
   columns: string[];
   dtypes: Record<string, string>;
   missing: Record<string, number>;
-  preview: Record<string, any>[];
+  preview: Record<string, unknown>[];
 };
 
 export type AnalyticsProfile = {
@@ -204,16 +201,6 @@ export const databaseService = {
     return typedGet<DatasetProfileOut>(
       `/projects/${projectId}/datasets/${datasetId}/profile?top_k=${topK}`
     );
-  },
-
-  async getActiveDataset(projectId: string | number) {
-    return typedGet<ActiveDatasetOut>(`/projects/${projectId}/datasets/active`);
-  },
-
-  async setActiveDataset(projectId: string | number, datasetId: number) {
-    return typedPostJson<ActiveDatasetOut>(`/projects/${projectId}/datasets/active`, {
-      dataset_id: datasetId,
-    } satisfies ActiveDatasetIn);
   },
 
   async getDatasetTarget(projectId: string, datasetId: number): Promise<DatasetTargetOut> {

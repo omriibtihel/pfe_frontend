@@ -42,8 +42,8 @@ export function AggPanel({ chartKind, xCat, aggOut, seriesLabel, topK, agg, yNum
     height: 56,
   };
 
-  const tooltipFormatter = (v: any) => [
-    typeof v === "number" ? v.toLocaleString("fr-FR", { maximumFractionDigits: 2 }) : v,
+  const tooltipFormatter = (v: unknown) => [
+    typeof v === "number" ? v.toLocaleString("fr-FR", { maximumFractionDigits: 2 }) : String(v),
     seriesLabel,
   ];
 

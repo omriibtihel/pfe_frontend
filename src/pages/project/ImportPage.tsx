@@ -414,7 +414,7 @@ export function ImportPage() {
                             <tr key={i} className="border-t border-border">
                               {previewColumns.map((col) => (
                                 <td key={col} className="px-4 py-2">
-                                  {String((row as any)?.[col] ?? "")}
+                                  {String((row as Record<string, unknown>)?.[col] ?? "")}
                                 </td>
                               ))}
                             </tr>

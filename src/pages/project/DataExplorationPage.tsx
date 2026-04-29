@@ -1,5 +1,3 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
-import { useParams } from 'react-router-dom';
 import {
   AlertCircle,
   AlertTriangle,
@@ -15,8 +13,10 @@ import {
   TableProperties,
   Target,
 } from 'lucide-react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useParams } from 'react-router-dom';
 
-import { AppLayout } from '@/layouts/AppLayout';
+import { ReportExportModal } from '@/components/report/ReportExportModal';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import {
@@ -26,9 +26,11 @@ import {
   CardHeader,
   CardTitle,
 } from '@/components/ui/card';
+import CorrelationHeatmap from '@/components/ui/CorrelationHeatmap';
+import DataTable from '@/components/ui/data-table';
 import { Input } from '@/components/ui/input';
-import { Modal } from '@/components/ui/modal';
 import { PageSkeleton } from '@/components/ui/loading-skeleton';
+import { Modal } from '@/components/ui/modal';
 import { Progress } from '@/components/ui/progress';
 import {
   Select,
@@ -42,29 +44,27 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useToast } from '@/hooks/use-toast';
 import { useDataExploration } from '@/hooks/useDataExploration';
-import DataTable from '@/components/ui/data-table';
-import CorrelationHeatmap from '@/components/ui/CorrelationHeatmap';
+import { AppLayout } from '@/layouts/AppLayout';
+import type { AnalyticsOverview, AnalyticsProfile, CorrelationOut, DatasetOut, DatasetOverviewOut, DatasetProfileOut } from '@/services/databaseService';
 import databaseService from '@/services/databaseService';
-import type { CorrelationOut, AnalyticsOverview, AnalyticsProfile, DatasetOut, DatasetOverviewOut, DatasetProfileOut } from '@/services/databaseService';
 import dataService, { type VersionUI } from '@/services/dataService';
-import { ReportExportModal } from '@/components/report/ReportExportModal';
 
 import {
-  BarChart,
   Bar,
+  BarChart,
+  CartesianGrid,
+  Cell,
+  ResponsiveContainer,
+  Tooltip,
   XAxis,
   YAxis,
-  CartesianGrid,
-  Tooltip,
-  ResponsiveContainer,
-  Cell,
 } from 'recharts';
 
-import type { ColKind, ColProfile } from './dataExploration/types';
-import { fmt, pctLabel, KIND_COLORS, kindLabel } from './dataExploration/types';
+import { ColumnDetailPanel } from './dataExploration/ColumnDetailPanel';
 import { KindIcon } from './dataExploration/KindIcon';
 import { QualityBadge } from './dataExploration/QualityBadge';
-import { ColumnDetailPanel } from './dataExploration/ColumnDetailPanel';
+import type { ColKind, ColProfile } from './dataExploration/types';
+import { fmt, KIND_COLORS, kindLabel, pctLabel } from './dataExploration/types';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Main page
@@ -435,23 +435,28 @@ export default function DataExplorationPage() {
         </div>
 
         {/* ── Summary cards ────────────────────────────────────────────────── */}
-        <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
           <Card className="border-primary/20 bg-gradient-to-br from-primary/10 to-primary/5">
             <CardContent className="pt-5 pb-4">
               <p className="text-xs text-muted-foreground uppercase tracking-wide">Lignes</p>
               <p className="text-3xl font-bold text-primary mt-1">{totalRows.toLocaleString()}</p>
-              <p className="text-xs text-muted-foreground mt-1">{totalCols} colonnes</p>
             </CardContent>
           </Card>
 
           <Card className="border-purple-500/20 bg-gradient-to-br from-purple-500/10 to-purple-500/5">
             <CardContent className="pt-5 pb-4">
-              <p className="text-xs text-muted-foreground uppercase tracking-wide">Numériques</p>
+              <p className="text-xs text-muted-foreground uppercase tracking-wide">Colonnes Numériques</p>
               <p className="text-3xl font-bold text-purple-600 dark:text-purple-400 mt-1">
                 {numericCount}
               </p>
-              <p className="text-xs text-muted-foreground mt-1">
-                {categoricalCount} catégorielles
+            </CardContent>
+          </Card>
+
+          <Card className="border-purple-500/20 bg-gradient-to-br from-purple-500/10 to-purple-500/5">
+            <CardContent className="pt-5 pb-4">
+              <p className="text-xs text-muted-foreground uppercase tracking-wide">Colonnes Catégorielles</p>
+              <p className="text-3xl font-bold text-purple-600 dark:text-purple-400 mt-1">
+                {categoricalCount}
               </p>
             </CardContent>
           </Card>

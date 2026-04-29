@@ -87,7 +87,7 @@ describe("buildMetaMap", () => {
         },
       ];
 
-      const result = buildMetaMap(["score"], { score: "float64" }, serverMeta as any);
+      const result = buildMetaMap(["score"], { score: "float64" }, serverMeta);
 
       const meta = result["score"];
       expect(meta.skewness).toBeNull();
@@ -148,7 +148,7 @@ describe("buildMetaMap", () => {
         { name: "a", dtype: "float64", kind: "numeric", missing: 0, unique: 5, total: 10, sample: [] },
       ];
 
-      const result = buildMetaMap(["a", "b"], { a: "float64", b: "object" }, serverMeta as any);
+      const result = buildMetaMap(["a", "b"], { a: "float64", b: "object" }, serverMeta);
 
       expect(result["a"]).toBeDefined();
       expect(result["b"]).toBeDefined();
@@ -158,7 +158,7 @@ describe("buildMetaMap", () => {
     it("skips serverMeta entries without a name", () => {
       const serverMeta = [
         { dtype: "float64", kind: "numeric", missing: 0, unique: 5, total: 10, sample: [] },
-      ] as any;
+      ];
 
       expect(() => buildMetaMap(["x"], { x: "float64" }, serverMeta)).not.toThrow();
     });
@@ -170,7 +170,7 @@ describe("buildMetaMap", () => {
         { name: "flag", dtype: "bool", kind: "bool", missing: 0, unique: 2, total: 10, sample: [] },
       ];
 
-      const result = buildMetaMap(["flag"], { flag: "bool" }, serverMeta as any);
+      const result = buildMetaMap(["flag"], { flag: "bool" }, serverMeta);
 
       expect(result["flag"].kind).toBe("binary");
     });
@@ -180,7 +180,7 @@ describe("buildMetaMap", () => {
         { name: "score", dtype: "float64", missing: 0, unique: 10, total: 50, sample: [] },
       ];
 
-      const result = buildMetaMap(["score"], { score: "float64" }, serverMeta as any);
+      const result = buildMetaMap(["score"], { score: "float64" }, serverMeta);
 
       expect(result["score"].kind).toBe("numeric");
     });
@@ -190,7 +190,7 @@ describe("buildMetaMap", () => {
         { name: "val", kind: "numeric", missing: 0, unique: 5, total: 10, sample: [] },
       ];
 
-      const result = buildMetaMap(["val"], { val: "float64" }, serverMeta as any);
+      const result = buildMetaMap(["val"], { val: "float64" }, serverMeta);
 
       expect(result["val"].dtype).toBe("float64");
     });

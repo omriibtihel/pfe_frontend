@@ -172,7 +172,6 @@ export function useStep3ColumnPreprocessing({
           hasNegativeValues: columnProfile?.column_distribution?.[column.name]?.has_non_positive ?? false,
         };
       }),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
     [featureColumns, preprocessing.columns, preprocessing.defaults, globalAdvancedParams, columnProfile]
   );
 

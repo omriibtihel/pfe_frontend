@@ -12,8 +12,25 @@ export interface PrimaryMetric {
 
 export interface MetricsSummary {
   accuracy?: number | null;
-  rocAuc?: number | null;
+  precision?: number | null;
+  recall?: number | null;
   f1?: number | null;
+  rocAuc?: number | null;
+  prAuc?: number | null;
+  balancedAccuracy?: number | null;
+  specificity?: number | null;
+  f1Pos?: number | null;
+  precisionPos?: number | null;
+  recallPos?: number | null;
+  precisionMacro?: number | null;
+  recallMacro?: number | null;
+  f1Macro?: number | null;
+  precisionWeighted?: number | null;
+  recallWeighted?: number | null;
+  f1Weighted?: number | null;
+  precisionMicro?: number | null;
+  recallMicro?: number | null;
+  f1Micro?: number | null;
   r2?: number | null;
   rmse?: number | null;
   mae?: number | null;
@@ -239,6 +256,9 @@ export interface GridSearchInfo {
   cvSplits?: number | null;
   nCandidates?: number | null;
   cvResultsSummary?: GridSearchResultEntry[] | null;
+  gridSearchFailed?: boolean;
+  gridSearchFailureReason?: string | null;
+  warnings?: Array<{ severity: string; code: string; message: string }>;
 }
 
 export interface BalancingInfo {
@@ -254,7 +274,7 @@ export interface AnalysisBlock {
   residualAnalysis?: ResidualAnalysisData | null;
   confusionMatrix?: number[][] | null;
   classDistribution?: Record<string, unknown> | null;
-  baselineMajority?: number | null;
+  baseline?: { strategy: string; metrics: Record<string, unknown> } | null;
   metricsWarnings: string[];
   artifactWarnings?: ArtifactWarning[];
 }

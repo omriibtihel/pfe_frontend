@@ -3,9 +3,15 @@ import { ArrowDown, ArrowUp, ArrowUpDown, Trophy } from 'lucide-react';
 
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import type { ModelResult, TrainingSession } from '@/types';
+import type { MetricsSummary, ModelResult, TrainingSession } from '@/types';
 import { metricDirection } from '@/utils/metricUtils';
-import { toNumber, toPercent, toSeconds } from './trainingResultsHelpers';
+import {
+  selectComparisonMetrics,
+  toNumber,
+  toPercent,
+  toSeconds,
+  type ComparisonMetric,
+} from './trainingResultsHelpers';
 
 /**
  * Returns true when lower values are "better" for the given column key.
@@ -26,29 +32,32 @@ export function columnLowerIsBetter(key: string): boolean {
 }
 
 const METRIC_DESCRIPTIONS: Record<string, string> = {
-  accuracy: 'Proportion de prédictions correctes sur le jeu de test.',
+  accuracy: 'Proportion de prédictions correctes.',
+  precision: 'Parmi les positifs prédits, combien sont vraiment positifs.',
+  recall: 'Parmi les vrais positifs, combien ont été détectés.',
   f1: 'Moyenne harmonique de la précision et du rappel.',
-  rocAuc: 'Aire sous la courbe ROC. Mesure la discrimination du modèle entre les classes.',
+  roc_auc: 'Aire sous la courbe ROC. Discrimination entre classes.',
+  pr_auc: 'Aire sous la courbe précision-rappel. Recommandé en cas de classes déséquilibrées.',
+  f1_pos: 'F1 calculé sur la classe positive.',
+  precision_macro: 'Précision moyenne (chaque classe pèse autant).',
+  recall_macro: 'Rappel moyen (chaque classe pèse autant).',
+  f1_macro: 'F1 moyen (chaque classe pèse autant).',
+  precision_weighted: 'Précision pondérée par la fréquence des classes.',
+  recall_weighted: 'Rappel pondéré par la fréquence des classes.',
+  f1_weighted: 'F1 pondéré par la fréquence des classes.',
+  precision_micro: 'Précision globale calculée sur tous les cas.',
+  recall_micro: 'Rappel global calculé sur tous les cas.',
+  f1_micro: 'F1 global calculé sur tous les cas.',
   r2: 'Coefficient de détermination (R²). Plus proche de 1 = meilleure explication de la variance.',
   rmse: "Racine de l'erreur quadratique moyenne. Pénalise les grandes erreurs.",
   mae: 'Erreur absolue moyenne. Robuste aux valeurs aberrantes.',
+  mse: 'Erreur quadratique moyenne.',
   time: "Temps d'entraînement en secondes.",
 };
 
 interface SortConfig {
   key: string;
   dir: 'asc' | 'desc';
-}
-
-interface EnrichedRow {
-  result: ModelResult;
-  accuracy: number | null;
-  f1: number | null;
-  rocAuc: number | null;
-  r2: number | null;
-  rmse: number | null;
-  mae: number | null;
-  time: number | null;
 }
 
 interface ModelsComparisonTableProps {
@@ -62,53 +71,45 @@ export function ModelsComparisonTable({
   bestModel,
   isRegression,
 }: ModelsComparisonTableProps) {
-  const [sort, setSort] = useState<SortConfig>({
-    key: isRegression ? 'rmse' : 'rocAuc',
-    dir: isRegression ? 'asc' : 'desc',
-  });
-
-  const columns: Array<{ key: keyof Omit<EnrichedRow, 'result'>; label: string }> = isRegression
-    ? [
-        { key: 'r2', label: 'R²' },
-        { key: 'rmse', label: 'RMSE' },
-        { key: 'mae', label: 'MAE' },
-        { key: 'time', label: 'Temps' },
-      ]
-    : [
-        { key: 'accuracy', label: 'Accuracy' },
-        { key: 'f1', label: 'F1-score' },
-        { key: 'rocAuc', label: 'AUC-ROC' },
-        { key: 'time', label: 'Temps' },
-      ];
-
-  const enriched = useMemo<EnrichedRow[]>(
+  const metricColumns = useMemo<ComparisonMetric[]>(
     () =>
-      session.results.map((r) => ({
-        result: r,
-        accuracy: r.metrics.accuracy ?? null,
-        f1: r.metrics.f1 ?? null,
-        rocAuc: r.metrics.rocAuc ?? null,
-        r2: r.metrics.r2 ?? null,
-        rmse: r.metrics.rmse ?? null,
-        mae: r.metrics.mae ?? null,
-        time: r.trainingTime ?? null,
-      })),
-    [session.results],
+      selectComparisonMetrics(
+        session.config?.metrics,
+        isRegression ? 'regression' : 'classification',
+        5,
+      ),
+    [session.config?.metrics, isRegression],
   );
 
+  const defaultSortKey = metricColumns[0]?.metric ?? (isRegression ? 'rmse' : 'accuracy');
+  const [sort, setSort] = useState<SortConfig>({
+    key: defaultSortKey,
+    dir: columnLowerIsBetter(defaultSortKey) ? 'asc' : 'desc',
+  });
+
+  const getMetricValue = (r: ModelResult, summaryKey: keyof MetricsSummary): number | null => {
+    const value = r.metrics?.[summaryKey];
+    return typeof value === 'number' && Number.isFinite(value) ? value : null;
+  };
+
   const sorted = useMemo(() => {
-    return [...enriched].sort((a, b) => {
-      const av = (a[sort.key as keyof EnrichedRow] as number | null) ?? Number.NEGATIVE_INFINITY;
-      const bv = (b[sort.key as keyof EnrichedRow] as number | null) ?? Number.NEGATIVE_INFINITY;
-      const na = Number(av);
-      const nb = Number(bv);
+    const sortColumn = metricColumns.find((c) => c.metric === sort.key);
+    return [...session.results].sort((a, b) => {
+      const av = sort.key === 'time'
+        ? a.trainingTime ?? null
+        : sortColumn ? getMetricValue(a, sortColumn.summaryKey) : null;
+      const bv = sort.key === 'time'
+        ? b.trainingTime ?? null
+        : sortColumn ? getMetricValue(b, sortColumn.summaryKey) : null;
+      const na = av == null ? Number.NaN : Number(av);
+      const nb = bv == null ? Number.NaN : Number(bv);
       if (!Number.isFinite(na) && !Number.isFinite(nb)) return 0;
       if (!Number.isFinite(na)) return 1;
       if (!Number.isFinite(nb)) return -1;
       if (columnLowerIsBetter(sort.key)) return sort.dir === 'asc' ? na - nb : nb - na;
       return sort.dir === 'desc' ? nb - na : na - nb;
     });
-  }, [enriched, sort]);
+  }, [session.results, sort, metricColumns]);
 
   const toggleSort = (key: string) =>
     setSort((prev) =>
@@ -120,7 +121,7 @@ export function ModelsComparisonTable({
       return <span className="text-muted-foreground/40">—</span>;
     }
     if (key === 'time') return toSeconds(val);
-    if (key === 'r2' || key === 'rmse' || key === 'mae') return toNumber(val);
+    if (key === 'r2' || key === 'rmse' || key === 'mae' || key === 'mse') return toNumber(val);
     return toPercent(val);
   };
 
@@ -153,28 +154,42 @@ export function ModelsComparisonTable({
                   <th scope="col" className="px-4 py-3 text-left font-medium text-muted-foreground">
                     Modèle
                   </th>
-                  {columns.map((col) => (
+                  {metricColumns.map((col) => (
                     <th
-                      key={col.key}
+                      key={col.metric}
                       scope="col"
                       className="px-4 py-3 text-left font-medium text-muted-foreground"
-                      title={METRIC_DESCRIPTIONS[col.key]}
+                      title={METRIC_DESCRIPTIONS[col.metric]}
                     >
                       <button
-                        onClick={() => toggleSort(col.key)}
+                        onClick={() => toggleSort(col.metric)}
                         className="group flex items-center gap-1 rounded transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                        aria-label={`Trier par ${col.label}${sort.key === col.key ? (sort.dir === 'desc' ? ' - décroissant' : ' - croissant') : ''}`}
+                        aria-label={`Trier par ${col.label}${sort.key === col.metric ? (sort.dir === 'desc' ? ' - décroissant' : ' - croissant') : ''}`}
                       >
                         <span>{col.label}</span>
-                        <SortIcon colKey={col.key} sort={sort} />
+                        <SortIcon colKey={col.metric} sort={sort} />
                       </button>
                     </th>
                   ))}
+                  <th
+                    scope="col"
+                    className="px-4 py-3 text-left font-medium text-muted-foreground"
+                    title={METRIC_DESCRIPTIONS.time}
+                  >
+                    <button
+                      onClick={() => toggleSort('time')}
+                      className="group flex items-center gap-1 rounded transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                      aria-label={`Trier par Temps${sort.key === 'time' ? (sort.dir === 'desc' ? ' - décroissant' : ' - croissant') : ''}`}
+                    >
+                      <span>Temps</span>
+                      <SortIcon colKey="time" sort={sort} />
+                    </button>
+                  </th>
                 </tr>
               </thead>
 
               <tbody>
-                {sorted.map(({ result, ...vals }) => {
+                {sorted.map((result) => {
                   const isBest = result.id === bestModel?.id;
                   return (
                     <tr
@@ -223,18 +238,23 @@ export function ModelsComparisonTable({
                         </div>
                       </td>
 
-                      {columns.map((col) => {
-                        const val = vals[col.key as keyof typeof vals] as number | null;
-                        const isActiveSort = sort.key === col.key;
+                      {metricColumns.map((col) => {
+                        const val = getMetricValue(result, col.summaryKey);
+                        const isActiveSort = sort.key === col.metric;
                         return (
                           <td
-                            key={col.key}
+                            key={col.metric}
                             className={`px-4 py-3 tabular-nums ${isActiveSort ? 'font-semibold text-primary' : ''}`}
                           >
-                            {fmt(col.key, val)}
+                            {fmt(col.metric, val)}
                           </td>
                         );
                       })}
+                      <td
+                        className={`px-4 py-3 tabular-nums ${sort.key === 'time' ? 'font-semibold text-primary' : ''}`}
+                      >
+                        {fmt('time', result.trainingTime ?? null)}
+                      </td>
                     </tr>
                   );
                 })}

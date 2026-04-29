@@ -36,7 +36,7 @@ export function useNettoyageActions(state: NettoyageState, data: NettoyageData, 
   const runCleaning = async (
     description: string,
     action: CleaningAction,
-    params: Record<string, any> = {},
+    params: Record<string, unknown> = {},
     overrideColumns?: string[],
   ) => {
     if (!data.effectiveDatasetId) {
@@ -78,7 +78,7 @@ export function useNettoyageActions(state: NettoyageState, data: NettoyageData, 
     if (!data.effectiveDatasetId) return;
     try {
       const res = await dataService.undoLastOperation(projectId, data.effectiveDatasetId);
-      if (!((res as any)?.ok ?? true)) {
+      if (!(res?.ok ?? true)) {
         toast({ title: "Rien à annuler", description: "Aucune opération trouvée.", variant: "destructive" });
         return;
       }
@@ -140,8 +140,11 @@ export function useNettoyageActions(state: NettoyageState, data: NettoyageData, 
       await dataService.commitVersionWorkspace(projectId, data.versionId, state.workspaceDatasetId);
       await data.loadVersionMeta(data.versionId);
 
-      const ws = await dataService.getOrCreateVersionWorkspace(projectId, data.versionId);
-      const newWsId = (ws as any)?.workspace_dataset_id ?? (ws as any)?.data?.workspace_dataset_id;
+      const ws = (await dataService.getOrCreateVersionWorkspace(projectId, data.versionId)) as
+        | { workspace_dataset_id?: number; data?: { workspace_dataset_id?: number } }
+        | null
+        | undefined;
+      const newWsId = ws?.workspace_dataset_id ?? ws?.data?.workspace_dataset_id;
       if (!newWsId) throw new Error("Impossible de récupérer un nouveau workspace après l'enregistrement.");
 
       state.setWorkspaceDatasetId(newWsId);
@@ -171,11 +174,11 @@ export function useNettoyageActions(state: NettoyageState, data: NettoyageData, 
     state.setShowSaveNameModal(false);
     state.setIsSavingProcessed(true);
     try {
-      const out = await dataService.saveCleanedAsVersion(projectId, data.effectiveDatasetId, {
+      const out = (await dataService.saveCleanedAsVersion(projectId, data.effectiveDatasetId, {
         name: state.saveVersionName.trim() || undefined,
-      });
-      const newVersionId = (out as any)?.version_id ?? (out as any)?.id;
-      const savedName = (out as any)?.name ?? state.saveVersionName.trim();
+      })) as { id?: number | string; version_id?: number | string; name?: string } | null | undefined;
+      const newVersionId = out?.version_id ?? out?.id;
+      const savedName = out?.name ?? state.saveVersionName.trim();
       state.setHasDirtySession(false);
       await data.refreshVersions();
       toast({
@@ -224,16 +227,18 @@ export function useNettoyageActions(state: NettoyageState, data: NettoyageData, 
     state.setKindOverrides(next);
     state.setColumnMetaMap((prev) => {
       const out = { ...prev };
-      if (out[col]) out[col] = { ...out[col], kind: kind as any };
+      if (out[col]) out[col] = { ...out[col], kind };
       return out;
     });
     try {
+      // En mode édition de version, /column-kinds écrit la VersionColumnSchema
+      // ET crée l'op `set_kind` dans le workspace, en transaction unique.
+      // Sinon, postSchemaAction fait les deux côté dataset.
       if (data.isEditingVersion && data.versionId) {
         await dataService.saveVersionColumnKinds(projectId, data.versionId, { [col]: kind });
-        await data.refreshProcessing(data.effectiveDatasetId, state.page);
-        return;
+      } else {
+        await postSchemaAction(projectId, data.effectiveDatasetId, { schema_action: "set_kind", column: col, kind });
       }
-      await postSchemaAction(projectId, data.effectiveDatasetId, { schema_action: "set_kind", column: col, kind });
       await data.refreshProcessing(data.effectiveDatasetId, state.page);
     } catch (e) {
       toast({ title: "Erreur", description: (e as Error).message ?? "Type non persisté", variant: "destructive" });
@@ -247,16 +252,15 @@ export function useNettoyageActions(state: NettoyageState, data: NettoyageData, 
     state.setKindOverrides(next);
     state.setColumnMetaMap((prev) => {
       const out = { ...prev };
-      if (out[col]) out[col] = { ...out[col], kind: inferKindFallback(col, out[col]?.dtype) as any };
+      if (out[col]) out[col] = { ...out[col], kind: inferKindFallback(col, out[col]?.dtype) };
       return out;
     });
     try {
       if (data.isEditingVersion && data.versionId) {
         await dataService.saveVersionColumnKinds(projectId, data.versionId, { [col]: null });
-        await data.refreshProcessing(data.effectiveDatasetId, state.page);
-        return;
+      } else {
+        await postSchemaAction(projectId, data.effectiveDatasetId, { schema_action: "clear_kind", column: col });
       }
-      await postSchemaAction(projectId, data.effectiveDatasetId, { schema_action: "clear_kind", column: col });
       await data.refreshProcessing(data.effectiveDatasetId, state.page);
     } catch (e) {
       toast({ title: "Erreur", description: (e as Error).message ?? "Schema non persisté", variant: "destructive" });
@@ -292,7 +296,7 @@ export function useNettoyageActions(state: NettoyageState, data: NettoyageData, 
     }
     await runCleaning(
       "Substitution de valeurs",
-      "substitute_values" as any,
+      "substitute_values",
       {
         column: col,
         from_value: state.substTreatFromAsNull ? null : state.substFrom,

@@ -8,6 +8,7 @@ import {
   AreaChart as AreaIcon,
   Grid3X3,
   CircleDot,
+  type LucideIcon,
 } from "lucide-react";
 import type { ChartKind } from "./types";
 
@@ -38,7 +39,7 @@ export const fmtAxisVal = (v: number): string => {
 
 export const CHART_GROUPS: Array<{
   label: string;
-  items: { key: ChartKind; label: string; Icon: any }[];
+  items: { key: ChartKind; label: string; Icon: LucideIcon }[];
 }> = [
   {
     label: "Distribution",
@@ -89,7 +90,7 @@ export const AGG_TITLES: Record<"bar" | "line" | "area", string> = {
 export const CHART_HINT: Record<string, string> = {
   agg:     'Agrégation de Y par valeurs de X (Top K catégories). Agrégation "count" ne nécessite pas de colonne Y.',
   pie:     'Répartition Top K + "Autres". La légende ci-dessous affiche les comptages exacts.',
-  hist:    "Distribution d'une colonne numérique découpée en bins. Augmenter les bins pour plus de précision.",
+  hist:    "Histogramme calculé sur toute la colonne numérique. Les valeurs non numériques ou manquantes sont exclues.",
   boxplot: "Boîte = IQR [P25–P75] · trait = médiane · moustaches = min/max. Cliquer sur les colonnes pour les afficher/masquer.",
   scatter: "Nuage de points sur un échantillon aléatoire. Augmenter l'échantillon pour plus de précision.",
   bubble:  "Scatter dont la taille des bulles est proportionnelle à Z. L'axe Z est normalisé visuellement.",

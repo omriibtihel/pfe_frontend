@@ -12,8 +12,8 @@ export type ProcessingOperation = {
   description: string;
 
   columns: string[];
-  params: Record<string, any>;
+  params: Record<string, unknown>;
   created_at: string;
 
-  result?: Record<string, any> | null;
+  result?: Record<string, unknown> | null;
 };

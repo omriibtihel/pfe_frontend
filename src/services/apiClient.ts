@@ -17,21 +17,24 @@ function extractErrorMessage(err: unknown): string {
 
     // FastAPI typical: {"detail":"..."} or {"detail":[{msg:"..."}]}
     if (data && typeof data === "object" && "detail" in data) {
-      const detail = (data as any).detail;
+      const detail = (data as { detail?: unknown }).detail;
       if (typeof detail === "string" && detail.trim()) return detail;
-      if (detail && typeof detail === "object") {
-        const message = (detail as any).message;
+      if (detail && typeof detail === "object" && !Array.isArray(detail)) {
+        const message = (detail as { message?: unknown }).message;
         if (typeof message === "string" && message.trim()) return message;
       }
       if (Array.isArray(detail)) {
-        const msg = detail.map((x: any) => x?.msg).filter(Boolean).join(", ");
+        const msg = detail
+          .map((x) => (x && typeof x === "object" ? (x as { msg?: unknown }).msg : undefined))
+          .filter((m): m is string => typeof m === "string" && m.length > 0)
+          .join(", ");
         if (msg) return msg;
       }
     }
 
     // Other APIs: {"message":"..."}
     if (data && typeof data === "object" && "message" in data) {
-      const message = (data as any).message;
+      const message = (data as { message?: unknown }).message;
       if (typeof message === "string" && message.trim()) return message;
     }
 
@@ -47,7 +50,7 @@ function extractErrorMessage(err: unknown): string {
 function parseFilenameFromContentDisposition(cd?: string): string | undefined {
   if (!cd) return undefined;
   // RFC5987: filename*=UTF-8''...
-  const m1 = /filename\*\=UTF-8''([^;]+)/i.exec(cd);
+  const m1 = /filename\*=UTF-8''([^;]+)/i.exec(cd);
   const m2 = /filename="?([^"]+)"?/i.exec(cd);
   const raw = (m1?.[1] ?? m2?.[1])?.trim();
   if (!raw) return undefined;
@@ -83,8 +86,7 @@ class ApiClient {
     this.axios.interceptors.request.use((config) => {
       const token = this.getToken();
       if (token) {
-        config.headers = config.headers ?? ({} as any);
-        (config.headers as any).Authorization = `Bearer ${token}`;
+        config.headers.set("Authorization", `Bearer ${token}`);
       }
       return config;
     });

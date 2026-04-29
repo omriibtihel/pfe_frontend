@@ -12,6 +12,7 @@ import datasetService from "@/services/datasetService";
 import apiClient from "@/services/apiClient";
 import type { ColumnMeta, ColumnKind, AlertThresholdsConfig } from "@/services/dataService";
 import type { AlertThresholds } from "@/components/nettoyage/alertRules";
+import type { ProcessingOperation } from "@/types";
 
 import type { NettoyageState } from "./useNettoyageState";
 
@@ -75,8 +76,27 @@ export function kindBadgeClass(kind: string) {
     default: return "border-muted-foreground/20 bg-muted/30 text-muted-foreground";
   }
 }
-export function getOpResult(op: any) {
-  return op?.result ?? op?.params?.__result ?? null;
+export type OpPerColumnImpact = {
+  missing_before?: number | null;
+  missing_after?: number | null;
+  filled?: number | null;
+  changed_count?: number | null;
+};
+
+export type OpResult = {
+  before_shape?: { rows?: number | null; cols?: number | null } | null;
+  after_shape?: { rows?: number | null; cols?: number | null } | null;
+  rows_removed?: number | null;
+  columns_added?: string[] | null;
+  columns_removed?: string[] | null;
+  per_column?: Record<string, OpPerColumnImpact> | null;
+};
+
+export function getOpResult(op: ProcessingOperation | null | undefined): OpResult | null {
+  if (!op) return null;
+  if (op.result != null) return op.result as OpResult;
+  const inlined = (op.params as Record<string, unknown> | undefined)?.__result;
+  return (inlined as OpResult | undefined) ?? null;
 }
 
 export function buildMetaMap(columns: string[], dtypes: Record<string, string>, serverMeta?: AnyServerMeta[]) {
@@ -87,11 +107,11 @@ export function buildMetaMap(columns: string[], dtypes: Record<string, string>, 
       map[m.name] = {
         name: m.name,
         dtype: String(m.dtype ?? dtypes?.[m.name] ?? "unknown"),
-        kind: normalizeKind(m.kind ?? m.inferred_kind ?? inferKindFallback(m.name, dtypes?.[m.name])) as any,
+        kind: normalizeKind(m.kind ?? m.inferred_kind ?? inferKindFallback(m.name, dtypes?.[m.name])),
         missing: Number(m.missing ?? 0),
         unique: Number(m.unique ?? 0),
         total: Number(m.total ?? 0),
-        sample: Array.isArray(m.sample) ? (m.sample as any) : [],
+        sample: Array.isArray(m.sample) ? m.sample : [],
         parasites:     m.parasites     ?? null,
         skewness:      m.skewness      ?? null,
         outlier_count: m.outlier_count ?? null,
@@ -111,7 +131,7 @@ export function buildMetaMap(columns: string[], dtypes: Record<string, string>, 
       map[c] = {
         name: c,
         dtype: dtypes?.[c] ?? "unknown",
-        kind: normalizeKind(inferKindFallback(c, dtypes?.[c])) as any,
+        kind: normalizeKind(inferKindFallback(c, dtypes?.[c])),
         missing: 0, unique: 0, total: 0, sample: [],
       } as ColumnMeta;
     }
@@ -150,7 +170,7 @@ export function writeFallbackSchema(
     localStorage.setItem(`${OVERRIDES_KEY_PREFIX}${projectId}:${datasetId}`, JSON.stringify(overrides));
     localStorage.setItem(`${VERIFIED_KEY_PREFIX}${projectId}:${datasetId}`, JSON.stringify(Array.from(verified)));
     localStorage.setItem(`${DISMISSED_KEY_PREFIX}${projectId}:${datasetId}`, JSON.stringify(Array.from(dismissed)));
-  } catch {}
+  } catch { /* localStorage may be unavailable (private mode, quota) — silently skip */ }
 }
 
 // ── Schema server helpers ─────────────────────────────────────────────────────
@@ -296,7 +316,7 @@ export function useNettoyageData(state: NettoyageState, projectId: string) {
     const cols = previewResp?.columns ?? [];
     const dts = previewResp?.dtypes ?? {};
 
-    state.setOperations((opsResp ?? []) as any);
+    state.setOperations(opsResp ?? []);
     state.setColumns(cols);
     state.setDtypes(dts);
     state.setPreviewRows(previewResp?.rows ?? []);
@@ -319,7 +339,7 @@ export function useNettoyageData(state: NettoyageState, projectId: string) {
 
     const patched: Record<string, ColumnMeta> = { ...baseMeta };
     for (const [c, k] of Object.entries(mergedOverrides)) {
-      if (patched[c]) patched[c] = { ...patched[c], kind: k as any };
+      if (patched[c]) patched[c] = { ...patched[c], kind: k };
     }
     state.setColumnMetaMap(patched);
     writeFallbackSchema(projectId, datasetId, mergedOverrides, mergedVerified, mergedDismissed);
@@ -355,13 +375,7 @@ export function useNettoyageData(state: NettoyageState, projectId: string) {
         state.setDatasets(list);
         state.setVersions(versionsList);
 
-        const active = await datasetService.getActive(projectId).catch(() => ({ active_dataset_id: null }));
-        let chosen: number | null = active.active_dataset_id ?? null;
-        if (chosen && !list.some((d) => d.id === chosen)) chosen = null;
-        if (!chosen) {
-          chosen = list?.[0]?.id ?? null;
-          if (chosen) await datasetService.setActive(projectId, chosen).catch(() => {});
-        }
+        const chosen: number | null = list?.[0]?.id ?? null;
         state.setActiveDatasetId(chosen);
 
         if (versionId) {
@@ -371,8 +385,11 @@ export function useNettoyageData(state: NettoyageState, projectId: string) {
           state.setPromptedTargetForDatasetId(null);
           await loadVersionMeta(versionId);
           try {
-            const ws = await dataService.getOrCreateVersionWorkspace(projectId, versionId);
-            const wsId = (ws as any)?.workspace_dataset_id as number;
+            const ws = (await dataService.getOrCreateVersionWorkspace(projectId, versionId)) as
+              | { workspace_dataset_id?: number }
+              | null
+              | undefined;
+            const wsId = ws?.workspace_dataset_id as number;
             state.setWorkspaceDatasetId(wsId);
             await refreshProcessing(wsId, 1);
             toast({ title: "Workspace prêt", description: "Nettoyage isolé : aucune autre version ne sera affectée." });
@@ -437,7 +454,6 @@ export function useNettoyageData(state: NettoyageState, projectId: string) {
     const run = async () => {
       state.setIsSwitchingDataset(true);
       try {
-        await datasetService.setActive(projectId, state.activeDatasetId!).catch(() => {});
         const ws = await dataService.getOrCreateDatasetWorkspace(projectId, state.activeDatasetId!);
         if (!mounted) return;
         state.setWorkspaceDatasetId(ws.workspace_dataset_id);

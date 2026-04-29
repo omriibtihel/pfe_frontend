@@ -179,7 +179,6 @@ export interface TrainingConfig {
   groupColumn?: string;
   metrics: MetricType[];
   positiveLabel?: string | number | null;
-  trainingDebug?: boolean;
   preprocessing: TrainingPreprocessingConfig;
   modelHyperparams?: ModelHyperparams;
   customCode?: string;

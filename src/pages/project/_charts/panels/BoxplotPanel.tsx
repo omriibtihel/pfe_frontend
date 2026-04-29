@@ -277,7 +277,7 @@ export function BoxplotPanel({ boxplotInfo, allBoxplotCols }: Props) {
               <Bar
                 dataKey="value"
                 isAnimationActive={false}
-                shape={(props: any) => (
+                shape={(props: object) => (
                   <BoxPlotShape
                     {...props}
                     showMean={showMean}

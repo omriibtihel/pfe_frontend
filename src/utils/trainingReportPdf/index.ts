@@ -419,7 +419,7 @@ export async function generateTrainingReportPdf(
   y = finalY(doc, y) + 4;
 
   // Légende
-  const evalNote = (model: any): string => {
+  const evalNote = (model: ModelResult): string => {
     if (model.evaluationSource?.isIndependentTest) {
       const n = model.evaluationSource.nSamples;
       return `Évaluation finale sur test holdout séparé${n ? ` (${n} lignes)` : ""}.`;

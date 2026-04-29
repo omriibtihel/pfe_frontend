@@ -1,6 +1,8 @@
 import type {
   DetailedClassificationMetrics,
   ExplainabilityData,
+  MetricsSummary,
+  MetricType,
   ModelResultDetail,
 } from '@/types';
 
@@ -146,6 +148,106 @@ export function humanizeWarning(key: string): string {
 export function truncateFeatureLabel(value: string, max = 24): string {
   if (value.length <= max) return value;
   return `${value.slice(0, max - 3)}...`;
+}
+
+// ── Selected-metric mapping (for comparison table & cards) ───────────────────
+
+export type ComparisonMetric = {
+  metric: MetricType;
+  summaryKey: keyof MetricsSummary;
+  label: string;
+  shortLabel: string;
+};
+
+const METRIC_TO_SUMMARY_KEY: Partial<Record<MetricType, keyof MetricsSummary>> = {
+  accuracy: 'accuracy',
+  precision: 'precision',
+  recall: 'recall',
+  f1: 'f1',
+  roc_auc: 'rocAuc',
+  pr_auc: 'prAuc',
+  f1_pos: 'f1Pos',
+  precision_macro: 'precisionMacro',
+  recall_macro: 'recallMacro',
+  f1_macro: 'f1Macro',
+  precision_weighted: 'precisionWeighted',
+  recall_weighted: 'recallWeighted',
+  f1_weighted: 'f1Weighted',
+  precision_micro: 'precisionMicro',
+  recall_micro: 'recallMicro',
+  f1_micro: 'f1Micro',
+  mae: 'mae',
+  mse: 'mse',
+  rmse: 'rmse',
+  r2: 'r2',
+};
+
+const METRIC_DISPLAY_LABELS: Partial<Record<MetricType, { label: string; short: string }>> = {
+  accuracy: { label: 'Accuracy', short: 'Acc.' },
+  precision: { label: 'Precision', short: 'Préc.' },
+  recall: { label: 'Recall', short: 'Recall' },
+  f1: { label: 'F1-score', short: 'F1' },
+  roc_auc: { label: 'AUC-ROC', short: 'AUC' },
+  pr_auc: { label: 'PR-AUC', short: 'PR' },
+  f1_pos: { label: 'F1 (positif)', short: 'F1+' },
+  precision_macro: { label: 'Préc. macro', short: 'P-mac' },
+  recall_macro: { label: 'Rappel macro', short: 'R-mac' },
+  f1_macro: { label: 'F1 macro', short: 'F1-mac' },
+  precision_weighted: { label: 'Préc. pondérée', short: 'P-wgt' },
+  recall_weighted: { label: 'Rappel pondéré', short: 'R-wgt' },
+  f1_weighted: { label: 'F1 pondéré', short: 'F1-wgt' },
+  precision_micro: { label: 'Préc. micro', short: 'P-mic' },
+  recall_micro: { label: 'Rappel micro', short: 'R-mic' },
+  f1_micro: { label: 'F1 micro', short: 'F1-mic' },
+  mae: { label: 'MAE', short: 'MAE' },
+  mse: { label: 'MSE', short: 'MSE' },
+  rmse: { label: 'RMSE', short: 'RMSE' },
+  r2: { label: 'R²', short: 'R²' },
+};
+
+const CLASSIFICATION_PRIORITY: MetricType[] = [
+  'roc_auc', 'pr_auc', 'f1', 'recall', 'precision', 'accuracy',
+  'f1_macro', 'f1_weighted', 'f1_pos',
+  'recall_macro', 'precision_macro',
+  'recall_weighted', 'precision_weighted',
+  'f1_micro', 'recall_micro', 'precision_micro',
+];
+const REGRESSION_PRIORITY: MetricType[] = ['r2', 'rmse', 'mae', 'mse'];
+
+const CLASSIFICATION_FALLBACK: MetricType[] = ['roc_auc', 'f1', 'accuracy'];
+const REGRESSION_FALLBACK: MetricType[] = ['rmse', 'mae', 'r2'];
+
+export function selectComparisonMetrics(
+  selected: MetricType[] | undefined | null,
+  taskType: 'classification' | 'regression',
+  max = 5,
+): ComparisonMetric[] {
+  const priority = taskType === 'regression' ? REGRESSION_PRIORITY : CLASSIFICATION_PRIORITY;
+  const selectedSet = new Set(selected ?? []);
+  const items: ComparisonMetric[] = [];
+  const seen = new Set<string>();
+
+  for (const metric of priority) {
+    if (!selectedSet.has(metric)) continue;
+    const summaryKey = METRIC_TO_SUMMARY_KEY[metric];
+    if (!summaryKey || seen.has(summaryKey)) continue;
+    const labels = METRIC_DISPLAY_LABELS[metric] ?? { label: metric, short: metric };
+    items.push({ metric, summaryKey, label: labels.label, shortLabel: labels.short });
+    seen.add(summaryKey);
+    if (items.length >= max) break;
+  }
+
+  if (items.length === 0) {
+    const fallback = taskType === 'regression' ? REGRESSION_FALLBACK : CLASSIFICATION_FALLBACK;
+    for (const metric of fallback) {
+      const summaryKey = METRIC_TO_SUMMARY_KEY[metric];
+      if (!summaryKey) continue;
+      const labels = METRIC_DISPLAY_LABELS[metric] ?? { label: metric, short: metric };
+      items.push({ metric, summaryKey, label: labels.label, shortLabel: labels.short });
+    }
+  }
+
+  return items;
 }
 
 // ── Detail-view helpers — require ModelResultDetail (from /details endpoint) ─

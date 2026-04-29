@@ -32,10 +32,6 @@ export type DatasetOverviewOut = {
   preview: Record<string, unknown>[];
 };
 
-export type ActiveDatasetOut = {
-  active_dataset_id: number | null;
-};
-
 /**
  * Base path helper
  */
@@ -43,19 +39,7 @@ function base(projectId: string | number) {
   return `/projects/${projectId}/datasets`;
 }
 
-/**
- * Service
- * ✅ Ajouts / corrections:
- * - getActive() (GET) pour lire le dataset actif côté backend
- * - setActive() aligné (POST /datasets/active)
- * - list() utilise base()
- * - preview() & overview() utilisent base()
- * - delete() utilise base()
- * - upload() reste multipart
- * - size_bytes: number | null (cohérent avec backend possible)
- */
 export const datasetService = {
-  // ---- datasets ----
   list(projectId: string | number) {
     return apiClient.get<DatasetOut[]>(`${base(projectId)}`);
   },
@@ -70,7 +54,6 @@ export const datasetService = {
     return apiClient.delete<void>(`${base(projectId)}/${datasetId}`);
   },
 
-  // ---- preview / overview (existing endpoints) ----
   preview(projectId: string | number, datasetId: number, rows = 5) {
     return apiClient.get<DatasetPreviewOut>(
       `${base(projectId)}/${datasetId}/preview?rows=${rows}`
@@ -81,17 +64,6 @@ export const datasetService = {
     return apiClient.get<DatasetOverviewOut>(
       `${base(projectId)}/${datasetId}/overview?rows=${rows}`
     );
-  },
-
-  // ---- active dataset (✅ important to avoid multi-dataset confusion) ----
-  getActive(projectId: string | number) {
-    return apiClient.get<ActiveDatasetOut>(`${base(projectId)}/active`);
-  },
-
-  setActive(projectId: string | number, datasetId: number) {
-    return apiClient.postJson<ActiveDatasetOut>(`${base(projectId)}/active`, {
-      dataset_id: datasetId,
-    });
   },
 };
 

@@ -23,6 +23,90 @@ function opTypeBadge(t: string) {
   return "bg-muted/30 border-border text-muted-foreground";
 }
 
+function opTypeLabel(t: string) {
+  const k = (t ?? "").toLowerCase();
+  if (k === "schema") return "Schéma";
+  if (k === "cleaning") return "Nettoyage";
+  if (k === "imputation") return "Imputation";
+  if (k === "normalization") return "Normalisation";
+  if (k === "encoding") return "Encodage";
+  return t || "—";
+}
+
+function formatOpDate(iso: string): { short: string; full: string } {
+  const d = new Date(iso);
+  const full = d.toLocaleString("fr-FR");
+  const diffMs = Date.now() - d.getTime();
+  const sec = Math.round(diffMs / 1000);
+  if (sec < 0) return { short: full, full };
+  if (sec < 60) return { short: "à l'instant", full };
+  const min = Math.round(sec / 60);
+  if (min < 60) return { short: `il y a ${min} min`, full };
+  const hr = Math.round(min / 60);
+  if (hr < 24) return { short: `il y a ${hr} h`, full };
+  const day = Math.round(hr / 24);
+  if (day < 7) return { short: `il y a ${day} j`, full };
+  return { short: d.toLocaleDateString("fr-FR"), full };
+}
+
+function schemaActionLabel(action: string): string {
+  switch (action) {
+    case "set_kind": return "Type de colonne défini";
+    case "clear_kind": return "Type de colonne réinitialisé";
+    case "verify_categorical": return "Vérification catégorielle";
+    case "dismiss_alert": return "Alerte ignorée";
+    default: return action || "Action schéma";
+  }
+}
+
+function humanizeKind(kind: string): string {
+  const k = kind.toLowerCase();
+  if (k === "numeric") return "numérique";
+  if (k === "categorical") return "catégoriel";
+  if (k === "datetime") return "date/heure";
+  if (k === "binary") return "binaire";
+  if (k === "text") return "texte";
+  if (k === "id") return "identifiant";
+  return kind;
+}
+
+/**
+ * Réécrit les descriptions techniques du backend en libellés FR lisibles.
+ * Ex: "Schema: restecg → numeric" → "Type de « restecg » défini sur numérique".
+ */
+function humanizeDescription(op: ProcessingOperation): string {
+  const desc = (op.description ?? "").trim();
+  const opType = (op.op_type ?? "").toLowerCase();
+  const params = op.params ?? {};
+
+  if (opType === "schema") {
+    const action = String(params.schema_action ?? "");
+    const column = params.column ? String(params.column) : null;
+
+    if (action === "set_kind" && column && params.kind) {
+      return `Type de « ${column} » défini sur ${humanizeKind(String(params.kind))}`;
+    }
+    if (action === "clear_kind" && column) {
+      return `Type de « ${column} » réinitialisé (auto-détection)`;
+    }
+    if (action === "verify_categorical" && column) {
+      return params.verified === false
+        ? `Vérification catégorielle retirée pour « ${column} »`
+        : `« ${column} » confirmé comme catégoriel`;
+    }
+    if (action === "dismiss_alert") {
+      return params.dismissed === false ? "Alerte rétablie" : "Alerte ignorée";
+    }
+
+    const arrowMatch = desc.match(/^Schema\s*:\s*(.+?)\s*(?:→|->|-)+\s*(.+)$/i);
+    if (arrowMatch) {
+      return `Type de « ${arrowMatch[1].trim()} » défini sur ${humanizeKind(arrowMatch[2].trim())}`;
+    }
+  }
+
+  return desc;
+}
+
 // ── Props ─────────────────────────────────────────────────────────────────────
 interface OperationsTimelineProps {
   operations: ProcessingOperation[];
@@ -71,6 +155,7 @@ export function OperationsTimeline({ operations, selectedOp, onSelectOp, columnM
               {operations.map((op, i) => {
                 const r = getOpResult(op);
                 const summaryChips = buildOpSummaryChips(op);
+                const dt = formatOpDate(op.created_at);
                 return (
                   <motion.button
                     key={op.id}
@@ -86,15 +171,15 @@ export function OperationsTimeline({ operations, selectedOp, onSelectOp, columnM
                     </div>
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center gap-2 min-w-0">
-                        <p className="text-sm font-medium truncate">{op.description}</p>
-                        <Badge variant="outline" className={`shrink-0 text-[10px] ${opTypeBadge(op.op_type)}`}>{op.op_type}</Badge>
+                        <p className="text-sm font-medium truncate" title={op.description}>{humanizeDescription(op)}</p>
+                        <Badge variant="outline" className={`shrink-0 text-[10px] ${opTypeBadge(op.op_type)}`}>{opTypeLabel(op.op_type)}</Badge>
                       </div>
                       {summaryChips.length > 0 && (
                         <div className="mt-1.5 flex flex-wrap gap-1">{summaryChips}</div>
                       )}
                       <p className="text-[10px] text-muted-foreground/60 mt-1.5">
-                        {new Date(op.created_at).toLocaleString("fr-FR")}
-                        {r ? <span className="ml-2 text-primary/60">· cliquer pour détails</span> : null}
+                        <span title={dt.full}>{dt.short}</span>
+                        <span className="ml-2 text-primary/60">· cliquer pour détails</span>
                       </p>
                     </div>
                     <ChevronDown className="h-4 w-4 text-muted-foreground/50 shrink-0 mt-1 -rotate-90 group-hover/item:text-foreground transition-colors" />
@@ -111,16 +196,18 @@ export function OperationsTimeline({ operations, selectedOp, onSelectOp, columnM
         {selectedOp ? (() => {
           const r = getOpResult(selectedOp);
           const cols = (selectedOp.columns ?? []).filter(Boolean);
+          const isSchema = (selectedOp.op_type ?? "").toLowerCase() === "schema";
+          const schemaAction = isSchema ? String(selectedOp.params?.schema_action ?? "") : "";
           return (
             <div className="max-h-[80vh] overflow-y-auto pr-1">
               <div className="space-y-4">
                 <div className="flex flex-wrap items-center gap-2">
-                  <Badge variant="secondary">{selectedOp.op_type}</Badge>
+                  <Badge variant="secondary">{opTypeLabel(selectedOp.op_type)}</Badge>
                   <Badge variant="outline">{new Date(selectedOp.created_at).toLocaleString("fr-FR")}</Badge>
                   {cols.length > 0 ? <Badge variant="outline">{cols.length} colonne(s)</Badge> : null}
                 </div>
                 <div>
-                  <p className="text-sm font-medium">{selectedOp.description}</p>
+                  <p className="text-sm font-medium" title={selectedOp.description}>{humanizeDescription(selectedOp)}</p>
                   {cols.length > 0 && (
                     <div className="mt-2 flex flex-wrap gap-2">
                       {cols.slice(0, 20).map((c) => renderColBadge(c, "outline"))}
@@ -159,7 +246,7 @@ export function OperationsTimeline({ operations, selectedOp, onSelectOp, columnM
                               </tr>
                             </thead>
                             <tbody>
-                              {Object.entries(r.per_column).map(([c, info]: any) => (
+                              {Object.entries(r.per_column).map(([c, info]) => (
                                 <tr key={c} className="border-b border-border last:border-b-0">
                                   <td className="py-2 pr-3 font-medium">{c}</td>
                                   <td className="py-2 px-3 text-right">{info?.missing_before ?? "—"}</td>
@@ -174,6 +261,29 @@ export function OperationsTimeline({ operations, selectedOp, onSelectOp, columnM
                       </div>
                     ) : null}
                   </>
+                ) : isSchema ? (
+                  <div className="rounded-md border border-border p-3 bg-muted/30 space-y-2">
+                    <p className="text-sm font-medium">{schemaActionLabel(schemaAction)}</p>
+                    <div className="text-xs text-muted-foreground space-y-1">
+                      {selectedOp.params?.column ? (
+                        <div>Colonne : <span className="font-mono text-foreground">{String(selectedOp.params.column)}</span></div>
+                      ) : null}
+                      {schemaAction === "set_kind" && selectedOp.params?.kind ? (
+                        <div>Nouveau type : <span className="font-medium text-foreground">{String(selectedOp.params.kind)}</span></div>
+                      ) : null}
+                      {schemaAction === "verify_categorical" ? (
+                        <div>Statut : <span className="font-medium text-foreground">{selectedOp.params?.verified === false ? "Non vérifié" : "Vérifié"}</span></div>
+                      ) : null}
+                      {schemaAction === "dismiss_alert" ? (
+                        <>
+                          {selectedOp.params?.alert_key ? (
+                            <div>Clé d'alerte : <span className="font-mono text-foreground">{String(selectedOp.params.alert_key)}</span></div>
+                          ) : null}
+                          <div>Statut : <span className="font-medium text-foreground">{selectedOp.params?.dismissed === false ? "Rétablie" : "Ignorée"}</span></div>
+                        </>
+                      ) : null}
+                    </div>
+                  </div>
                 ) : (
                   <div className="rounded-md border border-border p-3 bg-muted/30">
                     <p className="text-sm font-medium">Détails indisponibles</p>

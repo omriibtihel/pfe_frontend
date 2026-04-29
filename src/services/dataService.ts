@@ -22,14 +22,14 @@ export type ApplyOperationPayload = {
   type: OperationType;
   description: string;
   columns: string[];
-  params?: Record<string, any>;
+  params?: Record<string, unknown>;
 };
 
 export type ApplyCleaningPayload = {
   type: CleaningOperationType; // "cleaning"
   description: string;
   columns: string[]; // can be [] for drop_duplicates / drop_empty_rows
-  params: Record<string, any> & { action: CleaningAction };
+  params: Record<string, unknown> & { action: CleaningAction };
 };
 
 export type ProcessingPreviewOut = {
@@ -150,25 +150,25 @@ export type VersionUI = {
   targetColumn?: string | null;
 };
 
-function toNum(x: any): number | null {
+function toNum(x: unknown): number | null {
   const n = Number(x);
   return Number.isFinite(n) ? n : null;
 }
 
 function normalizeVersion(v: DatasetVersionOut): VersionUI {
   const id = toNum(v?.id) ?? 0;
-  const targetColumn = (v as any)?.targetColumn ?? (v as any)?.target_column ?? null;
+  const targetColumn = v?.targetColumn ?? v?.target_column ?? null;
 
   return {
     id,
-    projectId: toNum((v as any)?.project_id),
-    sourceDatasetId: toNum((v as any)?.source_dataset_id),
+    projectId: toNum(v?.project_id),
+    sourceDatasetId: toNum(v?.source_dataset_id),
     name: String(v?.name ?? `Version #${id}`),
-    filePath: (v as any)?.file_path ?? null,
+    filePath: v?.file_path ?? null,
     operations: Array.isArray(v?.operations) ? (v.operations as string[]) : [],
-    createdAt: (v as any)?.created_at ?? null,
-    canPredict: Boolean((v as any)?.canPredict ?? (v as any)?.can_predict),
-    sizeBytes: toNum((v as any)?.size_bytes),
+    createdAt: v?.created_at ?? null,
+    canPredict: Boolean(v?.canPredict ?? v?.can_predict),
+    sizeBytes: toNum(v?.size_bytes),
     targetColumn: targetColumn ? String(targetColumn) : null,
   };
 }
@@ -214,16 +214,14 @@ function clampPageSize(pageSize?: number) {
 // Helper: map ColumnMeta -> DatasetColumn (complete shape)
 // ✅ This fixes your Step1 type mismatch (nullCount/uniqueCount/sampleValues)
 function toDatasetColumn(c: ColumnMeta): DatasetColumn {
-  const t = String((c as any)?.override_kind ?? (c as any)?.inferred_kind ?? (c as any)?.kind ?? (c as any)?.dtype ?? "other");
+  const t = String(c?.override_kind ?? c?.inferred_kind ?? c?.kind ?? c?.dtype ?? "other");
 
   return {
     name: c.name,
     type: t,
-
-    // defaults/derived (depends on your DatasetColumn definition)
-    nullCount: Number((c as any)?.missing ?? 0),
-    uniqueCount: Number((c as any)?.unique ?? 0),
-    sampleValues: Array.isArray((c as any)?.sample) ? (c as any)?.sample : [],
+    nullCount: Number(c?.missing ?? 0),
+    uniqueCount: Number(c?.unique ?? 0),
+    sampleValues: Array.isArray(c?.sample) ? c.sample : [],
   } as DatasetColumn;
 }
 
@@ -270,7 +268,7 @@ export const dataService = {
     datasetId: number,
     payload: Omit<ApplyCleaningPayload, "type"> & { type?: "cleaning" }
   ): Promise<OperationOut> {
-    const params = payload.params ?? ({} as any);
+    const params = payload.params ?? ({} as Record<string, unknown> & { action?: string });
     if (!params.action || typeof params.action !== "string") {
       throw new Error("applyCleaningOperation: params.action is required");
     }
@@ -279,7 +277,7 @@ export const dataService = {
       type: "cleaning",
       description: payload.description,
       columns: payload.columns ?? [],
-      params: params as any,
+      params: params as Record<string, unknown> & { action: CleaningAction },
     };
 
     return apiClient.postJson<OperationOut>(`${processingBase(projectId, datasetId)}/operations`, safe);

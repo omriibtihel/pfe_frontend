@@ -198,7 +198,7 @@ describe('generateTrainingReportPdf — k-fold CV stability section', () => {
         residualAnalysis: null,
         confusionMatrix: null,
         classDistribution: null,
-        baselineMajority: null,
+        baseline: null,
         metricsWarnings: [],
       },
       balancing: null,
@@ -253,20 +253,20 @@ describe('generateTrainingReportPdf — k-fold CV stability section', () => {
       ],
     };
 
-    await generateTrainingReportPdf(session as any, 'proj-1');
+    await generateTrainingReportPdf(session as unknown as Parameters<typeof generateTrainingReportPdf>[0], 'proj-1');
 
     // The CV stability autoTable call has a head row and body rows with ±
     const cvTableCall = autoTableCalls.find(
-      (opts: any) => Array.isArray(opts.body) && opts.body.some((row: string[]) => row[1]?.includes('±')),
+      (opts: { body?: unknown }) => Array.isArray(opts.body) && (opts.body as string[][]).some((row) => row[1]?.includes('±')),
     );
 
     expect(cvTableCall).toBeDefined();
-    const rows = (cvTableCall as any).body as string[][];
+    const rows = (cvTableCall as { body: string[][] }).body;
     expect(rows.length).toBeGreaterThan(0);
     // Verify 4-column structure (label, mean±std, min, max)
     expect(rows[0]).toHaveLength(4);
     // Verify the header row is present
-    expect((cvTableCall as any).head).toEqual([['Métrique', 'Moyenne  ±  Écart-type', 'Min', 'Max']]);
+    expect((cvTableCall as { head: string[][] }).head).toEqual([['Métrique', 'Moyenne  ±  Écart-type', 'Min', 'Max']]);
   });
 
   it('fallback renders r.metrics when detail fetch fails', async () => {
@@ -324,16 +324,16 @@ describe('generateTrainingReportPdf — k-fold CV stability section', () => {
       ],
     };
 
-    await generateTrainingReportPdf(session as any, 'proj-1');
+    await generateTrainingReportPdf(session as unknown as Parameters<typeof generateTrainingReportPdf>[0], 'proj-1');
 
     // When detail fails, the fallback autoTable call has body rows with metric values but NO ±
     // At least one autoTable call must have non-empty rows (the fallback section)
     const nonEmptyCall = autoTableCalls.find(
-      (opts: any) => Array.isArray(opts.body) && opts.body.length > 0,
+      (opts: { body?: unknown }) => Array.isArray(opts.body) && opts.body.length > 0,
     );
     expect(nonEmptyCall).toBeDefined();
     // The fallback section should not have a 4-column structure (only 2 columns: label + value)
-    const fallbackRows = (nonEmptyCall as any).body as string[][];
+    const fallbackRows = (nonEmptyCall as { body: string[][] }).body;
     // All rows in the fallback are 2-column [label, value] — not 4-column
     expect(fallbackRows.every((r) => r.length === 2)).toBe(true);
   });

@@ -25,6 +25,7 @@ import { PageSkeleton } from "@/components/ui/loading-skeleton";
 import { useToast } from "@/hooks/use-toast";
 
 import { dataService, type VersionUI } from "@/services/dataService";
+import datasetService from "@/services/datasetService";
 import databaseService from "@/services/databaseService";
 import { DEFAULT_TRAINING_PREPROCESSING, DEFAULT_TRAINING_BALANCING } from "@/types";
 
@@ -66,7 +67,6 @@ function toTrainingConfig(prep: PrepConfig): TrainingConfig {
     gridCvFolds: 3,
     gridScoring: "auto",
     metrics: [],
-    trainingDebug: false,
     modelHyperparams: {},
   };
 }
@@ -157,9 +157,10 @@ export function PreparationPage() {
       }
 
       try {
-        const active = await databaseService.getActiveDataset(projectId);
-        if (active.active_dataset_id) {
-          const targetData = await databaseService.getDatasetTarget(projectId, active.active_dataset_id);
+        const datasets = await datasetService.list(projectId);
+        const sourceDataset = datasets[0] ?? null;
+        if (sourceDataset) {
+          const targetData = await databaseService.getDatasetTarget(projectId, sourceDataset.id);
           setPrepConfig({
             ...DEFAULT_PREP_CONFIG,
             datasetVersionId: selectedVersionId,

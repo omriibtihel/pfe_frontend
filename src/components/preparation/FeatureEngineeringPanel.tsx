@@ -58,11 +58,11 @@ function makeBlankFeature(idx: number): FeatureDef {
 }
 
 /** Normalize features from any previous localStorage format. */
-function normalizeFeature(f: FeatureDef): FeatureDef {
+function normalizeFeature(f: Partial<FeatureDef> | null | undefined): FeatureDef {
   return {
-    name: (f as any).name ?? `feature`,
-    enabled: (f as any).enabled ?? true,
-    expression: (f as any).expression ?? "",
+    name: f?.name ?? `feature`,
+    enabled: f?.enabled ?? true,
+    expression: f?.expression ?? "",
   };
 }
 
