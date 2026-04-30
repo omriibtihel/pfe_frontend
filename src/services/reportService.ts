@@ -384,7 +384,7 @@ export function generateDatasetReport(input: ReportInput): void {
     doc.setFont('helvetica', 'bold');
     doc.setFontSize(7);
     doc.setTextColor(37, 99, 235);
-    doc.text('MEDICALVISION', M, 7.5);
+    doc.text('MEDIQ', M, 7.5);
     // Center: document label
     doc.setFont('helvetica', 'normal');
     doc.setTextColor(148, 163, 184);
@@ -522,7 +522,7 @@ export function generateDatasetReport(input: ReportInput): void {
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(8);
   doc.setTextColor(37, 99, 235);
-  doc.text('MEDICALVISION', M, 13);
+  doc.text('MEDIQ', M, 13);
   doc.setDrawColor(37, 99, 235);
   doc.setLineWidth(0.5);
   doc.line(M, 14.8, M + 36, 14.8);
@@ -1426,7 +1426,7 @@ export function generateDatasetReport(input: ReportInput): void {
     }
 
     sentences.push(
-      `Après les prétraitements recommandés, ce dataset sera exploitable pour un entraînement supervisé via la page Entraînement de MedicalVision.`,
+      `Après les prétraitements recommandés, ce dataset sera exploitable pour un entraînement supervisé via la page Entraînement de MedIQ.`,
     );
 
     para(sentences.join(' '));
@@ -1489,7 +1489,7 @@ export function generateDatasetReport(input: ReportInput): void {
     doc.setFont('helvetica', 'bold');
     doc.setFontSize(6.5);
     doc.setTextColor(37, 99, 235);
-    doc.text('MedicalVision', M, ph - 5.5);
+    doc.text('MedIQ', M, ph - 5.5);
     doc.setFont('helvetica', 'normal');
     doc.setTextColor(100, 116, 139);
     doc.text(' \u2014 Document confidentiel', M + 23, ph - 5.5);

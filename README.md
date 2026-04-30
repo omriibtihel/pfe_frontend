@@ -1,10 +1,10 @@
-# MedicalVision Frontend
+# MedIQ Frontend
 
 Plateforme web d'analyse de données médicales et d'entraînement de modèles de machine learning, développée dans le cadre d'un projet de fin d'études (PFE).
 
 ## Aperçu
 
-MedicalVision est une application SaaS permettant aux professionnels de santé et aux chercheurs de :
+MedIQ est une application SaaS permettant aux professionnels de santé et aux chercheurs de :
 - Importer et explorer des datasets médicaux
 - Nettoyer et prétraiter les données
 - Entraîner des modèles ML via un wizard guidé en 6 étapes

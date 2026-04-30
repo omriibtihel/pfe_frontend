@@ -173,7 +173,7 @@ export function footers(doc: jsPDF, genDate: string): void {
     doc.setFont('helvetica', 'bold');
     doc.setFontSize(6.5);
     txtc(doc, C.navy);
-    doc.text('MedicalVision', M, H - 5.5);
+    doc.text('MedIQ', M, H - 5.5);
     doc.setFont('helvetica', 'normal');
     txtc(doc, C.muted);
     doc.text(' \u2014 Document confidentiel a usage professionnel', M + 23, H - 5.5);

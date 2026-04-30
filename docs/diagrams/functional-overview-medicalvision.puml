@@ -1,5 +1,5 @@
 @startuml
-title Vue fonctionnelle generale - MedicalVision
+title Vue fonctionnelle generale - MedIQ
 
 skinparam dpi 180
 skinparam shadowing false

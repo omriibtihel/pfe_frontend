@@ -92,9 +92,9 @@ const pipeline = [
 ];
 
 const testimonials = [
-  { name: "Dr. Sophie Martin",  role: "Cardiologue, CHU Paris",          content: "MedicalVision a transformé notre approche diagnostique. La précision des prédictions nous permet d'agir plus rapidement.", avatar: "SM", rating: 5 },
+  { name: "Dr. Sophie Martin",  role: "Cardiologue, CHU Paris",          content: "MedIQ a transformé notre approche diagnostique. La précision des prédictions nous permet d'agir plus rapidement.", avatar: "SM", rating: 5 },
   { name: "Prof. Jean Dubois",  role: "Chef de service, Institut Pasteur", content: "L'interface intuitive et la puissance des algorithmes font de cette plateforme un outil indispensable pour la recherche.", avatar: "JD", rating: 5 },
-  { name: "Dr. Marie Laurent",  role: "Oncologue, Gustave Roussy",        content: "Grâce à MedicalVision, nous avons réduit de 40 % le temps d'analyse de nos données patients.",                           avatar: "ML", rating: 5 },
+  { name: "Dr. Marie Laurent",  role: "Oncologue, Gustave Roussy",        content: "Grâce à MedIQ, nous avons réduit de 40 % le temps d'analyse de nos données patients.",                           avatar: "ML", rating: 5 },
 ];
 
 const statsData = [
@@ -157,7 +157,7 @@ function DashboardMock() {
           <div className="w-3 h-3 rounded-full bg-rose-400" />
           <div className="w-3 h-3 rounded-full bg-amber-400" />
           <div className="w-3 h-3 rounded-full bg-emerald-400" />
-          <span className="ml-3 text-xs text-muted-foreground font-mono">MedicalVision — Dashboard</span>
+          <span className="ml-3 text-xs text-muted-foreground font-mono">MedIQ — Dashboard</span>
         </div>
 
         {/* Content */}
@@ -280,7 +280,7 @@ export default function LandingPage() {
               <div className="w-9 h-9 bg-gradient-to-br from-primary to-secondary rounded-xl flex items-center justify-center shadow-glow-sm">
                 <Activity className="w-5 h-5 text-white" />
               </div>
-              <span className="text-xl font-bold tracking-tight">MedicalVision</span>
+              <span className="text-xl font-bold tracking-tight">MedIQ</span>
             </div>
 
             {/* Desktop links */}
@@ -599,7 +599,7 @@ export default function LandingPage() {
               <span className="text-gradient-premium">confiance</span>
             </h2>
             <p className="text-muted-foreground text-lg max-w-xl mx-auto">
-              Des professionnels de santé de toute la France utilisent MedicalVision au quotidien.
+              Des professionnels de santé de toute la France utilisent MedIQ au quotidien.
             </p>
           </motion.div>
 
@@ -710,7 +710,7 @@ export default function LandingPage() {
               <div className="w-9 h-9 bg-gradient-to-br from-primary to-secondary rounded-xl flex items-center justify-center shadow-glow-sm">
                 <Activity className="w-5 h-5 text-white" />
               </div>
-              <span className="font-bold text-lg">MedicalVision</span>
+              <span className="font-bold text-lg">MedIQ</span>
             </div>
 
             <div className="flex items-center gap-8 text-sm text-muted-foreground">
@@ -720,7 +720,7 @@ export default function LandingPage() {
             </div>
 
             <div className="text-sm text-muted-foreground">
-              © 2025 MedicalVision. Tous droits réservés.
+              © 2025 MedIQ. Tous droits réservés.
             </div>
           </div>
         </div>

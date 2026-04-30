@@ -151,7 +151,7 @@ export async function generateTrainingReportPdf(
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(8);
   txtc(doc, C.teal);
-  doc.text('MEDICALVISION', M, 10);
+  doc.text('MEDIQ', M, 10);
   drawc(doc, C.teal);
   doc.setLineWidth(0.5);
   doc.line(M, 11.5, M + 35, 11.5);

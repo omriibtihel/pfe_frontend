@@ -135,7 +135,7 @@ export function AppLayout({ children }: AppLayoutProps) {
             <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-primary via-secondary to-accent shadow-glow-sm">
               <Activity className="h-5 w-5 text-white" />
             </div>
-            <span className="text-base font-bold tracking-tight">MedicalVision</span>
+            <span className="text-base font-bold tracking-tight">MedIQ</span>
           </Link>
         </div>
         <Button variant="ghost" size="icon" onClick={() => setProfileOpen(true)}>
@@ -166,7 +166,7 @@ export function AppLayout({ children }: AppLayoutProps) {
             </div>
             {sidebarOpen && (
               <div className="flex min-w-0 flex-col">
-                <span className="text-lg font-bold tracking-tight">MedicalVision</span>
+                <span className="text-lg font-bold tracking-tight">MedIQ</span>
                 <span className="text-xs font-medium text-muted-foreground">{t("nav.aiSpace")}</span>
               </div>
             )}

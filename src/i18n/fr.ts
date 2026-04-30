@@ -16,7 +16,7 @@ const fr = {
     search: "Rechercher",
     noData: "Aucune donnée",
     optional: "optionnel",
-    copyright: "© 2025 MedicalVision — Environnement professionnel sécurisé",
+    copyright: "© 2025 MedIQ — Environnement professionnel sécurisé",
   },
 
   nav: {
@@ -63,7 +63,7 @@ const fr = {
       noAccount: "Pas encore de compte ?",
       signupLink: "S'inscrire",
       successTitle: "Connexion reussie",
-      successDesc: "Bienvenue sur MedicalVision",
+      successDesc: "Bienvenue sur MedIQ",
       errorTitle: "Erreur",
       defaultError: "Erreur lors de la connexion",
     },

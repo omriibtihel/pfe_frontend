@@ -1,5 +1,5 @@
 @startuml
-title Diagramme general de cas d'utilisation - MedicalVision
+title Diagramme general de cas d'utilisation - MedIQ
 
 left to right direction
 skinparam dpi 180
@@ -39,7 +39,7 @@ actor "Visiteur" as Visitor
 actor "Medecin" as Doctor
 actor "Administrateur" as Admin
 
-rectangle "Systeme MedicalVision" {
+rectangle "Systeme MedIQ" {
   package "Acces au systeme" {
     usecase "Creer une demande\nd'inscription" as UC_Register
     usecase "S'authentifier" as UC_Login

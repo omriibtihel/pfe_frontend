@@ -1,4 +1,4 @@
-# Diagrammes UML - MedicalVision
+# Diagrammes UML - MedIQ
 
 Ces fichiers sont prepares pour le rapport de projet :
 

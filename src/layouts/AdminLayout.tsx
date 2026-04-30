@@ -22,7 +22,7 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
               <Activity className="h-5 w-5" />
             </div>
             <div>
-              <div className="text-base font-semibold leading-none tracking-tight">MedicalVision</div>
+              <div className="text-base font-semibold leading-none tracking-tight">MedIQ</div>
               <div className="mt-1 text-xs text-muted-foreground">Admin Console</div>
             </div>
             <Badge

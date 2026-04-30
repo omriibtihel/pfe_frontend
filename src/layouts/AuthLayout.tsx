@@ -60,7 +60,7 @@ export function AuthLayout({ children }: AuthLayoutProps) {
               <Activity className="h-5 w-5 text-primary-foreground" />
             </div>
             <div>
-              <p className="text-lg font-bold leading-none tracking-tight">MedicalVision</p>
+              <p className="text-lg font-bold leading-none tracking-tight">MedIQ</p>
               <p className="mt-0.5 text-[10px] font-semibold uppercase tracking-[0.2em] text-muted-foreground">
                 AI Platform
               </p>
