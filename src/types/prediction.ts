@@ -48,6 +48,16 @@ export interface ShapLocalItem {
   data: number | string | null;
 }
 
+/** One LIME contribution for a specific feature on a specific row. */
+export interface LimeLocalItem {
+  feature: string;
+  contribution: number;
+  data: number | string | null;
+}
+
+/** Method requested when calling the /explain endpoints. */
+export type ExplanationMethod = 'shap' | 'lime' | 'both';
+
 /** One row of prediction output. */
 export interface PredictionRow {
   rowIndex: number;
@@ -56,8 +66,10 @@ export interface PredictionRow {
   score: number | null;
   /** Original input values for this row. */
   inputData: Record<string, unknown>;
-  /** Local SHAP values — present only when /explain endpoint is used. */
+  /** Local SHAP values — present only when /explain endpoint is used with method=shap|both. */
   shap?: ShapLocalItem[] | null;
+  /** Local LIME values — present only when /explain endpoint is used with method=lime|both. */
+  lime?: LimeLocalItem[] | null;
 }
 
 /** Aggregate statistics across all predicted rows. */

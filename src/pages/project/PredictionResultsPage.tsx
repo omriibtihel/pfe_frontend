@@ -32,7 +32,13 @@ import { Modal } from '@/components/ui/modal';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { useToast } from '@/hooks/use-toast';
 import { predictionService } from '@/services/predictionService';
-import type { PredictionResponse, PredictionRow, ShapLocalItem } from '@/types';
+import type {
+  ExplanationMethod,
+  LimeLocalItem,
+  PredictionResponse,
+  PredictionRow,
+  ShapLocalItem,
+} from '@/types';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Constants
@@ -145,16 +151,42 @@ function ScoreBar({ score, threshold = 0.5 }: { score: number | null; threshold?
   );
 }
 
-function ShapPanel({ items }: { items: ShapLocalItem[] }) {
+// ─────────────────────────────────────────────────────────────────────────────
+// Explanation primitives — unified shape so SHAP and LIME render identically
+// ─────────────────────────────────────────────────────────────────────────────
+
+interface NormalizedExplanationItem {
+  feature: string;
+  value: number;
+  data: number | string | null;
+}
+
+function _normShap(items: ShapLocalItem[]): NormalizedExplanationItem[] {
+  return items.map((d) => ({ feature: d.feature, value: d.shap_value, data: d.data }));
+}
+
+function _normLime(items: LimeLocalItem[]): NormalizedExplanationItem[] {
+  return items.map((d) => ({ feature: d.feature, value: d.contribution, data: d.data }));
+}
+
+function SingleMethodPanel({
+  items,
+  label,
+  accentClass,
+}: {
+  items: NormalizedExplanationItem[];
+  label: string;
+  accentClass: string;
+}) {
   const top = items.slice(0, 8);
-  const maxAbs = Math.max(...top.map((d) => Math.abs(d.shap_value)), 1e-9);
+  const maxAbs = Math.max(...top.map((d) => Math.abs(d.value)), 1e-9);
 
   return (
     <div className="py-3 px-2 space-y-3">
       {/* Header */}
       <div className="flex items-center justify-between">
-        <span className="flex items-center gap-1.5 text-[11px] font-semibold text-violet-600 dark:text-violet-400">
-          <Sparkles className="h-3 w-3" /> Contributions SHAP
+        <span className={`flex items-center gap-1.5 text-[11px] font-semibold ${accentClass}`}>
+          <Sparkles className="h-3 w-3" /> {label}
         </span>
         <span className="flex items-center gap-3 text-[10px] text-muted-foreground">
           <span className="flex items-center gap-1">
@@ -169,18 +201,15 @@ function ShapPanel({ items }: { items: ShapLocalItem[] }) {
       {/* Rows */}
       <div className="space-y-1.5">
         {top.map((item) => {
-          const pct = (Math.abs(item.shap_value) / maxAbs) * 100;
-          const isPos = item.shap_value > 0;
+          const pct = (Math.abs(item.value) / maxAbs) * 100;
+          const isPos = item.value > 0;
           const color = isPos ? '#f97316' : '#60a5fa';
 
           return (
             <div key={item.feature} className="grid items-center gap-2" style={{ gridTemplateColumns: '140px 1fr 60px 52px' }}>
-              {/* Feature name */}
               <span className="text-[11px] text-foreground truncate" title={item.feature}>
                 {item.feature}
               </span>
-
-              {/* Bar — centered axis */}
               <div className="relative h-3 rounded-sm bg-muted/40 overflow-hidden">
                 <div
                   className="absolute top-0 h-full rounded-sm"
@@ -193,16 +222,9 @@ function ShapPanel({ items }: { items: ShapLocalItem[] }) {
                 />
                 <div className="absolute inset-y-0 left-1/2 w-px bg-border/80" />
               </div>
-
-              {/* SHAP value */}
-              <span
-                className="text-[11px] tabular-nums font-semibold text-right"
-                style={{ color }}
-              >
-                {isPos ? '+' : ''}{item.shap_value.toFixed(3)}
+              <span className="text-[11px] tabular-nums font-semibold text-right" style={{ color }}>
+                {isPos ? '+' : ''}{item.value.toFixed(3)}
               </span>
-
-              {/* Input value */}
               <span className="text-[10px] text-muted-foreground text-right truncate font-mono" title={item.data != null ? String(item.data) : ''}>
                 {item.data != null ? _fmt(item.data) : ''}
               </span>
@@ -214,14 +236,191 @@ function ShapPanel({ items }: { items: ShapLocalItem[] }) {
   );
 }
 
-function ShapModal({
+function ComparisonPanel({
+  shapItems,
+  limeItems,
+}: {
+  shapItems: NormalizedExplanationItem[];
+  limeItems: NormalizedExplanationItem[];
+}) {
+  // Take the union of features ranked by max(|shap|, |lime|).
+  const merged = new Map<string, { shap?: NormalizedExplanationItem; lime?: NormalizedExplanationItem }>();
+  for (const s of shapItems) merged.set(s.feature, { ...(merged.get(s.feature) ?? {}), shap: s });
+  for (const l of limeItems) merged.set(l.feature, { ...(merged.get(l.feature) ?? {}), lime: l });
+
+  const ranked = Array.from(merged.entries())
+    .map(([feature, { shap, lime }]) => ({
+      feature,
+      shap,
+      lime,
+      score: Math.max(Math.abs(shap?.value ?? 0), Math.abs(lime?.value ?? 0)),
+    }))
+    .sort((a, b) => b.score - a.score)
+    .slice(0, 8);
+
+  const maxAbs = Math.max(...ranked.map((d) => d.score), 1e-9);
+
+  const drawBar = (val: number | undefined, hue: 'violet' | 'teal') => {
+    if (val == null) {
+      return (
+        <div className="relative h-2.5 rounded-sm bg-muted/30 overflow-hidden">
+          <div className="absolute inset-y-0 left-1/2 w-px bg-border/80" />
+        </div>
+      );
+    }
+    const pct = (Math.abs(val) / maxAbs) * 100;
+    const isPos = val > 0;
+    const color = isPos ? '#f97316' : '#60a5fa';
+    const trackBg = hue === 'violet' ? 'bg-violet-500/10' : 'bg-teal-500/10';
+    return (
+      <div className={`relative h-2.5 rounded-sm overflow-hidden ${trackBg}`}>
+        <div
+          className="absolute top-0 h-full rounded-sm"
+          style={{
+            width: `${pct / 2}%`,
+            backgroundColor: color,
+            opacity: 0.85,
+            ...(isPos ? { left: '50%' } : { right: '50%' }),
+          }}
+        />
+        <div className="absolute inset-y-0 left-1/2 w-px bg-border/80" />
+      </div>
+    );
+  };
+
+  return (
+    <div className="py-3 px-2 space-y-3">
+      {/* Header — column labels */}
+      <div className="grid items-center gap-2 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground" style={{ gridTemplateColumns: '140px 1fr 60px 1fr 60px' }}>
+        <span>Variable</span>
+        <span className="text-violet-600 dark:text-violet-400 flex items-center gap-1">
+          <Sparkles className="h-3 w-3" /> SHAP
+        </span>
+        <span className="text-right text-violet-600 dark:text-violet-400">Δ</span>
+        <span className="text-teal-600 dark:text-teal-400 flex items-center gap-1">
+          <Sparkles className="h-3 w-3" /> LIME
+        </span>
+        <span className="text-right text-teal-600 dark:text-teal-400">Δ</span>
+      </div>
+
+      {/* Rows */}
+      <div className="space-y-1.5">
+        {ranked.map(({ feature, shap, lime }) => {
+          const sVal = shap?.value;
+          const lVal = lime?.value;
+          // Disagreement marker: opposite signs and both non-trivial
+          const disagree = sVal != null && lVal != null && Math.sign(sVal) !== Math.sign(lVal) && Math.abs(sVal) > 1e-3 && Math.abs(lVal) > 1e-3;
+
+          return (
+            <div
+              key={feature}
+              className="grid items-center gap-2"
+              style={{ gridTemplateColumns: '140px 1fr 60px 1fr 60px' }}
+            >
+              <span className="text-[11px] text-foreground truncate flex items-center gap-1" title={feature}>
+                {disagree && <span className="text-amber-500" title="SHAP et LIME divergent sur cette variable">⚠</span>}
+                {feature}
+              </span>
+              {drawBar(sVal, 'violet')}
+              <span
+                className="text-[11px] tabular-nums font-semibold text-right"
+                style={{ color: sVal == null ? 'var(--muted-foreground)' : sVal > 0 ? '#f97316' : '#60a5fa' }}
+              >
+                {sVal == null ? '—' : `${sVal > 0 ? '+' : ''}${sVal.toFixed(3)}`}
+              </span>
+              {drawBar(lVal, 'teal')}
+              <span
+                className="text-[11px] tabular-nums font-semibold text-right"
+                style={{ color: lVal == null ? 'var(--muted-foreground)' : lVal > 0 ? '#f97316' : '#60a5fa' }}
+              >
+                {lVal == null ? '—' : `${lVal > 0 ? '+' : ''}${lVal.toFixed(3)}`}
+              </span>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function ExplanationPanel({
+  method,
+  shapItems,
+  limeItems,
+}: {
+  method: ExplanationMethod;
+  shapItems?: ShapLocalItem[] | null;
+  limeItems?: LimeLocalItem[] | null;
+}) {
+  const shapNorm = shapItems ? _normShap(shapItems) : [];
+  const limeNorm = limeItems ? _normLime(limeItems) : [];
+
+  if (method === 'shap') {
+    if (shapNorm.length === 0) return <p className="text-xs text-muted-foreground py-6 text-center">SHAP indisponible.</p>;
+    return <SingleMethodPanel items={shapNorm} label="Contributions SHAP" accentClass="text-violet-600 dark:text-violet-400" />;
+  }
+  if (method === 'lime') {
+    if (limeNorm.length === 0) return <p className="text-xs text-muted-foreground py-6 text-center">LIME indisponible.</p>;
+    return <SingleMethodPanel items={limeNorm} label="Contributions LIME" accentClass="text-teal-600 dark:text-teal-400" />;
+  }
+  // both
+  if (shapNorm.length === 0 && limeNorm.length === 0) {
+    return <p className="text-xs text-muted-foreground py-6 text-center">Aucune explication disponible.</p>;
+  }
+  return <ComparisonPanel shapItems={shapNorm} limeItems={limeNorm} />;
+}
+
+const METHOD_LABELS: Record<ExplanationMethod, string> = {
+  shap: 'SHAP',
+  lime: 'LIME',
+  both: 'Les deux',
+};
+
+function MethodToggle({ value, onChange }: { value: ExplanationMethod; onChange: (m: ExplanationMethod) => void }) {
+  const options: ExplanationMethod[] = ['shap', 'lime', 'both'];
+  return (
+    <div className="inline-flex rounded-md border border-border bg-muted/30 p-0.5">
+      {options.map((opt) => {
+        const active = opt === value;
+        return (
+          <button
+            key={opt}
+            type="button"
+            onClick={() => onChange(opt)}
+            className={`rounded px-2.5 py-1 text-[11px] font-medium transition-colors ${
+              active
+                ? opt === 'shap'
+                  ? 'bg-violet-100 text-violet-700 dark:bg-violet-900/40 dark:text-violet-300'
+                  : opt === 'lime'
+                    ? 'bg-teal-100 text-teal-700 dark:bg-teal-900/40 dark:text-teal-300'
+                    : 'bg-foreground/10 text-foreground'
+                : 'text-muted-foreground hover:text-foreground'
+            }`}
+          >
+            {METHOD_LABELS[opt]}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+function ExplanationModal({
   row,
-  items,
+  shapItems,
+  limeItems,
+  method,
+  onMethodChange,
+  isLoading,
   isClassification,
   onClose,
 }: {
   row: PredictionRow;
-  items: ShapLocalItem[];
+  shapItems?: ShapLocalItem[] | null;
+  limeItems?: LimeLocalItem[] | null;
+  method: ExplanationMethod;
+  onMethodChange: (m: ExplanationMethod) => void;
+  isLoading: boolean;
   isClassification: boolean;
   onClose: () => void;
 }) {
@@ -230,13 +429,15 @@ function ShapModal({
     isClassification && row.score != null ? `Score : ${(row.score * 100).toFixed(1)}%` : null,
   ].filter(Boolean).join('  ·  ');
 
+  const titlePrefix = method === 'shap' ? 'SHAP' : method === 'lime' ? 'LIME' : 'SHAP vs LIME';
+
   return (
     <Modal
       isOpen
       onClose={onClose}
       size="lg"
       icon={<Sparkles className="h-5 w-5" />}
-      title={`Explication SHAP — ligne ${row.rowIndex + 1}`}
+      title={`Explication ${titlePrefix} — ligne ${row.rowIndex + 1}`}
       description={descParts}
       footer={
         <p className="text-[11px] text-muted-foreground">
@@ -248,7 +449,19 @@ function ShapModal({
         </p>
       }
     >
-      <ShapPanel items={items} />
+      <div className="space-y-2">
+        <div className="flex items-center justify-between px-2">
+          <span className="text-[11px] text-muted-foreground">Méthode d'explication</span>
+          <MethodToggle value={method} onChange={onMethodChange} />
+        </div>
+        {isLoading ? (
+          <div className="flex items-center justify-center py-10">
+            <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+          </div>
+        ) : (
+          <ExplanationPanel method={method} shapItems={shapItems} limeItems={limeItems} />
+        )}
+      </div>
     </Modal>
   );
 }
@@ -287,9 +500,13 @@ export function PredictionResultsPage() {
   const [parseError, setParseError] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
   const [page, setPage] = useState(0);
-  const [shapModal, setShapModal] = useState<{ row: PredictionRow; items: ShapLocalItem[] } | null>(null);
-  const [shapCache, setShapCache] = useState<Record<number, ShapLocalItem[]>>({});
-  const [loadingShapRows, setLoadingShapRows] = useState<Set<number>>(new Set());
+
+  // Explanation state — unified cache per row, supports SHAP, LIME or both
+  type ExplanationCacheEntry = { shap?: ShapLocalItem[]; lime?: LimeLocalItem[] };
+  const [explanationCache, setExplanationCache] = useState<Record<number, ExplanationCacheEntry>>({});
+  const [loadingRows, setLoadingRows] = useState<Set<number>>(new Set());
+  const [explainMethod, setExplainMethod] = useState<ExplanationMethod>('shap');
+  const [openModalRow, setOpenModalRow] = useState<PredictionRow | null>(null);
 
   useEffect(() => {
     setParseError(false);
@@ -309,7 +526,36 @@ export function PredictionResultsPage() {
   const isClassification = result?.taskType === 'classification';
   const totalRows = result?.nRows ?? 0;
   const rows = result?.rows ?? [];
-  const hasShap = rows.some((r) => r.shap && r.shap.length > 0) || Object.keys(shapCache).length > 0;
+
+  /** True when at least one explanation (SHAP or LIME, server-provided or cached) exists. */
+  const hasAnyExplanation =
+    rows.some((r) => (r.shap && r.shap.length > 0) || (r.lime && r.lime.length > 0)) ||
+    Object.keys(explanationCache).length > 0;
+
+  /** Returns the cached explanation entry for a row, merged with server-provided fields. */
+  const getRowExplanations = useCallback(
+    (row: PredictionRow): ExplanationCacheEntry => {
+      const cached = explanationCache[row.rowIndex] ?? {};
+      return {
+        shap: cached.shap ?? row.shap ?? undefined,
+        lime: cached.lime ?? row.lime ?? undefined,
+      };
+    },
+    [explanationCache],
+  );
+
+  /** Which methods does the cache+row need before we can render `method`? */
+  const _missingMethods = (entry: ExplanationCacheEntry, method: ExplanationMethod): ExplanationMethod | null => {
+    if (method === 'shap') return entry.shap ? null : 'shap';
+    if (method === 'lime') return entry.lime ? null : 'lime';
+    // both
+    const missingShap = !entry.shap;
+    const missingLime = !entry.lime;
+    if (missingShap && missingLime) return 'both';
+    if (missingShap) return 'shap';
+    if (missingLime) return 'lime';
+    return null;
+  };
 
   const uncertainRows = useMemo(
     () => rows.filter((r) => _confLevel(r.score, result?.thresholdUsed) === 'uncertain'),
@@ -331,38 +577,66 @@ export function PredictionResultsPage() {
   const totalPages = Math.ceil(rows.length / PAGE_SIZE);
   const pageRows = rows.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE);
 
-  const handleExplainRow = useCallback(async (row: PredictionRow) => {
-    if (!id || !result || loadingShapRows.has(row.rowIndex)) return;
+  /**
+   * Fetch the explanations for `row` using `method`, merging into the cache.
+   * No-op when the cache already has every method requested.
+   */
+  const fetchExplanations = useCallback(
+    async (row: PredictionRow, method: ExplanationMethod): Promise<void> => {
+      if (!id || !result) return;
 
-    // If already cached, open modal directly
-    const cached = row.shap ?? shapCache[row.rowIndex];
-    if (cached && cached.length > 0) {
-      setShapModal({ row, items: cached });
-      return;
-    }
+      const entry = getRowExplanations(row);
+      const needed = _missingMethods(entry, method);
+      if (needed === null) return;
 
-    setLoadingShapRows((prev) => new Set(prev).add(row.rowIndex));
-    try {
-      const explained = await predictionService.predictManualWithSavedModelExplain(
-        id,
-        result.modelId,
-        [row.inputData],
-      );
-      const shap = explained.rows[0]?.shap;
-      if (shap && shap.length > 0) {
-        setShapCache((prev) => ({ ...prev, [row.rowIndex]: shap }));
-        setShapModal({ row, items: shap });
-      } else {
-        toast({ title: 'SHAP indisponible pour ce modèle', variant: 'destructive' });
+      setLoadingRows((prev) => new Set(prev).add(row.rowIndex));
+      try {
+        const explained = await predictionService.predictManualWithSavedModelExplain(
+          id,
+          result.modelId,
+          [row.inputData],
+          needed,
+        );
+        const respRow = explained.rows[0];
+        if (!respRow) return;
+
+        const update: ExplanationCacheEntry = {};
+        if (respRow.shap && respRow.shap.length > 0) update.shap = respRow.shap;
+        if (respRow.lime && respRow.lime.length > 0) update.lime = respRow.lime;
+
+        if (!update.shap && !update.lime) {
+          const label = needed === 'shap' ? 'SHAP' : needed === 'lime' ? 'LIME' : 'SHAP/LIME';
+          toast({ title: `${label} indisponible pour ce modèle`, variant: 'destructive' });
+          return;
+        }
+
+        setExplanationCache((prev) => ({
+          ...prev,
+          [row.rowIndex]: { ...(prev[row.rowIndex] ?? {}), ...update },
+        }));
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : 'Impossible de calculer les explications.';
+        console.error('[Expliquer] error:', err);
+        toast({ title: 'Erreur explication', description: msg, variant: 'destructive' });
+      } finally {
+        setLoadingRows((prev) => { const s = new Set(prev); s.delete(row.rowIndex); return s; });
       }
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : 'Impossible de calculer les explications.';
-      console.error('[Expliquer] SHAP error:', err);
-      toast({ title: 'Erreur SHAP', description: msg, variant: 'destructive' });
-    } finally {
-      setLoadingShapRows((prev) => { const s = new Set(prev); s.delete(row.rowIndex); return s; });
+    },
+    [id, result, getRowExplanations, toast],
+  );
+
+  const handleExplainRow = useCallback(async (row: PredictionRow) => {
+    if (!id || !result || loadingRows.has(row.rowIndex)) return;
+    setOpenModalRow(row);
+    await fetchExplanations(row, explainMethod);
+  }, [id, result, loadingRows, fetchExplanations, explainMethod]);
+
+  const handleMethodChange = useCallback(async (m: ExplanationMethod) => {
+    setExplainMethod(m);
+    if (openModalRow) {
+      await fetchExplanations(openModalRow, m);
     }
-  }, [id, result, loadingShapRows, shapCache, toast]);
+  }, [openModalRow, fetchExplanations]);
 
   const handleExportCsv = useCallback(async () => {
     if (!id || !result) return;
@@ -448,9 +722,9 @@ export function PredictionResultsPage() {
                   <span className="text-amber-600 font-medium">seuil {result.thresholdUsed.toFixed(2)}</span>
                 </>
               )}
-              {hasShap && (
+              {hasAnyExplanation && (
                 <Badge variant="outline" className="gap-1 text-xs border-violet-400/50 text-violet-600 dark:text-violet-400">
-                  <Sparkles className="h-3 w-3" /> SHAP
+                  <Sparkles className="h-3 w-3" /> Explicabilité
                 </Badge>
               )}
             </p>
@@ -615,9 +889,13 @@ export function PredictionResultsPage() {
               <CardTitle className="text-sm flex items-center gap-2 flex-wrap">
                 Détail des prédictions
                 <span className="text-[11px] text-muted-foreground font-normal">
-                  · Cliquez sur <span className="text-violet-600 dark:text-violet-400">Expliquer</span> pour obtenir les contributions SHAP par ligne
+                  · Cliquez sur <span className="text-violet-600 dark:text-violet-400">Expliquer</span> pour obtenir les contributions par ligne (SHAP, LIME ou comparaison)
                 </span>
               </CardTitle>
+              <div className="flex items-center gap-2">
+                <span className="text-[11px] text-muted-foreground">Méthode</span>
+                <MethodToggle value={explainMethod} onChange={(m) => setExplainMethod(m)} />
+              </div>
               {result.thresholdUsed !== 0.5 && (
                 <Badge variant="secondary" className="text-xs font-normal">
                   seuil calibré : {result.thresholdUsed.toFixed(2)}
@@ -642,7 +920,7 @@ export function PredictionResultsPage() {
                     ))}
                     <th className="px-3 py-2.5 w-24 text-right font-medium text-muted-foreground">
                       <span className="flex items-center justify-end gap-1">
-                        <Sparkles className="h-3 w-3 text-violet-500" /> SHAP
+                        <Sparkles className="h-3 w-3 text-violet-500" /> Explication
                       </span>
                     </th>
                   </tr>
@@ -650,8 +928,9 @@ export function PredictionResultsPage() {
                 <tbody>
                   {pageRows.map((row) => {
                     const uncertain = isClassification && _confLevel(row.score, result.thresholdUsed) === 'uncertain';
-                    const shapItems = row.shap ?? shapCache[row.rowIndex] ?? null;
-                    const isLoadingShap = loadingShapRows.has(row.rowIndex);
+                    const entry = getRowExplanations(row);
+                    const hasAny = Boolean(entry.shap?.length || entry.lime?.length);
+                    const isLoadingRow = loadingRows.has(row.rowIndex);
                     return (
                       <tr
                         key={row.rowIndex}
@@ -677,17 +956,17 @@ export function PredictionResultsPage() {
                         <td className="px-3 py-2 text-right">
                           <button
                             type="button"
-                            disabled={isLoadingShap}
+                            disabled={isLoadingRow}
                             onClick={() => void handleExplainRow(row)}
                             className={`flex items-center gap-1 rounded border px-2 py-0.5 text-[10px] font-medium transition-colors disabled:opacity-50 ${
-                              shapItems
+                              hasAny
                                 ? 'border-violet-400/50 bg-violet-100 text-violet-700 hover:bg-violet-200 dark:bg-violet-900/40 dark:text-violet-300'
                                 : 'border-violet-300 bg-violet-50 text-violet-700 hover:bg-violet-100 dark:border-violet-700 dark:bg-violet-950/30 dark:text-violet-300'
                             }`}
-                            title={shapItems ? 'Voir les explications SHAP' : 'Calculer les explications SHAP'}
+                            title={hasAny ? 'Voir les explications' : `Calculer (${METHOD_LABELS[explainMethod]})`}
                           >
-                            {isLoadingShap ? <Loader2 className="h-3 w-3 animate-spin" /> : <Zap className="h-3 w-3" />}
-                            {shapItems ? 'SHAP ✓' : 'Expliquer'}
+                            {isLoadingRow ? <Loader2 className="h-3 w-3 animate-spin" /> : <Zap className="h-3 w-3" />}
+                            {hasAny ? `${METHOD_LABELS[explainMethod]} ✓` : 'Expliquer'}
                           </button>
                         </td>
                       </tr>
@@ -733,15 +1012,22 @@ export function PredictionResultsPage() {
         </Card>
       </div>
 
-      {/* SHAP Modal */}
-      {shapModal && (
-        <ShapModal
-          row={shapModal.row}
-          items={shapModal.items}
-          isClassification={isClassification}
-          onClose={() => setShapModal(null)}
-        />
-      )}
+      {/* Explanation Modal — supports SHAP, LIME, or both */}
+      {openModalRow && (() => {
+        const entry = getRowExplanations(openModalRow);
+        return (
+          <ExplanationModal
+            row={openModalRow}
+            shapItems={entry.shap}
+            limeItems={entry.lime}
+            method={explainMethod}
+            onMethodChange={(m) => void handleMethodChange(m)}
+            isLoading={loadingRows.has(openModalRow.rowIndex)}
+            isClassification={isClassification}
+            onClose={() => setOpenModalRow(null)}
+          />
+        );
+      })()}
     </AppLayout>
   );
 }

@@ -1,5 +1,5 @@
 import apiClient from './apiClient';
-import type { ActiveModelInfo, PredictionResponse, SavedModelSummary } from '@/types';
+import type { ActiveModelInfo, ExplanationMethod, PredictionResponse, SavedModelSummary } from '@/types';
 
 const base = (projectId: string) => `/projects/${projectId}/training`;
 
@@ -85,18 +85,21 @@ export const predictionService = {
   },
 
   /**
-   * Run inference with local SHAP explanations (manual rows, saved model).
-   * Each row in the response includes a "shap" key with per-feature contributions.
+   * Run inference with local explanations (manual rows, saved model).
+   *
+   * `method` controls which explainability method runs:
+   *   - 'shap' (default): each row includes a "shap" key
+   *   - 'lime': each row includes a "lime" key
+   *   - 'both': each row includes both keys (side-by-side comparison)
    */
   async predictManualWithSavedModelExplain(
     projectId: string,
     modelId: string | number,
     rows: Record<string, unknown>[],
+    method: ExplanationMethod = 'shap',
   ): Promise<PredictionResponse> {
-    const raw = await apiClient.postJson<Record<string, unknown>>(
-      `${base(projectId)}/models/${encodeURIComponent(String(modelId))}/predict/json/explain`,
-      { rows },
-    );
+    const url = `${base(projectId)}/models/${encodeURIComponent(String(modelId))}/predict/json/explain?method=${encodeURIComponent(method)}`;
+    const raw = await apiClient.postJson<Record<string, unknown>>(url, { rows });
     return _mapPredictionResponse(raw);
   },
 
@@ -238,6 +241,7 @@ function _mapPredictionResponse(raw: Record<string, unknown>): PredictionRespons
       score: row['score'] != null ? (row['score'] as number) : null,
       inputData: (row['input_data'] as Record<string, unknown>) ?? {},
       shap: row['shap'] != null ? (row['shap'] as import('@/types').ShapLocalItem[]) : undefined,
+      lime: row['lime'] != null ? (row['lime'] as import('@/types').LimeLocalItem[]) : undefined,
     };
   });
 
