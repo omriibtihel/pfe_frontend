@@ -1,5 +1,12 @@
 import apiClient from './apiClient';
-import type { ActiveModelInfo, ExplanationMethod, PredictionResponse, SavedModelSummary } from '@/types';
+import type {
+  ActiveModelInfo,
+  CounterfactualResult,
+  ExplanationMethod,
+  FeatureRangesMap,
+  PredictionResponse,
+  SavedModelSummary,
+} from '@/types';
 
 const base = (projectId: string) => `/projects/${projectId}/training`;
 
@@ -126,6 +133,44 @@ export const predictionService = {
       `${base(projectId)}/models/${encodeURIComponent(String(modelId))}/predict/results/export`,
       payload,
     );
+  },
+
+  /**
+   * Fetch per-feature ranges (min/max/mean/std for numeric, categories for
+   * categorical) used to bound interactive counterfactual sliders.
+   */
+  async getFeatureRanges(
+    projectId: string,
+    modelId: string | number,
+  ): Promise<FeatureRangesMap> {
+    const raw = await apiClient.get<Record<string, unknown>>(
+      `${base(projectId)}/models/${encodeURIComponent(String(modelId))}/feature-ranges`,
+    );
+    return (raw['ranges'] as FeatureRangesMap) ?? {};
+  },
+
+  /**
+   * Compute DiCE counterfactuals for a single patient row.
+   *
+   * featuresToVary: original feature names (NOT preprocessed) the user allows
+   * DiCE to change. The backend maps them to preprocessed columns internally.
+   */
+  async computeCounterfactual(
+    projectId: string,
+    modelId: string | number,
+    row: Record<string, unknown>,
+    featuresToVary: string[],
+    nCounterfactuals = 3,
+  ): Promise<CounterfactualResult> {
+    const raw = await apiClient.postJson<Record<string, unknown>>(
+      `${base(projectId)}/models/${encodeURIComponent(String(modelId))}/predict/json/counterfactual`,
+      {
+        row,
+        features_to_vary: featuresToVary,
+        n_counterfactuals: nCounterfactuals,
+      },
+    );
+    return _mapCounterfactualResult(raw);
   },
 
   /**
@@ -257,6 +302,7 @@ function _mapPredictionResponse(raw: Record<string, unknown>): PredictionRespons
     featureCountReceived: raw['feature_count_received'] as number,
     featureCountExpected: raw['feature_count_expected'] as number | null,
     featureNamesExpected: (raw['feature_names_expected'] as string[]) ?? [],
+    topFeatures: (raw['top_features'] as string[]) ?? [],
     thresholdUsed: (raw['threshold_used'] as number) ?? 0.5,
     rows,
     summary: {
@@ -268,6 +314,25 @@ function _mapPredictionResponse(raw: Record<string, unknown>): PredictionRespons
       max: summary['max'] as number | undefined,
       std: summary['std'] as number | undefined,
     },
+  };
+}
+
+function _mapCounterfactualResult(raw: Record<string, unknown>): CounterfactualResult {
+  const rawItems = raw['counterfactual'] as Array<Record<string, unknown>> | null;
+  return {
+    model_id: raw['model_id'] as number,
+    task_type: raw['task_type'] as string,
+    original_prediction: raw['original_prediction'],
+    original_score: raw['original_score'] as number | null,
+    counterfactual: rawItems
+      ? rawItems.map((item) => ({
+          feature: item['feature'] as string,
+          original_value: item['original_value'] as number | null,
+          suggested_value: item['suggested_value'] as number | null,
+          delta: item['delta'] as number | null,
+        }))
+      : null,
+    message: raw['message'] as string | null,
   };
 }
 

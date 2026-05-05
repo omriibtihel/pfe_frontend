@@ -162,6 +162,33 @@ const en = {
     fr: "Français",
     en: "English",
   },
+
+  predictionReport: {
+    button: "Generate report",
+    title: "Explanatory report",
+    generating: "Generating…",
+    disclaimerBanner:
+      "Auto-generated report. Not medical advice. Discuss with a healthcare professional.",
+    sections: {
+      prediction: "Prediction",
+      summary: "Summary",
+      keyFactors: "Key factors",
+      context: "Context",
+      limitations: "Model limitations",
+      nextSteps: "Next steps",
+    },
+    factor: {
+      value: "Value",
+      normalRange: "normal range",
+    },
+    confidence: "confidence",
+    download: "Download PDF",
+    downloading: "Preparing…",
+    cached: "Cached response",
+    errors: {
+      stream: "Report generation failed.",
+    },
+  },
 } as const;
 
 export default en;

@@ -103,6 +103,8 @@ export interface PredictionResponse {
   featureCountReceived: number;
   featureCountExpected: number | null;
   featureNamesExpected: string[];
+  /** Top-K most informative original feature names (from SHAP / fallback alphabetical), used for the inline "Variables clés du modèle" column. */
+  topFeatures: string[];
   thresholdUsed: number;
   rows: PredictionRow[];
   summary: PredictionSummary;
@@ -118,6 +120,44 @@ export interface PredictionInput {
   mode: 'manual' | 'file';
   data: Record<string, unknown>[] | File;
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Counterfactual explanations
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** One changed feature in a DiCE counterfactual explanation. */
+export interface CounterfactualItem {
+  feature: string;
+  original_value: number | null;
+  suggested_value: number | null;
+  delta: number | null;
+}
+
+/** Full response from POST .../predict/json/counterfactual. */
+export interface CounterfactualResult {
+  model_id: number;
+  task_type: string;
+  original_prediction: unknown;
+  original_score: number | null;
+  /** List of changed features sorted by |delta| descending, or null when no flip was found. */
+  counterfactual: CounterfactualItem[] | null;
+  /** Human-readable fallback when counterfactual is null. */
+  message: string | null;
+}
+
+/** Per-feature range used to bound an interactive slider (GET .../feature-ranges). */
+export interface FeatureRange {
+  type: 'numeric' | 'categorical' | 'unknown';
+  /** Numeric only */
+  min?: number;
+  max?: number;
+  mean?: number;
+  std?: number;
+  /** Categorical only */
+  categories?: string[];
+}
+
+export type FeatureRangesMap = Record<string, FeatureRange>;
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Legacy types kept for backward compatibility (previously used by mock)

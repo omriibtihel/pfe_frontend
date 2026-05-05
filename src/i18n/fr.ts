@@ -162,6 +162,33 @@ const fr = {
     fr: "Français",
     en: "English",
   },
+
+  predictionReport: {
+    button: "Générer le rapport",
+    title: "Rapport explicatif",
+    generating: "Génération en cours…",
+    disclaimerBanner:
+      "Rapport généré automatiquement. Ne constitue pas un avis médical. À discuter avec un professionnel de santé.",
+    sections: {
+      prediction: "Prédiction",
+      summary: "Résumé",
+      keyFactors: "Facteurs clés",
+      context: "Contexte",
+      limitations: "Limites du modèle",
+      nextSteps: "À retenir",
+    },
+    factor: {
+      value: "Valeur",
+      normalRange: "plage normale",
+    },
+    confidence: "confiance",
+    download: "Télécharger PDF",
+    downloading: "Préparation…",
+    cached: "Réponse en cache",
+    errors: {
+      stream: "Échec de la génération du rapport.",
+    },
+  },
 } as const;
 
 export default fr;
