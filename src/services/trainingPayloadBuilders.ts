@@ -8,6 +8,8 @@ import type {
   TrainingThresholdStrategy,
   ModelHyperparams,
 } from "@/types";
+import { serializeHpSpec } from "@/services/training/hpSerializer";
+import type { ModelHyperparamSpec } from "@/types/training/hyperparams";
 import {
   DEFAULT_TRAINING_BALANCING,
   DEFAULT_TRAINING_PREPROCESSING,
@@ -43,7 +45,7 @@ export type TrainingStartPayload = {
   metrics: string[];
   positiveLabel?: string | number | null;
   preprocessing: TrainingPreprocessingConfig;
-  modelHyperparams: ModelHyperparams;
+  modelHyperparams: Record<string, Record<string, unknown>>;
   customCode: string;
   featureEngineering: FeatureEngineeringConfig;
 };
@@ -89,23 +91,19 @@ function clonePreprocessing(preprocessing: TrainingPreprocessingConfig | null | 
   return { defaults, columns };
 }
 
-function cloneModelHyperparams(modelHyperparams: ModelHyperparams | null | undefined): ModelHyperparams {
+function cloneModelHyperparams(modelHyperparams: ModelHyperparams | null | undefined): Record<string, Record<string, unknown>> {
   const src = modelHyperparams ?? {};
-  const out: ModelHyperparams = {};
+  const out: Record<string, Record<string, unknown>> = {};
   for (const [model, fields] of Object.entries(src)) {
     const modelKey = String(model ?? "").trim();
     if (!modelKey || !fields || typeof fields !== "object") continue;
-    const clonedFields: Record<string, string | number | boolean | null | Array<string | number | boolean | null>> = {};
+    const serializedFields: Record<string, unknown> = {};
     for (const [field, value] of Object.entries(fields)) {
       const fieldKey = String(field ?? "").trim();
       if (!fieldKey) continue;
-      if (Array.isArray(value)) {
-        clonedFields[fieldKey] = [...value] as Array<string | number | boolean | null>;
-      } else {
-        clonedFields[fieldKey] = (value ?? null) as string | number | boolean | null;
-      }
+      serializedFields[fieldKey] = serializeHpSpec(value as unknown as ModelHyperparamSpec);
     }
-    out[modelKey] = clonedFields;
+    out[modelKey] = serializedFields;
   }
   return out;
 }

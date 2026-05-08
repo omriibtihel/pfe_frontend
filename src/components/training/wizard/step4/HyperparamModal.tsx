@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { Info } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
@@ -7,6 +7,7 @@ import { Modal } from "@/components/ui/modal";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { MedHelp } from "@/components/ui/med-help";
 import type {
+  HpRange,
   ModelHyperparamScalar,
   ModelHyperparamValue,
   TrainingConfig,
@@ -20,6 +21,8 @@ import {
   parseFieldValue,
   FRIENDLY_LABEL,
 } from "./modelHpHelpers";
+import { HpChipsInput } from "./HpChipsInput";
+import { HpRangeInput } from "./HpRangeInput";
 
 export interface HyperparamModalProps {
   isOpen: boolean;
@@ -34,6 +37,22 @@ export interface HyperparamModalProps {
   onSetField: (modelKey: string, fieldName: string, value: ModelHyperparamValue | undefined) => void;
 }
 
+// Key: `${modelKey}::${fieldName}`
+type CustomFieldsState = Record<string, boolean>;
+
+// Safe cast helpers — at runtime HpRange/HpGrid objects can be stored in modelHyperparams
+// even though the TypeScript type says ModelHyperparamValue.
+function asRangeOrNull(v: ModelHyperparamValue | undefined): HpRange | null {
+  const obj = v as unknown as { kind?: string };
+  return obj?.kind === "range" ? (v as unknown as HpRange) : null;
+}
+
+function storedIsRange(v: ModelHyperparamValue | undefined): boolean {
+  return asRangeOrNull(v) !== null;
+}
+
+const NUMERIC_FOR_RANGE = new Set(["int", "int_or_none", "float", "float_or_enum"]);
+
 export function HyperparamModal({
   isOpen,
   onClose,
@@ -47,9 +66,54 @@ export function HyperparamModal({
   onSetField,
 }: HyperparamModalProps) {
   const isSearchActive = (searchType ?? "none") !== "none";
+  const isGridSearch = searchType === "grid";
+  const isRandomSearch = searchType === "random" || searchType === "halving_random";
   const searchTypeLabel =
     searchType === "grid" ? "GridSearch" :
     searchType === "random" ? "Random Search" : "Successive Halving";
+
+  // Per-field custom-mode toggle state (keyed as `modelKey::fieldName`)
+  const [customFields, setCustomFields] = useState<CustomFieldsState>({});
+
+  const customKey = (fieldName: string) => `${modelKey}::${fieldName}`;
+
+  const isFieldCustom = (fieldName: string, rawValue: ModelHyperparamValue | undefined): boolean => {
+    const explicit = customFields[customKey(fieldName)];
+    if (explicit !== undefined) return explicit;
+    // Infer from stored value structure
+    if (isGridSearch && Array.isArray(rawValue)) return true;
+    if (isRandomSearch && (Array.isArray(rawValue) || storedIsRange(rawValue))) return true;
+    return false;
+  };
+
+  const handleSetDefault = (fieldName: string) => {
+    setCustomFields((prev) => ({ ...prev, [customKey(fieldName)]: false }));
+    onSetField(modelKey, fieldName, undefined);
+  };
+
+  // Chips custom (GridSearch numeric, Random enum)
+  const handleSetCustomChips = (
+    fieldName: string,
+    rawValue: ModelHyperparamValue | undefined,
+    initChips: ModelHyperparamScalar[],
+  ) => {
+    setCustomFields((prev) => ({ ...prev, [customKey(fieldName)]: true }));
+    if (!Array.isArray(rawValue)) {
+      onSetField(modelKey, fieldName, initChips);
+    }
+  };
+
+  // Range custom (Random/Halving numeric)
+  const handleSetCustomRange = (
+    fieldName: string,
+    rawValue: ModelHyperparamValue | undefined,
+    initRange: HpRange,
+  ) => {
+    setCustomFields((prev) => ({ ...prev, [customKey(fieldName)]: true }));
+    if (!storedIsRange(rawValue)) {
+      onSetField(modelKey, fieldName, initRange as unknown as ModelHyperparamValue);
+    }
+  };
 
   const activeModelFields = useMemo(
     () =>
@@ -60,6 +124,20 @@ export function HyperparamModal({
       }),
     [fieldSchemas, taskType]
   );
+
+  const infoText = isGridSearch
+    ? "Utilisez \"Personnalisé\" pour définir les valeurs exactes à explorer. Laissez sur \"Défaut\" pour utiliser la grille optimisée du backend."
+    : isRandomSearch
+    ? "Utilisez \"Personnalisé\" pour définir un intervalle [Min, Max] sur les paramètres numériques, ou une liste de valeurs sur les paramètres énumérés."
+    : "Les valeurs par défaut sont optimisées pour la plupart des cas médicaux. Ne modifiez que si vous avez une raison spécifique.";
+
+  const modalDescription = isGridSearch
+    ? "En mode GridSearch, chaque paramètre peut utiliser la grille par défaut du backend ou une liste personnalisée."
+    : isRandomSearch
+    ? `En mode ${searchTypeLabel}, chaque paramètre peut utiliser la distribution par défaut du backend ou un intervalle personnalisé.`
+    : modelSelected
+    ? "Modifiez les hyperparamètres du modèle sélectionné."
+    : "Modèle non sélectionné : les valeurs seront conservées mais ignorées tant que le modèle n'est pas coché.";
 
   return (
     <Modal
@@ -74,18 +152,12 @@ export function HyperparamModal({
           </Badge>
           {isSearchActive && (
             <Badge variant="outline" className="text-[10px] border-amber-300 text-amber-600 dark:text-amber-400">
-              Lecture seule — mode {searchTypeLabel}
+              Mode {searchTypeLabel}
             </Badge>
           )}
         </span>
       }
-      description={
-        isSearchActive
-          ? `En mode ${searchTypeLabel}, les HP sont explorés automatiquement par le backend. Repassez en mode Aucune pour fixer des valeurs.`
-          : modelSelected
-          ? "Modifiez les hyperparamètres du modèle sélectionné."
-          : "Modèle non sélectionné : les valeurs seront conservées mais ignorées tant que le modèle n'est pas coché."
-      }
+      description={modalDescription}
     >
       {!activeModelFields.length ? (
         <div className="rounded-lg border border-border/60 p-3 text-sm text-muted-foreground">
@@ -95,8 +167,9 @@ export function HyperparamModal({
         <div className="space-y-3">
           <div className="rounded-lg border border-sky-200/50 bg-sky-50/40 dark:bg-sky-950/20 p-2.5 text-[11px] text-sky-700 dark:text-sky-400 flex gap-2">
             <Info className="h-3.5 w-3.5 shrink-0 mt-0.5 text-sky-500" />
-            <span>Les valeurs par défaut sont optimisées pour la plupart des cas médicaux. Ne modifiez que si vous avez une raison spécifique.</span>
+            <span>{infoText}</span>
           </div>
+
           {activeModelFields.map(([fieldName, fieldSchema]) => {
             const rawModelValue = modelHyperparams[modelKey]?.[fieldName];
             const displayValue = toDisplayText(rawModelValue, fieldSchema.default);
@@ -107,6 +180,8 @@ export function HyperparamModal({
 
             const isEnumSelect = fieldType === "enum";
             const isEnumOrNullSelect = fieldType === "enum_or_null";
+            const isEnumType = isEnumSelect || isEnumOrNullSelect;
+            const isNumericRange = NUMERIC_FOR_RANGE.has(fieldType);
 
             const enumOrNullValue =
               rawModelValue === null || rawModelValue === undefined
@@ -127,6 +202,100 @@ export function HyperparamModal({
             })();
 
             const displayLabel = FRIENDLY_LABEL[fieldName] ?? fieldName;
+            const isCustom = isFieldCustom(fieldName, rawModelValue);
+
+            // Chips for grid (numeric) and random (enum)
+            const currentChips = Array.isArray(rawModelValue)
+              ? (rawModelValue as ModelHyperparamScalar[])
+              : (gridValues as ModelHyperparamScalar[]);
+
+            // Range extracted from stored value (random numeric custom)
+            const rangeValue = asRangeOrNull(rawModelValue);
+
+            // Default init range for random mode (respect schema bounds)
+            const schemaMin =
+              typeof fieldSchema.min === "number" ? fieldSchema.min :
+              typeof fieldSchema.ge === "number" ? fieldSchema.ge :
+              typeof fieldSchema.gt === "number" ? fieldSchema.gt + (fieldType.startsWith("int") ? 1 : 0.001) :
+              undefined;
+            const schemaMax =
+              typeof fieldSchema.max === "number" ? fieldSchema.max :
+              typeof fieldSchema.le === "number" ? fieldSchema.le :
+              typeof fieldSchema.lt === "number" ? fieldSchema.lt - (fieldType.startsWith("int") ? 1 : 0.001) :
+              undefined;
+            const initRange: HpRange = {
+              kind: "range",
+              min: typeof schemaMin === "number" ? schemaMin : (fieldType.startsWith("int") ? 1 : 0.001),
+              max: typeof schemaMax === "number" ? schemaMax : (fieldType.startsWith("int") ? 100 : 10),
+            };
+
+            // Toggle shown for: GridSearch non-enum, OR any RandomSearch field
+            const showToggle = (isGridSearch && !isEnumType) || isRandomSearch;
+
+            const onClickCustom = isRandomSearch && isNumericRange
+              ? () => handleSetCustomRange(fieldName, rawModelValue, initRange)
+              : () => handleSetCustomChips(
+                  fieldName,
+                  rawModelValue,
+                  hasGridValues ? (gridValues as ModelHyperparamScalar[]) : [],
+                );
+
+            const ModeToggle = showToggle ? (
+              <div className="flex rounded border border-border/60 overflow-hidden w-fit">
+                <button
+                  type="button"
+                  onClick={() => handleSetDefault(fieldName)}
+                  className={cn(
+                    "px-2 py-0.5 text-[11px] transition-colors",
+                    !isCustom
+                      ? "bg-muted text-foreground font-medium"
+                      : "text-muted-foreground hover:bg-muted/50",
+                  )}
+                >
+                  Défaut
+                </button>
+                <button
+                  type="button"
+                  onClick={onClickCustom}
+                  className={cn(
+                    "px-2 py-0.5 text-[11px] border-l border-border/60 transition-colors",
+                    isCustom
+                      ? "bg-muted text-foreground font-medium"
+                      : "text-muted-foreground hover:bg-muted/50",
+                  )}
+                >
+                  Personnalisé
+                </button>
+              </div>
+            ) : null;
+
+            // ── Read-only chips (shown in Défaut mode when gridValues exist) ──
+            const ReadOnlyChips = (msg: string) => (
+              <div className="space-y-1.5">
+                <div className="flex flex-wrap gap-1.5">
+                  {gridValues.map((gv) => {
+                    const key = gridValKey(gv);
+                    const label = gv === null ? "∞" : String(gv);
+                    return (
+                      <span
+                        key={key}
+                        className="px-2 py-0.5 rounded border text-xs font-mono bg-muted/40 text-muted-foreground border-border/50 cursor-default select-none"
+                      >
+                        {label}
+                      </span>
+                    );
+                  })}
+                </div>
+                <p className="text-[10px] text-muted-foreground italic">{msg}</p>
+              </div>
+            );
+
+            // ── Default-mode placeholder (no gridValues) ──────────────────────
+            const DefaultPlaceholder = (msg: string) => (
+              <p className="text-[11px] text-muted-foreground italic rounded-md bg-muted/30 px-2 py-1.5">
+                {msg}
+              </p>
+            );
 
             return (
               <div key={`${modelKey}-${fieldName}`} className="space-y-1">
@@ -139,46 +308,70 @@ export function HyperparamModal({
                       </MedHelp>
                     )}
                   </div>
-                  <span className="text-[11px] text-muted-foreground">
-                    Défaut : {String(fieldSchema.default ?? "—")}
-                  </span>
+                  <div className="flex items-center gap-2">
+                    {ModeToggle}
+                    <span className="text-[11px] text-muted-foreground">
+                      Défaut : {String(fieldSchema.default ?? "—")}
+                    </span>
+                  </div>
                 </div>
 
+                {/* ── enum (simple Select) ─────────────────────────────────── */}
                 {isEnumSelect ? (
-                  <Select
-                    value={String((rawModelValue as ModelHyperparamScalar) ?? fieldSchema.default ?? "")}
-                    onValueChange={(next) => onSetField(modelKey, fieldName, next)}
-                  >
-                    <SelectTrigger className="h-8 text-xs">
-                      <SelectValue placeholder="Choisir..." />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {enumOptions.map((opt) => (
-                        <SelectItem key={`${modelKey}-${fieldName}-${opt}`} value={String(opt)}>
-                          {String(opt)}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                  isRandomSearch && isCustom ? (
+                    <HpChipsInput
+                      chips={Array.isArray(rawModelValue) ? (rawModelValue as ModelHyperparamScalar[]) : []}
+                      fieldSchema={fieldSchema}
+                      onChange={(vals) => onSetField(modelKey, fieldName, vals)}
+                    />
+                  ) : (
+                    <Select
+                      value={String((rawModelValue as ModelHyperparamScalar) ?? fieldSchema.default ?? "")}
+                      onValueChange={(next) => onSetField(modelKey, fieldName, next)}
+                    >
+                      <SelectTrigger className="h-8 text-xs">
+                        <SelectValue placeholder="Choisir..." />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {enumOptions.map((opt) => (
+                          <SelectItem key={`${modelKey}-${fieldName}-${opt}`} value={String(opt)}>
+                            {String(opt)}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  )
+
+                /* ── enum_or_null Select ─────────────────────────────────────── */
                 ) : isEnumOrNullSelect ? (
-                  <Select value={enumOrNullValue} onValueChange={handleEnumOrNull}>
-                    <SelectTrigger className="h-8 text-xs">
-                      <SelectValue placeholder="Choisir..." />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="null">
-                        <span className="text-muted-foreground italic">null — désactivé</span>
-                      </SelectItem>
-                      {enumOptions.map((opt) => (
-                        <SelectItem key={`${modelKey}-${fieldName}-${opt}`} value={String(opt)}>
-                          {String(opt)}
-                          {String(opt) === String(fieldSchema.default) && (
-                            <span className="ml-1.5 text-[10px] text-muted-foreground">(défaut)</span>
-                          )}
+                  isRandomSearch && isCustom ? (
+                    <HpChipsInput
+                      chips={Array.isArray(rawModelValue) ? (rawModelValue as ModelHyperparamScalar[]) : []}
+                      fieldSchema={fieldSchema}
+                      onChange={(vals) => onSetField(modelKey, fieldName, vals)}
+                    />
+                  ) : (
+                    <Select value={enumOrNullValue} onValueChange={handleEnumOrNull}>
+                      <SelectTrigger className="h-8 text-xs">
+                        <SelectValue placeholder="Choisir..." />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="null">
+                          <span className="text-muted-foreground italic">null — désactivé</span>
                         </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                        {enumOptions.map((opt) => (
+                          <SelectItem key={`${modelKey}-${fieldName}-${opt}`} value={String(opt)}>
+                            {String(opt)}
+                            {String(opt) === String(fieldSchema.default) && (
+                              <span className="ml-1.5 text-[10px] text-muted-foreground">(défaut)</span>
+                            )}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  )
+
+                /* ── Fixed mode (none): Select from grid_values ──────────────── */
                 ) : hasGridValues && !isSearchActive ? (
                   <Select
                     value={singleSelectValue}
@@ -207,43 +400,61 @@ export function HyperparamModal({
                       })}
                     </SelectContent>
                   </Select>
+
+                /* ── Search active + has grid_values ─────────────────────────── */
                 ) : hasGridValues && isSearchActive ? (
-                  <div className="space-y-1.5">
-                    <div className="flex flex-wrap gap-1.5">
-                      {gridValues.map((gv) => {
-                        const key = gridValKey(gv);
-                        const label = gv === null ? "∞" : String(gv);
-                        return (
-                          <span
-                            key={key}
-                            className="px-2 py-0.5 rounded border text-xs font-mono bg-muted/40 text-muted-foreground border-border/50 cursor-default select-none"
-                          >
-                            {label}
-                          </span>
-                        );
-                      })}
-                    </div>
-                    <p className="text-[10px] text-muted-foreground italic">
-                      {searchType === "grid"
-                        ? "Grille du backend — non modifiable en mode GridSearch"
-                        : `Distribution continue — non modifiable en mode ${searchType === "halving_random" ? "Successive Halving" : "Random Search"}`}
-                    </p>
-                  </div>
+                  isGridSearch && isCustom ? (
+                    <HpChipsInput
+                      chips={currentChips}
+                      fieldSchema={fieldSchema}
+                      onChange={(vals) => onSetField(modelKey, fieldName, vals)}
+                    />
+                  ) : isGridSearch ? (
+                    ReadOnlyChips("Grille du backend — basculez sur \"Personnalisé\" pour modifier")
+                  ) : isRandomSearch && isCustom ? (
+                    <HpRangeInput
+                      value={rangeValue}
+                      fieldType={fieldType}
+                      fieldSchema={fieldSchema}
+                      onChange={(r) => onSetField(modelKey, fieldName, r as unknown as ModelHyperparamValue)}
+                    />
+                  ) : (
+                    ReadOnlyChips("Valeurs de référence — basculez sur \"Personnalisé\" pour définir un intervalle")
+                  )
+
+                /* ── No grid_values (plain Input / chips / range) ────────────── */
                 ) : (
-                  <Input
-                    type={fieldType === "int" || fieldType === "float" ? "number" : "text"}
-                    value={displayValue}
-                    disabled={isSearchActive}
-                    onChange={(e) =>
-                      !isSearchActive && onSetField(
-                        modelKey,
-                        fieldName,
-                        parseFieldValue(e.target.value, fieldSchema, false),
-                      )
-                    }
-                    className={cn("h-8 text-xs", isSearchActive && "opacity-50 cursor-not-allowed")}
-                    placeholder={`ex: ${String(fieldSchema.default ?? "")}`}
-                  />
+                  isGridSearch && isCustom ? (
+                    <HpChipsInput
+                      chips={Array.isArray(rawModelValue) ? (rawModelValue as ModelHyperparamScalar[]) : []}
+                      fieldSchema={fieldSchema}
+                      onChange={(vals) => onSetField(modelKey, fieldName, vals)}
+                    />
+                  ) : isRandomSearch && isCustom ? (
+                    <HpRangeInput
+                      value={rangeValue}
+                      fieldType={fieldType}
+                      fieldSchema={fieldSchema}
+                      onChange={(r) => onSetField(modelKey, fieldName, r as unknown as ModelHyperparamValue)}
+                    />
+                  ) : isRandomSearch ? (
+                    DefaultPlaceholder("Distribution automatique du backend — basculez sur \"Personnalisé\" pour un intervalle personnalisé")
+                  ) : (
+                    <Input
+                      type={fieldType === "int" || fieldType === "float" ? "number" : "text"}
+                      value={displayValue}
+                      disabled={isSearchActive}
+                      onChange={(e) =>
+                        !isSearchActive && onSetField(
+                          modelKey,
+                          fieldName,
+                          parseFieldValue(e.target.value, fieldSchema, false),
+                        )
+                      }
+                      className={cn("h-8 text-xs", isSearchActive && "opacity-50 cursor-not-allowed")}
+                      placeholder={`ex: ${String(fieldSchema.default ?? "")}`}
+                    />
+                  )
                 )}
 
                 {!!fieldSchema.help && (

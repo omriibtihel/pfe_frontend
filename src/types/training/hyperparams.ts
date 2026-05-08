@@ -26,3 +26,22 @@ export interface ClassWeightModelCapability {
   default: string | null;
   help: string;
 }
+
+/** Discrete list of candidate values for GridSearch. */
+export interface HpGrid {
+  kind: "grid";
+  values: ModelHyperparamScalar[];
+}
+
+/** Continuous interval for RandomSearch / HalvingRandom. */
+export interface HpRange {
+  kind: "range";
+  min: number;
+  max: number;
+  distribution?: "uniform" | "log_uniform";
+  /** For int_or_none fields: also sample None (no upper limit). */
+  includeNull?: boolean;
+}
+
+/** Union of all HP value representations used in search mode. */
+export type ModelHyperparamSpec = ModelHyperparamScalar | HpGrid | HpRange;

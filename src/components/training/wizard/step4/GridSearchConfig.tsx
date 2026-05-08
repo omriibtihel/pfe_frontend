@@ -1,9 +1,8 @@
 import { useMemo, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
-import { AlertTriangle, Grid3X3 } from "lucide-react";
+import { AlertTriangle, Grid3X3, Info } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -17,21 +16,15 @@ export interface GridSearchConfigProps {
     TrainingConfig,
     "searchType" | "taskType" | "gridCvFolds" | "nIterRandomSearch" | "gridScoring" | "models"
   >;
-  hasAnyCustomHp: boolean;
+  /** Accepted but unused — kept so callers don't need to be updated. */
+  hasAnyCustomHp?: boolean;
   onConfigChange: (updates: Partial<TrainingConfig>) => void;
 }
 
-export function GridSearchConfig({ config, hasAnyCustomHp, onConfigChange }: GridSearchConfigProps) {
+export function GridSearchConfig({ config, onConfigChange }: GridSearchConfigProps) {
   const [cvFoldsError, setCvFoldsError] = useState<string | null>(null);
 
   const isSearchActive = (config.searchType ?? "none") !== "none";
-  const isRandomOrHalvingMode = config.searchType === "random" || config.searchType === "halving_random";
-  const searchTypeLabel =
-    config.searchType === "grid" ? "GridSearch" :
-    config.searchType === "random" ? "Random Search" : "Successive Halving";
-  const hasConflict = hasAnyCustomHp && isSearchActive;
-
-  const clearAllCustomHp = () => onConfigChange({ modelHyperparams: {} });
 
   const scoringOptions = useMemo(
     () =>
@@ -50,6 +43,11 @@ export function GridSearchConfig({ config, hasAnyCustomHp, onConfigChange }: Gri
     setCvFoldsError(null);
     onConfigChange({ gridCvFolds: n });
   };
+
+  const searchHint =
+    config.searchType === "grid"
+      ? "Mode grille : chaque paramètre peut utiliser les valeurs par défaut ou une liste personnalisée."
+      : "Mode aléatoire : chaque paramètre peut utiliser la distribution par défaut ou un intervalle [min, max] personnalisé.";
 
   return (
     <Card className="glass-premium shadow-card">
@@ -105,37 +103,10 @@ export function GridSearchConfig({ config, hasAnyCustomHp, onConfigChange }: Gri
           </Select>
         </div>
 
-        {hasConflict && (
-          <div className="rounded-lg border border-amber-300/60 bg-amber-50/60 dark:bg-amber-950/20 p-3">
-            <div className="flex items-start gap-2 text-amber-800 dark:text-amber-400">
-              <AlertTriangle className="h-3.5 w-3.5 shrink-0 mt-0.5" />
-              <div className="space-y-1.5">
-                <p className="text-xs font-semibold">Configuration HP personnalisée ignorée</p>
-                <p className="text-[11px] text-amber-700 dark:text-amber-500">
-                  Le mode <strong>{searchTypeLabel}</strong> utilise {isRandomOrHalvingMode ? "des distributions continues définies par le backend" : "la grille du backend"} — vos réglages HP personnalisés ne seront pas appliqués. Choisissez l'une des deux options :
-                </p>
-                <div className="flex flex-wrap gap-2 pt-0.5">
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant="outline"
-                    className="h-6 text-[11px] border-amber-400/60 text-amber-800 hover:bg-amber-100/80 dark:text-amber-400 dark:hover:bg-amber-900/30"
-                    onClick={clearAllCustomHp}
-                  >
-                    Effacer la config HP et rester en mode {searchTypeLabel}
-                  </Button>
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant="outline"
-                    className="h-6 text-[11px] border-amber-400/60 text-amber-800 hover:bg-amber-100/80 dark:text-amber-400 dark:hover:bg-amber-900/30"
-                    onClick={() => onConfigChange({ searchType: "none", useGridSearch: false })}
-                  >
-                    Revenir au mode Aucune (garder mes valeurs fixes)
-                  </Button>
-                </div>
-              </div>
-            </div>
+        {isSearchActive && (
+          <div className="flex items-start gap-1.5 text-[11px] text-muted-foreground">
+            <Info className="h-3 w-3 shrink-0 mt-0.5" />
+            <span>{searchHint}</span>
           </div>
         )}
 

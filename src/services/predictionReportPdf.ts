@@ -16,6 +16,15 @@ import type { ReportFactor, ReportLang, ReportPrediction } from './predictionRep
 
 // ── Public types ──────────────────────────────────────────────────────────────
 
+export interface PdfChartFactor {
+  label: string;
+  value: string;
+  /** "increase" | "decrease" | "neutral" */
+  direction: string;
+  /** Normalised weight in [0, 1]. */
+  weight: number;
+}
+
 export interface PredictionReportPdfInput {
   prediction: ReportPrediction | null;
   summary: string;
@@ -30,6 +39,10 @@ export interface PredictionReportPdfInput {
   modelVersion?: string | number;
   generatedAt?: Date;
   lang: ReportLang;
+  // Chart data (optional — charts are skipped when absent)
+  scorePct?: number | null;
+  thresholdPct?: number;
+  chartFactors?: PdfChartFactor[];
 }
 
 // ── Localized strings for the PDF chrome ──────────────────────────────────────
@@ -55,6 +68,16 @@ const STRINGS = {
     page: 'Page',
     of: 'sur',
     filenamePrefix: 'rapport_prediction',
+    // Chart strings
+    scoreTitle: "Score de l'analyse",
+    alertLevel: "Niveau d'alerte",
+    aboveAlert: "Au-dessus du niveau d'alerte",
+    belowAlert: "En dessous du niveau d'alerte",
+    factorInfluence: 'Influence des facteurs',
+    reassuring: 'Rassurant',
+    concerning: 'Préoccupant',
+    intro: "Ce rapport vous guide étape par étape pour comprendre l'analyse réalisée.",
+    endOfReport: 'Fin du rapport',
   },
   en: {
     title: 'Predictive analysis report',
@@ -76,6 +99,16 @@ const STRINGS = {
     page: 'Page',
     of: 'of',
     filenamePrefix: 'prediction_report',
+    // Chart strings
+    scoreTitle: 'Analysis score',
+    alertLevel: 'Alert level',
+    aboveAlert: 'Above the alert level',
+    belowAlert: 'Below the alert level',
+    factorInfluence: 'Factor influence',
+    reassuring: 'Reassuring',
+    concerning: 'Concerning',
+    intro: 'This report walks you through the analysis step by step.',
+    endOfReport: 'End of report',
   },
 } as const;
 
@@ -134,18 +167,58 @@ function drawHeader(doc: jsPDF, input: PredictionReportPdfInput, t: typeof STRIN
   const sepY = MARGIN + 12 + meta.length * 4 + 2;
   doc.line(MARGIN, sepY, PAGE_W - MARGIN, sepY);
 
-  return sepY + 6;
+  // Pedagogical intro line
+  doc.setFont('helvetica', 'italic');
+  doc.setFontSize(9);
+  doc.setTextColor(...COLOR_MUTED);
+  doc.text(t.intro, MARGIN, sepY + 5);
+
+  return sepY + 11;
 }
 
-function drawSection(doc: jsPDF, title: string, body: string, cursor: number): number {
-  if (!body) return cursor;
+/**
+ * Numbered badge ahead of a section title so the report reads as a
+ * step-by-step walkthrough. Returns the x-offset where the title text
+ * should start.
+ */
+function drawStepBadge(doc: jsPDF, step: number, cursor: number): number {
+  const badgeR = 3.2;
+  const cx = MARGIN + badgeR;
+  const cy = cursor - 1.6;
+  doc.setFillColor(...COLOR_PRIMARY);
+  doc.circle(cx, cy, badgeR, 'F');
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(8);
+  doc.setTextColor(255, 255, 255);
+  doc.text(String(step), cx, cy + 1.1, { align: 'center' });
+  return MARGIN + badgeR * 2 + 2.5;
+}
 
-  cursor = ensureRoom(doc, cursor, 18);
+function drawSectionHeading(
+  doc: jsPDF,
+  title: string,
+  cursor: number,
+  step?: number,
+): number {
+  const x = step !== undefined ? drawStepBadge(doc, step, cursor) : MARGIN;
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(11);
   doc.setTextColor(...COLOR_PRIMARY);
-  doc.text(title.toUpperCase(), MARGIN, cursor);
-  cursor += 5;
+  doc.text(title.toUpperCase(), x, cursor);
+  return cursor + 5;
+}
+
+function drawSection(
+  doc: jsPDF,
+  title: string,
+  body: string,
+  cursor: number,
+  step?: number,
+): number {
+  if (!body) return cursor;
+
+  cursor = ensureRoom(doc, cursor, 18);
+  cursor = drawSectionHeading(doc, title, cursor, step);
 
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(10);
@@ -153,7 +226,7 @@ function drawSection(doc: jsPDF, title: string, body: string, cursor: number): n
   const lines = doc.splitTextToSize(body, CONTENT_W);
   cursor = ensureRoom(doc, cursor, lines.length * 5 + 4);
   doc.text(lines, MARGIN, cursor);
-  return cursor + lines.length * 5 + 4;
+  return cursor + lines.length * 5 + 6;
 }
 
 function drawPredictionBox(
@@ -161,7 +234,11 @@ function drawPredictionBox(
   pred: ReportPrediction,
   cursor: number,
   t: typeof STRINGS.fr,
+  step?: number,
 ): number {
+  cursor = ensureRoom(doc, cursor, 30);
+  cursor = drawSectionHeading(doc, t.prediction, cursor, step);
+
   const boxH = 18;
   cursor = ensureRoom(doc, cursor, boxH + 4);
   doc.setFillColor(245, 247, 250);
@@ -182,7 +259,7 @@ function drawPredictionBox(
   doc.setTextColor(...COLOR_MUTED);
   doc.text(`${t.confidence}: ${pred.confidence_text}`, MARGIN + 4, cursor + 13);
 
-  return cursor + boxH + 6;
+  return cursor + boxH + 8;
 }
 
 function drawKeyFactors(
@@ -190,15 +267,13 @@ function drawKeyFactors(
   factors: ReportFactor[],
   cursor: number,
   t: typeof STRINGS.fr,
+  step?: number,
 ): number {
   if (!factors.length) return cursor;
 
-  cursor = ensureRoom(doc, cursor, 12);
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(11);
-  doc.setTextColor(...COLOR_PRIMARY);
-  doc.text(t.keyFactors.toUpperCase(), MARGIN, cursor);
-  cursor += 4;
+  cursor = ensureRoom(doc, cursor, 18);
+  cursor = drawSectionHeading(doc, t.keyFactors, cursor, step);
+  cursor -= 1;
 
   autoTable(doc, {
     startY: cursor,
@@ -226,37 +301,66 @@ function drawKeyFactors(
   return (finalY ?? cursor) + 6;
 }
 
-function drawDisclaimerFooter(
+/**
+ * Render the disclaimer once on its own dedicated last page so the
+ * legal notice is impossible to miss but never repeated.
+ */
+function drawFinalDisclaimer(
   doc: jsPDF,
   text: string,
   t: typeof STRINGS.fr,
 ): void {
-  const pageCount = doc.getNumberOfPages();
+  doc.addPage();
   const pageHeight = doc.internal.pageSize.getHeight();
 
+  let cursor = MARGIN + 30;
+
+  // Big centred title
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(20);
+  doc.setTextColor(...COLOR_WARNING_BORDER);
+  doc.text(t.disclaimer.toUpperCase(), PAGE_W / 2, cursor, { align: 'center' });
+  cursor += 14;
+
+  // Warning box around full disclaimer text
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(11);
+  doc.setTextColor(...COLOR_TEXT);
+  const innerW = CONTENT_W - 12;
+  const lines = doc.splitTextToSize(text, innerW);
+  const lineH = 6;
+  const boxH = 14 + lines.length * lineH;
+  const boxY = cursor;
+
+  doc.setFillColor(...COLOR_WARNING_BG);
+  doc.setDrawColor(...COLOR_WARNING_BORDER);
+  doc.setLineWidth(0.6);
+  doc.roundedRect(MARGIN, boxY, CONTENT_W, boxH, 3, 3, 'FD');
+
+  // Optional warning glyph (using basic text — keeps PDF self-contained)
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(14);
+  doc.setTextColor(...COLOR_WARNING_BORDER);
+  doc.text('!', MARGIN + 6, boxY + 10);
+
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(11);
+  doc.setTextColor(...COLOR_TEXT);
+  doc.text(lines, MARGIN + 12, boxY + 9);
+
+  // Bottom strip — date + project for traceability
+  doc.setFont('helvetica', 'italic');
+  doc.setFontSize(8);
+  doc.setTextColor(...COLOR_MUTED);
+  doc.text(t.endOfReport, PAGE_W / 2, pageHeight - MARGIN - 6, { align: 'center' });
+}
+
+function drawPaginationFooter(doc: jsPDF, t: typeof STRINGS.fr): void {
+  const pageCount = doc.getNumberOfPages();
+  const pageHeight = doc.internal.pageSize.getHeight();
   for (let i = 1; i <= pageCount; i++) {
     doc.setPage(i);
-
-    // Disclaimer banner anchored to the bottom of every page so it cannot
-    // be trimmed off by a misaligned print job.
-    doc.setFillColor(...COLOR_WARNING_BG);
-    doc.setDrawColor(...COLOR_WARNING_BORDER);
-    doc.setLineWidth(0.3);
-    const bannerY = pageHeight - MARGIN - 12;
-    doc.roundedRect(MARGIN, bannerY, CONTENT_W, 9, 1, 1, 'FD');
-
-    doc.setFont('helvetica', 'bold');
-    doc.setFontSize(7);
-    doc.setTextColor(...COLOR_WARNING_BORDER);
-    doc.text(t.disclaimer.toUpperCase(), MARGIN + 2, bannerY + 3.5);
-
     doc.setFont('helvetica', 'normal');
-    doc.setFontSize(7);
-    doc.setTextColor(...COLOR_TEXT);
-    const lines = doc.splitTextToSize(text, CONTENT_W - 4);
-    doc.text(lines.slice(0, 2), MARGIN + 2, bannerY + 7);
-
-    // Pagination
     doc.setFontSize(7);
     doc.setTextColor(...COLOR_MUTED);
     doc.text(
@@ -268,6 +372,183 @@ function drawDisclaimerFooter(
   }
 }
 
+// ── Chart helpers ─────────────────────────────────────────────────────────────
+
+type Strings = typeof STRINGS.fr;
+
+// Color constants for chart drawing
+const COLOR_RED:   [number, number, number] = [239, 68,  68];   // red-500
+const COLOR_GREEN: [number, number, number] = [22,  163, 74];   // green-600
+const COLOR_BLUE:  [number, number, number] = [59,  130, 246];  // blue-500
+const COLOR_GREY_BG: [number, number, number] = [229, 231, 235]; // gray-200
+const COLOR_GREY_TEXT: [number, number, number] = [75, 85, 99];  // gray-600
+
+/**
+ * Draw a horizontal progress-bar gauge showing the prediction score.
+ *
+ * Layout (all in mm):
+ *   Full bar   = CONTENT_W wide, 7 mm tall
+ *   Score fill = (scorePct / 100) × CONTENT_W
+ *   Threshold  = a perpendicular tick + label
+ */
+function drawScoreGaugePdf(
+  doc: jsPDF,
+  input: PredictionReportPdfInput,
+  cursor: number,
+  t: Strings,
+  step?: number,
+): number {
+  const { scorePct, thresholdPct = 50, lang } = input;
+  if (scorePct == null) return cursor;
+
+  const needed = 42;
+  cursor = ensureRoom(doc, cursor, needed);
+  cursor = drawSectionHeading(doc, t.scoreTitle, cursor, step);
+  cursor += 2;
+
+  const barH   = 7;
+  const barW   = CONTENT_W;
+  const scoreW = Math.max((scorePct / 100) * barW, 0.5);
+  const threshX = MARGIN + (thresholdPct / 100) * barW;
+  const isConcerning = scorePct > thresholdPct;
+  const fillColor = isConcerning ? COLOR_RED : COLOR_GREEN;
+
+  // Background bar (grey)
+  doc.setFillColor(...COLOR_GREY_BG);
+  doc.setDrawColor(...COLOR_GREY_BG);
+  doc.roundedRect(MARGIN, cursor, barW, barH, 1.5, 1.5, 'F');
+
+  // Score fill
+  doc.setFillColor(...fillColor);
+  doc.setDrawColor(...fillColor);
+  doc.roundedRect(MARGIN, cursor, scoreW, barH, 1.5, 1.5, 'F');
+
+  // Threshold tick (vertical line slightly taller than the bar)
+  doc.setDrawColor(...COLOR_GREY_TEXT);
+  doc.setLineWidth(0.7);
+  doc.line(threshX, cursor - 2, threshX, cursor + barH + 2);
+
+  // 0 % / 100 % endpoint labels
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(7.5);
+  doc.setTextColor(...COLOR_MUTED);
+  doc.text('0%',   MARGIN,          cursor + barH + 4.5);
+  doc.text('100%', MARGIN + barW,   cursor + barH + 4.5, { align: 'right' });
+
+  // Threshold label (centred on the tick, clamped to stay inside the page)
+  const threshLabel = `${t.alertLevel} ${thresholdPct}%`;
+  const labelX = Math.min(Math.max(threshX, MARGIN + 16), MARGIN + barW - 16);
+  doc.setTextColor(...COLOR_GREY_TEXT);
+  doc.text(threshLabel, labelX, cursor + barH + 9, { align: 'center' });
+
+  // Score callout (right side, coloured)
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(13);
+  doc.setTextColor(...fillColor);
+  doc.text(`${scorePct}%`, MARGIN + barW + 5, cursor + barH - 0.5);
+
+  cursor += barH + 13;
+
+  // Caption below the bar
+  doc.setFont('helvetica', 'italic');
+  doc.setFontSize(8.5);
+  doc.setTextColor(...COLOR_GREY_TEXT);
+  const caption = isConcerning
+    ? (lang === 'fr' ? `! ${t.aboveAlert}` : `! ${t.aboveAlert}`)
+    : (lang === 'fr' ? `OK ${t.belowAlert}` : `OK ${t.belowAlert}`);
+  doc.text(caption, MARGIN, cursor);
+  cursor += 7;
+
+  return cursor;
+}
+
+/**
+ * Draw a horizontal bar chart for factor contributions.
+ *
+ * Centre axis at MARGIN + CONTENT_W / 2.
+ * Bars extend left (reassuring, blue) or right (concerning, red).
+ */
+function drawFactorsChartPdf(
+  doc: jsPDF,
+  factors: PdfChartFactor[],
+  cursor: number,
+  lang: ReportLang,
+  t: Strings,
+  step?: number,
+): number {
+  if (factors.length === 0) return cursor;
+
+  const ROW_H     = 8;   // mm per factor row
+  const BAR_HALF  = 48;  // mm — max bar length each side
+  const cx        = MARGIN + CONTENT_W / 2;  // centre x = 105 mm
+  const needed    = 26 + factors.length * ROW_H;
+
+  cursor = ensureRoom(doc, cursor, needed);
+  cursor = drawSectionHeading(doc, t.factorInfluence, cursor, step);
+  cursor += 1;
+
+  // Legend
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(8);
+  doc.setTextColor(...COLOR_BLUE);
+  doc.text(`<- ${t.reassuring}`, cx - 2, cursor, { align: 'right' });
+  doc.setTextColor(...COLOR_RED);
+  doc.text(`${t.concerning} ->`, cx + 2, cursor, { align: 'left' });
+  cursor += 4;
+
+  // Centre axis line
+  doc.setDrawColor(209, 213, 219);
+  doc.setLineWidth(0.25);
+  doc.line(cx, cursor, cx, cursor + factors.length * ROW_H);
+
+  // Factor rows
+  factors.forEach((f, i) => {
+    const rowY = cursor + i * ROW_H;
+    const midY = rowY + ROW_H / 2;
+
+    // Alternating row background
+    if (i % 2 === 0) {
+      doc.setFillColor(249, 250, 251);
+      doc.rect(MARGIN, rowY, CONTENT_W, ROW_H, 'F');
+    }
+
+    // Label (right-aligned, fits left of the left-bar zone)
+    const MAX_LBL = 22;
+    const label = f.label.length > MAX_LBL
+      ? f.label.slice(0, MAX_LBL - 1) + '.'
+      : f.label;
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(8);
+    doc.setTextColor(...COLOR_TEXT);
+    doc.text(label, cx - BAR_HALF - 2, midY + 1, { align: 'right' });
+
+    // Bar
+    const minLen   = f.weight > 0 ? 1 : 0;
+    const barLen   = Math.max(Math.round(f.weight * BAR_HALF * 0.92), minLen);
+    const isConcerning = f.direction === 'increase';
+    const isNeutral    = f.direction === 'neutral';
+    const barColor: [number, number, number] = isNeutral
+      ? [156, 163, 175]
+      : isConcerning ? COLOR_RED : COLOR_BLUE;
+    const barX = isConcerning ? cx : cx - barLen;
+    const barRectH = ROW_H - 3;
+
+    if (barLen > 0) {
+      doc.setFillColor(...barColor);
+      doc.rect(barX, midY - barRectH / 2, barLen, barRectH, 'F');
+    }
+
+    // Value (right of bar zone)
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(7.5);
+    doc.setTextColor(...COLOR_MUTED);
+    doc.text(f.value, cx + BAR_HALF + 3, midY + 1);
+  });
+
+  cursor += factors.length * ROW_H + 6;
+  return cursor;
+}
+
 // ── Public entry point ────────────────────────────────────────────────────────
 
 export function downloadPredictionReportPdf(input: PredictionReportPdfInput): void {
@@ -276,17 +557,37 @@ export function downloadPredictionReportPdf(input: PredictionReportPdfInput): vo
 
   let cursor = drawHeader(doc, input, t);
 
+  // Pedagogical, numbered walkthrough.
+  let step = 1;
+
   if (input.prediction) {
-    cursor = drawPredictionBox(doc, input.prediction, cursor, t);
+    cursor = drawPredictionBox(doc, input.prediction, cursor, t, step++);
+  }
+  if (input.scorePct != null) {
+    cursor = drawScoreGaugePdf(doc, input, cursor, t, step++);
+  }
+  if (input.summary) {
+    cursor = drawSection(doc, t.summary, input.summary, cursor, step++);
+  }
+  if (input.chartFactors && input.chartFactors.length > 0) {
+    cursor = drawFactorsChartPdf(doc, input.chartFactors, cursor, input.lang, t, step++);
+  }
+  if (input.keyFactors.length > 0) {
+    cursor = drawKeyFactors(doc, input.keyFactors, cursor, t, step++);
+  }
+  if (input.context) {
+    cursor = drawSection(doc, t.context, input.context, cursor, step++);
+  }
+  if (input.limitations) {
+    cursor = drawSection(doc, t.limitations, input.limitations, cursor, step++);
+  }
+  if (input.nextSteps) {
+    cursor = drawSection(doc, t.nextSteps, input.nextSteps, cursor, step++);
   }
 
-  cursor = drawSection(doc, t.summary, input.summary, cursor);
-  cursor = drawKeyFactors(doc, input.keyFactors, cursor, t);
-  cursor = drawSection(doc, t.context, input.context, cursor);
-  cursor = drawSection(doc, t.limitations, input.limitations, cursor);
-  cursor = drawSection(doc, t.nextSteps, input.nextSteps, cursor);
-
-  drawDisclaimerFooter(doc, input.disclaimer, t);
+  // Disclaimer rendered once on a dedicated final page.
+  drawFinalDisclaimer(doc, input.disclaimer, t);
+  drawPaginationFooter(doc, t);
 
   const ts = (input.generatedAt ?? new Date())
     .toISOString()

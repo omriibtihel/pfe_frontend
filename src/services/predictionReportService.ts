@@ -38,6 +38,27 @@ export interface ReportFactor {
   direction: string;
   explanation: string;
   normal_range?: string | null;
+  /** Server-derived from glossary normal_range. Never trust LLM for this. */
+  status?: 'abnormal_high' | 'abnormal_low' | 'normal' | 'unknown';
+}
+
+export interface ChartFactor {
+  label: string;
+  value: string;
+  direction: string;
+  /** Normalised absolute weight in [0, 1]. */
+  weight: number;
+  status: string;
+  normal_range: string | null;
+}
+
+export interface ChartData {
+  /** Prediction score in percent (0–100), null for regression. */
+  score_pct: number | null;
+  /** Alert threshold in percent (default 50). */
+  threshold_pct: number;
+  is_classification: boolean;
+  factors: ChartFactor[];
 }
 
 export interface ReportPrediction {
@@ -49,6 +70,8 @@ export interface ReportPrediction {
 export type ReportChunk =
   | { section: 'summary'; content: string }
   | { section: 'prediction'; content: ReportPrediction }
+  | { section: 'risk_level'; content: string }
+  | { section: 'chart_data'; content: ChartData }
   | { section: 'key_factors'; content: ReportFactor[] }
   | { section: 'context'; content: string }
   | { section: 'limitations'; content: string }
