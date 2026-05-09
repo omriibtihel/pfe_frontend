@@ -40,7 +40,7 @@ export function RadarPanel({ radarData, allRadarCols, radarCols }: Props) {
       <div className="rounded-2xl border bg-card overflow-hidden">
         <ChartHeader
           title="Profil des moyennes"
-          subtitle={`${radarData.length} colonnes · valeurs normalisées [0–100]`}
+          subtitle={`${radarData.length} colonnes · min-max normalisées [0–100]`}
         />
         <ResponsiveContainer width="100%" height={420}>
           <RadarChart data={radarData} cx="50%" cy="50%" outerRadius={150}>

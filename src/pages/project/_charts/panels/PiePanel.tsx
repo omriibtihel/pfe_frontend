@@ -31,7 +31,7 @@ export function PiePanel({ chartKind, pieCol, countsOut, pieData, topK, chartLoa
         )}
 
         {!pieCol ? (
-          <EmptyChart icon={<PieIcon className="h-10 w-10 opacity-20" />} message="Aucune colonne catégorielle disponible" />
+          <EmptyChart icon={<PieIcon className="h-10 w-10 opacity-20" />} message="Aucune colonne disponible" />
         ) : !hasData ? (
           <EmptyChart icon={<PieIcon className="h-10 w-10 opacity-20" />} message={chartLoading ? "" : "Aucun résultat"} />
         ) : (

@@ -57,7 +57,7 @@ export function AggPanel({ chartKind, xCat, aggOut, seriesLabel, topK, agg, yNum
         )}
 
         {!xCat ? (
-          <EmptyChart message="Aucune colonne catégorielle disponible pour l'axe X" />
+          <EmptyChart message="Aucune colonne disponible pour l'axe X" />
         ) : !hasData ? (
           <EmptyChart message={chartLoading ? "" : "Aucun résultat pour ces paramètres"} />
         ) : (

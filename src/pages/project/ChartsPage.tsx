@@ -189,6 +189,11 @@ export function ChartsPage() {
     () => columns.filter((c) => c.kind === "categorical" || c.kind === "text" || c.kind === "datetime"),
     [columns],
   );
+  // Charts that work on grouped values (agg / value_counts) accept any kind.
+  const groupByCols = useMemo(
+    () => [...categoricalCols, ...numericCols],
+    [categoricalCols, numericCols],
+  );
 
   const allBoxplotCols = useMemo(() => {
     if (!profile) return [];
@@ -239,7 +244,8 @@ export function ChartsPage() {
     const defNum1 = numericCols[0]?.name ?? "";
     const defNum2 = numericCols[1]?.name ?? defNum1;
     const defNum3 = numericCols[2]?.name ?? defNum2;
-    setXCat(defCat); setYNum(defNum1); setPieCol(defCat); setHistCol(defNum1);
+    const defGroup = defCat || defNum1;
+    setXCat(defGroup); setYNum(defNum1); setPieCol(defGroup); setHistCol(defNum1);
     setSx(defNum1); setSy(defNum2);
     setBx(defNum1); setBy(defNum2); setBz(defNum3);
     setBoxplotCols(allBoxplotCols.slice(0, 1));
@@ -333,13 +339,15 @@ export function ChartsPage() {
   const radarData = useMemo(() => {
     const selected = numericCols.filter((c) => radarCols.includes(c.name));
     if (!selected.length) return [];
-    const means  = selected.map((c) => c.numeric?.mean ?? 0);
-    const maxAbs = Math.max(1e-9, ...means.map((v) => Math.abs(v)));
-    return selected.map((c) => ({
+    const means = selected.map((c) => c.numeric?.mean ?? 0);
+    const minM  = Math.min(...means);
+    const maxM  = Math.max(...means);
+    const span  = maxM - minM;
+    return selected.map((c, i) => ({
       metric:   shortLabel(c.name, 16),
       fullName: c.name,
       mean:     c.numeric?.mean ?? 0,
-      value:    ((c.numeric?.mean ?? 0) / maxAbs) * 100,
+      value:    span > 1e-9 ? ((means[i] - minM) / span) * 100 : 50,
     }));
   }, [numericCols, radarCols]);
 
@@ -702,11 +710,11 @@ export function ChartsPage() {
                       </div>
                     )}
 
-                    {/* X — categorical */}
+                    {/* X — any kind (groupby) */}
                     {needs.showXCat && (
                       <div className="space-y-1">
-                        <p className="text-xs font-medium text-muted-foreground">Axe X (catégoriel)</p>
-                        <ColSelect value={xCat} onChange={setXCat} cols={categoricalCols} placeholder="Choisir X" />
+                        <p className="text-xs font-medium text-muted-foreground">Axe X (groupé)</p>
+                        <ColSelect value={xCat} onChange={setXCat} cols={groupByCols} placeholder="Choisir X" />
                       </div>
                     )}
 
@@ -736,8 +744,8 @@ export function ChartsPage() {
                     {/* Pie column */}
                     {needs.showPieCol && (
                       <div className="space-y-1 lg:col-span-2">
-                        <p className="text-xs font-medium text-muted-foreground">Colonne (catégorielle)</p>
-                        <ColSelect value={pieCol} onChange={setPieCol} cols={categoricalCols} placeholder="Choisir colonne" />
+                        <p className="text-xs font-medium text-muted-foreground">Colonne</p>
+                        <ColSelect value={pieCol} onChange={setPieCol} cols={groupByCols} placeholder="Choisir colonne" />
                       </div>
                     )}
 
