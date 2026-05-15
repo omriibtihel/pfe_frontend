@@ -281,8 +281,8 @@ export function useNettoyageActions(state: NettoyageState, data: NettoyageData, 
 
   const applySubstitution = async () => {
     if (!data.effectiveDatasetId) return;
-    const col = (state.substColumn || "").trim();
-    if (!col) {
+    const col = state.substColumn || "";
+    if (!col.trim()) {
       toast({ title: "Colonne requise", description: "Choisis une colonne pour la substitution.", variant: "destructive" });
       return;
     }

@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useTranslation } from "react-i18next";
 import { RotateCcw, Undo2 } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
@@ -35,6 +36,7 @@ export function BulkActionsBar({
   onSetType,
   onSetEncoding,
 }: BulkActionsBarProps) {
+  const { t } = useTranslation();
   const [bulkType, setBulkType] = useState<TrainingColumnTypeSelection>("auto");
   const [bulkEncoding, setBulkEncoding] =
     useState<TrainingPreprocessingDefaults["categoricalEncoding"]>("onehot");
@@ -45,13 +47,13 @@ export function BulkActionsBar({
     <div className="rounded-xl border border-border/70 bg-background/80 p-3 space-y-3">
       <div className="flex flex-wrap items-start gap-2">
         <div className="space-y-0.5">
-          <p className="text-xs font-medium text-foreground">Actions groupées</p>
+          <p className="text-xs font-medium text-foreground">{t("preparation.columns.bulkTitle")}</p>
           <p className="text-[11px] text-muted-foreground">
-            Sélectionnez des colonnes dans le tableau, puis appliquez des modifications en masse.
+            {t("preparation.columns.bulkHint")}
           </p>
         </div>
         <Badge variant="secondary" className="ml-auto">
-          {selectedCount} selected
+          {t("preparation.columns.bulkSelected", { n: selectedCount })}
         </Badge>
       </div>
 
@@ -63,10 +65,10 @@ export function BulkActionsBar({
           onClick={onSelectAllFiltered}
           disabled={filteredCount === 0}
         >
-          Tout sélectionner
+          {t("preparation.columns.bulkSelectAll")}
         </Button>
         <Button type="button" size="sm" variant="ghost" onClick={onClearSelection} disabled={!hasSelection}>
-          Désélectionner tout
+          {t("preparation.columns.bulkClear")}
         </Button>
         <Button
           type="button"
@@ -77,13 +79,13 @@ export function BulkActionsBar({
           className="gap-1 ml-auto"
         >
           <Undo2 className="h-3.5 w-3.5" />
-          Annuler
+          {t("preparation.columns.bulkUndo")}
         </Button>
       </div>
 
       <div className="grid grid-cols-1 xl:grid-cols-3 gap-2">
         <div className="rounded-lg border border-border/60 bg-muted/20 p-2 space-y-2">
-          <p className="text-[11px] font-medium text-muted-foreground uppercase tracking-wide">Préréglages</p>
+          <p className="text-[11px] font-medium text-muted-foreground uppercase tracking-wide">{t("preparation.columns.bulkPresets")}</p>
           <Button
             type="button"
             size="sm"
@@ -92,7 +94,7 @@ export function BulkActionsBar({
             disabled={!hasSelection}
             className="w-full justify-start"
           >
-            Appliquer les defaults
+            {t("preparation.columns.bulkApplyDefaults")}
           </Button>
           <Button
             type="button"
@@ -103,12 +105,12 @@ export function BulkActionsBar({
             className="w-full justify-start gap-1"
           >
             <RotateCcw className="h-3.5 w-3.5" />
-            Réinitialiser
+            {t("preparation.columns.bulkReset")}
           </Button>
         </div>
 
         <div className="rounded-lg border border-border/60 bg-muted/20 p-2 space-y-2">
-          <p className="text-[11px] font-medium text-muted-foreground uppercase tracking-wide">Inclure / Type</p>
+          <p className="text-[11px] font-medium text-muted-foreground uppercase tracking-wide">{t("preparation.columns.bulkIncludeType")}</p>
           <div className="flex flex-wrap items-center gap-2">
             <Button
               type="button"
@@ -117,7 +119,7 @@ export function BulkActionsBar({
               disabled={!hasSelection}
               onClick={() => onSetUse(true)}
             >
-              Inclure
+              {t("preparation.columns.bulkInclude")}
             </Button>
             <Button
               type="button"
@@ -126,7 +128,7 @@ export function BulkActionsBar({
               disabled={!hasSelection}
               onClick={() => onSetUse(false)}
             >
-              Exclure
+              {t("preparation.columns.bulkExclude")}
             </Button>
           </div>
           <div className="flex flex-wrap items-center gap-2">
@@ -135,13 +137,13 @@ export function BulkActionsBar({
               onValueChange={(value) => setBulkType(value as TrainingColumnTypeSelection)}
             >
               <SelectTrigger className="h-9 w-full sm:w-[170px]">
-                <SelectValue placeholder="Set type" />
+                <SelectValue placeholder={t("preparation.columns.bulkSetType")} />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value={BULK_AUTO_TYPE}>Auto</SelectItem>
-                <SelectItem value="numeric">Numeric</SelectItem>
-                <SelectItem value="categorical">Categorical</SelectItem>
-                <SelectItem value="ordinal">Ordinal</SelectItem>
+                <SelectItem value={BULK_AUTO_TYPE}>{t("preparation.columns.typeAuto")}</SelectItem>
+                <SelectItem value="numeric">{t("preparation.columns.typeNumeric")}</SelectItem>
+                <SelectItem value="categorical">{t("preparation.columns.typeCategorical")}</SelectItem>
+                <SelectItem value="ordinal">{t("preparation.columns.typeOrdinal")}</SelectItem>
               </SelectContent>
             </Select>
             <Button
@@ -151,13 +153,13 @@ export function BulkActionsBar({
               disabled={!hasSelection}
               onClick={() => onSetType(bulkType)}
             >
-              Appliquer
+              {t("preparation.columns.bulkApply")}
             </Button>
           </div>
         </div>
 
         <div className="rounded-lg border border-border/60 bg-muted/20 p-2 space-y-2">
-          <p className="text-[11px] font-medium text-muted-foreground uppercase tracking-wide">Encodage</p>
+          <p className="text-[11px] font-medium text-muted-foreground uppercase tracking-wide">{t("preparation.columns.bulkEncoding")}</p>
           <div className="flex flex-wrap items-center gap-2">
             <Select
               value={bulkEncoding}
@@ -166,13 +168,13 @@ export function BulkActionsBar({
               }
             >
               <SelectTrigger className="h-9 w-full sm:w-[170px]">
-                <SelectValue placeholder="Set encoding" />
+                <SelectValue placeholder={t("preparation.columns.bulkSetEncoding")} />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="none">Aucun</SelectItem>
-                <SelectItem value="onehot">One-Hot</SelectItem>
-                <SelectItem value="ordinal">Ordinal</SelectItem>
-                <SelectItem value="label">Label</SelectItem>
+                <SelectItem value="none">{t("preparation.columns.encodingNone")}</SelectItem>
+                <SelectItem value="onehot">{t("preparation.columns.encodingOnehot")}</SelectItem>
+                <SelectItem value="ordinal">{t("preparation.columns.encodingOrdinal")}</SelectItem>
+                <SelectItem value="label">{t("preparation.columns.encodingLabel")}</SelectItem>
               </SelectContent>
             </Select>
             <Button
@@ -182,7 +184,7 @@ export function BulkActionsBar({
               disabled={!hasSelection}
               onClick={() => onSetEncoding(bulkEncoding)}
             >
-              Appliquer
+              {t("preparation.columns.bulkApply")}
             </Button>
           </div>
         </div>

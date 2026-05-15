@@ -217,11 +217,6 @@ export function ModelsComparisonTable({
                               CV
                             </Badge>
                           )}
-                          {result.automl && (
-                            <Badge variant="outline" className="px-1.5 py-0 text-[10px] border-violet-400 text-violet-600">
-                              AutoML
-                            </Badge>
-                          )}
                           {result.evaluationSource && (
                             <span
                               className={`text-[10px] border rounded px-1 py-0.5 ${

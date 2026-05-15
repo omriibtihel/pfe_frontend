@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useTranslation } from "react-i18next";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -30,6 +31,7 @@ function schemaUpperBound(schema: TrainingHyperparamFieldSchema, isInt: boolean)
 }
 
 export function HpRangeInput({ value, fieldType, fieldSchema, onChange }: HpRangeInputProps) {
+  const { t } = useTranslation();
   const isInt = fieldType === "int" || fieldType === "int_or_none";
   const isFloat = fieldType === "float" || fieldType === "float_or_enum";
   const isIntOrNone = fieldType === "int_or_none";
@@ -55,11 +57,11 @@ export function HpRangeInput({ value, fieldType, fieldSchema, onChange }: HpRang
     const minVal = parseBound(mStr, isInt);
     const maxVal = parseBound(xStr, isInt);
 
-    if (!Number.isFinite(minVal)) { setError("Valeur Min invalide"); return; }
-    if (!Number.isFinite(maxVal)) { setError("Valeur Max invalide"); return; }
-    if (minVal >= maxVal) { setError("Min doit être strictement inférieur à Max"); return; }
-    if (typeof lower === "number" && minVal < lower) { setError(`Min ≥ ${lower}`); return; }
-    if (typeof upper === "number" && maxVal > upper) { setError(`Max ≤ ${upper}`); return; }
+    if (!Number.isFinite(minVal)) { setError(t("training.hp.rangeErrMin")); return; }
+    if (!Number.isFinite(maxVal)) { setError(t("training.hp.rangeErrMax")); return; }
+    if (minVal >= maxVal) { setError(t("training.hp.rangeErrOrder")); return; }
+    if (typeof lower === "number" && minVal < lower) { setError(t("training.hp.rangeErrLower", { lower })); return; }
+    if (typeof upper === "number" && maxVal > upper) { setError(t("training.hp.rangeErrUpper", { upper })); return; }
 
     setError(null);
     const range: HpRange = { kind: "range", min: minVal, max: maxVal };
@@ -68,14 +70,14 @@ export function HpRangeInput({ value, fieldType, fieldSchema, onChange }: HpRang
     onChange(range);
   };
 
-  const minPlaceholder = typeof lower === "number" ? `≥ ${lower}` : "Min";
-  const maxPlaceholder = typeof upper === "number" ? `≤ ${upper}` : "Max";
+  const minPlaceholder = typeof lower === "number" ? t("training.hp.rangePlaceholderMinGe", { lower }) : t("training.hp.rangePlaceholderMin");
+  const maxPlaceholder = typeof upper === "number" ? t("training.hp.rangePlaceholderMaxLe", { upper }) : t("training.hp.rangePlaceholderMax");
 
   return (
     <div className="space-y-2">
       <div className="flex gap-2 items-end">
         <div className="flex-1 space-y-0.5">
-          <Label className="text-[10px] text-muted-foreground uppercase tracking-wide">Min</Label>
+          <Label className="text-[10px] text-muted-foreground uppercase tracking-wide">{t("training.hp.rangeMin")}</Label>
           <Input
             type="text"
             inputMode={isFloat ? "decimal" : "numeric"}
@@ -87,7 +89,7 @@ export function HpRangeInput({ value, fieldType, fieldSchema, onChange }: HpRang
           />
         </div>
         <div className="flex-1 space-y-0.5">
-          <Label className="text-[10px] text-muted-foreground uppercase tracking-wide">Max</Label>
+          <Label className="text-[10px] text-muted-foreground uppercase tracking-wide">{t("training.hp.rangeMax")}</Label>
           <Input
             type="text"
             inputMode={isFloat ? "decimal" : "numeric"}
@@ -100,7 +102,7 @@ export function HpRangeInput({ value, fieldType, fieldSchema, onChange }: HpRang
         </div>
         {showDistribution && (
           <div className="w-36 space-y-0.5">
-            <Label className="text-[10px] text-muted-foreground uppercase tracking-wide">Distribution</Label>
+            <Label className="text-[10px] text-muted-foreground uppercase tracking-wide">{t("training.hp.rangeDistribution")}</Label>
             <Select
               value={distribution}
               onValueChange={(v) => {
@@ -113,8 +115,8 @@ export function HpRangeInput({ value, fieldType, fieldSchema, onChange }: HpRang
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="uniform">Uniforme</SelectItem>
-                <SelectItem value="log_uniform">Log-uniforme</SelectItem>
+                <SelectItem value="uniform">{t("training.hp.rangeUniform")}</SelectItem>
+                <SelectItem value="log_uniform">{t("training.hp.rangeLogUniform")}</SelectItem>
               </SelectContent>
             </Select>
           </div>
@@ -133,14 +135,14 @@ export function HpRangeInput({ value, fieldType, fieldSchema, onChange }: HpRang
             }}
             className="h-3 w-3 rounded border-border accent-primary"
           />
-          <span className="text-[11px] text-muted-foreground">Inclure null (∞ — sans limite)</span>
+          <span className="text-[11px] text-muted-foreground">{t("training.hp.rangeIncludeNull")}</span>
         </label>
       )}
 
       {error && <p className="text-[10px] text-destructive">{error}</p>}
       {!error && !minText && !maxText && (
         <p className="text-[10px] text-muted-foreground italic">
-          Saisissez Min et Max puis appuyez sur Tab pour valider.
+          {t("training.hp.rangeHint")}
         </p>
       )}
     </div>

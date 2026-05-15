@@ -1,4 +1,5 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { AlertCircle, Target, X } from 'lucide-react';
 import { ParasiteValueBadges } from '@/components/shared/ParasiteValueBadges';
 import {
@@ -18,7 +19,7 @@ import databaseService from '@/services/databaseService';
 
 import { KindIcon } from './KindIcon';
 import { QualityBadge } from './QualityBadge';
-import { fmt, pctLabel, kindLabel } from './types';
+import { fmt, pctLabel, makeKindLabel } from './types';
 import type { ColProfile } from './types';
 
 export function ColumnDetailPanel({
@@ -40,6 +41,8 @@ export function ColumnDetailPanel({
   datasetId: number;
   versionId?: number | null;
 }) {
+  const { t } = useTranslation();
+  const kindLabel = useMemo(() => makeKindLabel(t), [t]);
   const missingPct = totalRows ? (col.missing / totalRows) * 100 : 0;
 
   const [chartData, setChartData] = useState<Array<{ label: string; count: number }> | null>(null);
@@ -61,7 +64,7 @@ export function ColumnDetailPanel({
           const res = versionId
             ? await databaseService.versionValueCounts(projectId, versionId, { col: col.name, top_k: 10 })
             : await databaseService.valueCounts(projectId, datasetId, { col: col.name, top_k: 10 });
-          setChartData(res.rows.map((r) => ({ label: r.value || '(vide)', count: r.count })));
+          setChartData(res.rows.map((r) => ({ label: r.value || t('dataExploration.detail.emptyValue'), count: r.count })));
         }
       } catch {
         // silently ignore
@@ -70,7 +73,7 @@ export function ColumnDetailPanel({
       }
     };
     void run();
-  }, [col.name, col.kind, projectId, datasetId, versionId]);
+  }, [col.name, col.kind, projectId, datasetId, versionId, t]);
 
   return (
     <div className="flex h-full flex-col">
@@ -85,7 +88,7 @@ export function ColumnDetailPanel({
         </div>
         <div className="flex items-center gap-1.5 flex-shrink-0">
           {isTarget && (
-            <Badge className="bg-primary/15 text-primary border-0 text-[10px]">Target</Badge>
+            <Badge className="bg-primary/15 text-primary border-0 text-[10px]">{t('dataExploration.detail.targetBadge')}</Badge>
           )}
           <Badge variant="outline" className="text-[10px]">
             {kindLabel(col.kind)}
@@ -102,14 +105,14 @@ export function ColumnDetailPanel({
       {/* Missing */}
       <div className="mb-4 space-y-1.5">
         <div className="flex items-center justify-between text-sm">
-          <span className="text-muted-foreground">Valeurs manquantes</span>
+          <span className="text-muted-foreground">{t('dataExploration.detail.missingTitle')}</span>
           <span className="font-medium">
-            {col.missing} / {totalRows} ({pctLabel(col.missing, totalRows)})
+            {t('dataExploration.detail.missingValue', { missing: col.missing, total: totalRows, pct: pctLabel(col.missing, totalRows) })}
           </span>
         </div>
         <Progress value={missingPct} className="h-2" />
         <div className="flex justify-between text-xs text-muted-foreground">
-          <span>Uniques : {col.unique} ({pctLabel(col.unique, totalRows)})</span>
+          <span>{t('dataExploration.detail.uniques', { n: col.unique, pct: pctLabel(col.unique, totalRows) })}</span>
           <QualityBadge missing={col.missing} total={totalRows} />
         </div>
       </div>
@@ -118,22 +121,22 @@ export function ColumnDetailPanel({
       {col.kind === 'numeric' && col.numeric && (
         <div className="mb-4">
           <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-2">
-            Statistiques descriptives
+            {t('dataExploration.detail.numericTitle')}
           </p>
           <div className="grid grid-cols-2 gap-2">
             {(
               [
-                ['Min', col.numeric.min],
-                ['Max', col.numeric.max],
-                ['Moyenne', col.numeric.mean],
-                ['Écart-type', col.numeric.std],
-                ['P25', col.numeric.p25],
-                ['Médiane (P50)', col.numeric.p50],
-                ['P75', col.numeric.p75],
+                ['min', col.numeric.min],
+                ['max', col.numeric.max],
+                ['mean', col.numeric.mean],
+                ['std', col.numeric.std],
+                ['p25', col.numeric.p25],
+                ['median', col.numeric.p50],
+                ['p75', col.numeric.p75],
               ] as [string, number | null | undefined][]
-            ).map(([label, val]) => (
-              <div key={label} className="rounded-lg bg-muted/50 px-3 py-2">
-                <p className="text-[11px] text-muted-foreground">{label}</p>
+            ).map(([key, val]) => (
+              <div key={key} className="rounded-lg bg-muted/50 px-3 py-2">
+                <p className="text-[11px] text-muted-foreground">{t(`dataExploration.detail.numericStats.${key}`)}</p>
                 <p className="font-semibold text-sm">{fmt(val)}</p>
               </div>
             ))}
@@ -146,7 +149,7 @@ export function ColumnDetailPanel({
         col.topValues && col.topValues.length > 0 && (
           <div className="mb-4 flex-1 min-h-0">
             <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-2">
-              Valeurs les plus fréquentes ({col.unique} uniques)
+              {t('dataExploration.detail.topValuesTitle', { n: col.unique })}
             </p>
             <div className="space-y-1.5 overflow-auto max-h-52">
               {col.topValues.map((tv) => {
@@ -162,7 +165,7 @@ export function ColumnDetailPanel({
                       title={tv.value}
                     >
                       {isParasite && <AlertCircle className="h-3 w-3 flex-shrink-0" />}
-                      {tv.value || '(vide)'}
+                      {tv.value || t('dataExploration.detail.emptyValue')}
                     </span>
                     <div className="flex-1 h-2 rounded-full bg-muted overflow-hidden">
                       <div
@@ -195,11 +198,11 @@ export function ColumnDetailPanel({
       {(col.kind === 'numeric' || col.kind === 'categorical' || col.kind === 'text') && (
         <div className="mb-4">
           <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-2">
-            {col.kind === 'numeric' ? 'Distribution (histogramme)' : 'Distribution (fréquences)'}
+            {col.kind === 'numeric' ? t('dataExploration.detail.distHistTitle') : t('dataExploration.detail.distFreqTitle')}
           </p>
           {loadingChart ? (
             <div className="h-28 flex items-center justify-center text-xs text-muted-foreground">
-              Chargement…
+              {t('dataExploration.detail.loading')}
             </div>
           ) : chartData && chartData.length > 0 ? (
             <ResponsiveContainer width="100%" height={110}>
@@ -216,7 +219,7 @@ export function ColumnDetailPanel({
                 />
                 <YAxis hide />
                 <Tooltip
-                  formatter={(v: number) => [v, 'count']}
+                  formatter={(v: number) => [v, t('dataExploration.detail.tooltipCount')]}
                   labelStyle={{ fontSize: 11 }}
                   contentStyle={{ fontSize: 11 }}
                 />
@@ -235,7 +238,7 @@ export function ColumnDetailPanel({
             </ResponsiveContainer>
           ) : (
             <div className="h-16 flex items-center justify-center text-xs text-muted-foreground">
-              Pas de données
+              {t('dataExploration.detail.noData')}
             </div>
           )}
         </div>
@@ -246,7 +249,7 @@ export function ColumnDetailPanel({
         {!isTarget && (
           <Button size="sm" variant="outline" onClick={onSetTarget} className="flex-1">
             <Target className="h-3.5 w-3.5 mr-1.5" />
-            Définir comme cible
+            {t('dataExploration.detail.setTarget')}
           </Button>
         )}
       </div>

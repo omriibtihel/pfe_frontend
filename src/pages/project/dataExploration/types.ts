@@ -43,6 +43,11 @@ export const KIND_COLORS: Record<ColKind, string> = {
   unknown: 'hsl(0,0%,60%)',
 };
 
+export function makeKindLabel(t: (key: string) => string): (k: ColKind) => string {
+  return (k: ColKind) => t(`dataExploration.kind.${k}`);
+}
+
+/** @deprecated Plain FR fallback — prefer makeKindLabel(t) inside components. */
 export function kindLabel(k: ColKind): string {
   const map: Record<ColKind, string> = {
     numeric: 'Numérique',

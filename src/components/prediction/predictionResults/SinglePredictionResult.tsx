@@ -5,6 +5,7 @@ import {
   ArrowLeft,
   CheckCircle2,
   Download,
+  Info,
   Loader2,
   Shuffle,
   Sparkles,
@@ -18,12 +19,8 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { PredictionReportPanel } from '@/components/prediction/PredictionReportPanel';
-import { useToast } from '@/hooks/use-toast';
-import { predictionService } from '@/services/predictionService';
 import type {
-  CounterfactualResult,
   ExplanationMethod,
-  FeatureRangesMap,
   LimeLocalItem,
   PredictionResponse,
   PredictionRow,
@@ -33,6 +30,7 @@ import type {
 import { CounterfactualModal } from './CounterfactualModal';
 import { ExplanationPanel, METHOD_LABELS, MethodToggle } from './ExplanationPanel';
 import { CONF_BADGE, _confLevel, _confTooltip, _fmt } from './helpers';
+import { usePredictionExplanations } from './usePredictionExplanations';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Hero card — large, focused display of the single prediction
@@ -96,7 +94,7 @@ function HeroCard({
   return (
     <Card className={`relative overflow-hidden ring-1 ${tone.ring} shadow-sm`}>
       <div className={`absolute inset-0 bg-gradient-to-br ${tone.bg} pointer-events-none`} aria-hidden />
-      <CardContent className="relative pt-8 pb-7 px-6 md:px-10">
+      <CardContent className="relative pt-8 pb-7 px-4 sm:px-6 md:px-10">
         <div className="flex flex-col items-center text-center gap-4">
           <div className={`flex h-14 w-14 items-center justify-center rounded-2xl ${tone.iconBox}`}>
             {tone.icon}
@@ -105,7 +103,7 @@ function HeroCard({
             <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
               {tone.label}
             </p>
-            <p className={`text-5xl md:text-6xl font-bold tracking-tight tabular-nums ${tone.text}`}>
+            <p className={`text-4xl sm:text-5xl md:text-6xl font-bold tracking-tight tabular-nums break-all ${tone.text}`}>
               {isClassification ? valStr : _fmt(row.prediction)}
             </p>
           </div>
@@ -284,6 +282,13 @@ function ExplanationCard({
 }) {
   const rowWithLime: PredictionRow = { ...row, lime: limeItems ?? row.lime ?? null };
 
+  const methodDescription =
+    method === 'shap'
+      ? "SHAP mesure la contribution réelle de chaque variable à la prédiction, en comparant à une moyenne de référence. Vue globale et fiable."
+      : method === 'lime'
+        ? "LIME explique la prédiction en testant de petites variations autour de cette ligne. Vue locale, intuitive et rapide."
+        : "Comparaison des deux approches : SHAP (contribution globale et exacte) et LIME (explication locale par variations). Si elles divergent (⚠), la variable est instable.";
+
   return (
     <Card className="shadow-sm">
       <CardContent className="pt-5 pb-5 px-5 space-y-3">
@@ -298,6 +303,11 @@ function ExplanationCard({
             </div>
           </div>
           <MethodToggle value={method} onChange={onMethodChange} />
+        </div>
+
+        <div className="flex items-start gap-2 rounded-md border border-border/60 bg-muted/30 px-3 py-2">
+          <Info className="mt-0.5 h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+          <p className="text-[11px] leading-relaxed text-muted-foreground">{methodDescription}</p>
         </div>
 
         <div className="rounded-lg border border-border bg-card min-h-[200px]">
@@ -349,162 +359,62 @@ export function SinglePredictionResult({
   projectId: string;
 }) {
   const navigate = useNavigate();
-  const { toast } = useToast();
 
   const row = result.rows[0];
   const isClassification = result.taskType === 'classification';
   const threshold = result.thresholdUsed ?? 0.5;
   const topFeatures = result.topFeatures ?? [];
 
+  const {
+    getRowExplanations,
+    fetchExplanations,
+    runCounterfactual,
+    cfLiveRunner,
+    featureRanges,
+    ensureFeatureRanges,
+    isRowLoading,
+    isCfLoading,
+    exportCsv,
+    isExporting,
+  } = usePredictionExplanations(projectId, result);
+
   const [method, setMethod] = useState<ExplanationMethod>('shap');
-  const [shapItems, setShapItems] = useState<ShapLocalItem[] | null>(row?.shap ?? null);
-  const [limeItems, setLimeItems] = useState<LimeLocalItem[] | null>(row?.lime ?? null);
-  const [isLoadingExplain, setIsLoadingExplain] = useState(false);
-  const [isExporting, setIsExporting] = useState(false);
-
-  // Counterfactual state
   const [openCfModal, setOpenCfModal] = useState(false);
-  const [cfResult, setCfResult] = useState<CounterfactualResult | undefined>();
-  const [isLoadingCf, setIsLoadingCf] = useState(false);
-  const [featureRanges, setFeatureRanges] = useState<FeatureRangesMap>({});
 
-  const fetchExplanations = useCallback(
-    async (m: ExplanationMethod) => {
-      if (!row) return;
-      const need: ExplanationMethod | null =
-        m === 'shap'
-          ? shapItems
-            ? null
-            : 'shap'
-          : m === 'lime'
-            ? limeItems
-              ? null
-              : 'lime'
-            : !shapItems && !limeItems
-              ? 'both'
-              : !shapItems
-                ? 'shap'
-                : !limeItems
-                  ? 'lime'
-                  : null;
-      if (need === null) return;
-
-      setIsLoadingExplain(true);
-      try {
-        const explained = await predictionService.predictManualWithSavedModelExplain(
-          projectId,
-          result.modelId,
-          [row.inputData],
-          need,
-        );
-        const respRow = explained.rows[0];
-        if (!respRow) return;
-        if (respRow.shap?.length) setShapItems(respRow.shap);
-        if (respRow.lime?.length) setLimeItems(respRow.lime);
-        if (!respRow.shap?.length && !respRow.lime?.length) {
-          const label = need === 'shap' ? 'SHAP' : need === 'lime' ? 'LIME' : 'SHAP/LIME';
-          toast({ title: `${label} indisponible pour ce modèle`, variant: 'destructive' });
-        }
-      } catch (err) {
-        const msg = err instanceof Error ? err.message : 'Impossible de calculer les explications.';
-        toast({ title: 'Erreur explication', description: msg, variant: 'destructive' });
-      } finally {
-        setIsLoadingExplain(false);
-      }
-    },
-    [row, shapItems, limeItems, projectId, result.modelId, toast],
-  );
+  const entry = row ? getRowExplanations(row) : { shap: undefined, lime: undefined, counterfactual: undefined };
+  const shapItems: ShapLocalItem[] | null = entry.shap ?? null;
+  const limeItems: LimeLocalItem[] | null = entry.lime ?? null;
+  const isLoadingExplain = row ? isRowLoading(row) : false;
+  const isLoadingCf = row ? isCfLoading(row) : false;
+  const cfResult = entry.counterfactual;
 
   // Auto-fetch SHAP on mount when missing
   useEffect(() => {
     if (!row) return;
-    if (!shapItems) void fetchExplanations('shap');
+    if (!shapItems) void fetchExplanations(row, 'shap');
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const handleMethodChange = useCallback(
     (m: ExplanationMethod) => {
       setMethod(m);
-      void fetchExplanations(m);
+      if (row) void fetchExplanations(row, m);
     },
-    [fetchExplanations],
+    [fetchExplanations, row],
   );
 
   const handleCfAutoSuggest = useCallback(
     async (featuresToVary: string[]) => {
       if (!row) return;
-      setIsLoadingCf(true);
-      try {
-        const cf = await predictionService.computeCounterfactual(
-          projectId,
-          result.modelId,
-          row.inputData,
-          featuresToVary,
-        );
-        setCfResult(cf);
-      } catch (err) {
-        const msg = err instanceof Error ? err.message : 'Impossible de calculer le contrefactuel.';
-        toast({ title: 'Erreur contrefactuel', description: msg, variant: 'destructive' });
-      } finally {
-        setIsLoadingCf(false);
-      }
+      await runCounterfactual(row, featuresToVary);
     },
-    [row, projectId, result.modelId, toast],
-  );
-
-  const cfLiveRunner = useCallback(
-    async (overrides: Record<string, unknown>) => {
-      const resp = await predictionService.predictManualWithSavedModel(projectId, result.modelId, [overrides]);
-      const r = resp.rows[0];
-      return { prediction: r?.prediction ?? null, score: r?.score ?? null };
-    },
-    [projectId, result.modelId],
+    [row, runCounterfactual],
   );
 
   // Lazy-load feature ranges when CF modal opens
   useEffect(() => {
-    if (!openCfModal) return;
-    if (Object.keys(featureRanges).length > 0) return;
-    let cancelled = false;
-    (async () => {
-      try {
-        const ranges = await predictionService.getFeatureRanges(projectId, result.modelId);
-        if (!cancelled) setFeatureRanges(ranges);
-      } catch (err) {
-        console.warn('[CF] failed to load feature ranges:', err);
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [openCfModal, projectId, result.modelId, featureRanges]);
-
-  const handleExportCsv = useCallback(async () => {
-    setIsExporting(true);
-    try {
-      const { blob, filename } = await predictionService.exportResultsCsv(
-        projectId,
-        result.modelId,
-        result.modelType,
-        result.rows,
-      );
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = filename ?? `prediction_${result.modelType}.csv`;
-      a.click();
-      URL.revokeObjectURL(url);
-      toast({ title: 'Export CSV réussi' });
-    } catch (err) {
-      toast({
-        title: 'Erreur export',
-        description: err instanceof Error ? err.message : "Impossible d'exporter.",
-        variant: 'destructive',
-      });
-    } finally {
-      setIsExporting(false);
-    }
-  }, [projectId, result, toast]);
+    if (openCfModal) ensureFeatureRanges();
+  }, [openCfModal, ensureFeatureRanges]);
 
   const driftWarnings = result.driftWarnings ?? [];
 
@@ -531,7 +441,7 @@ export function SinglePredictionResult({
 
   return (
     <AppLayout>
-      <div className="space-y-6 max-w-5xl mx-auto w-full">
+      <div className="space-y-6 w-full">
         {/* Header */}
         <div className="flex flex-col gap-3">
           <Button
@@ -543,8 +453,8 @@ export function SinglePredictionResult({
             <ArrowLeft className="h-3.5 w-3.5 mr-1" /> Nouvelle prédiction
           </Button>
           <div className="flex flex-col md:flex-row md:items-end md:justify-between gap-3">
-            <div className="space-y-1.5">
-              <h1 className="text-2xl md:text-3xl font-bold tracking-tight">Résultat de prédiction</h1>
+            <div className="space-y-1.5 min-w-0">
+              <h1 className="text-xl sm:text-2xl md:text-3xl font-bold tracking-tight">Résultat de prédiction</h1>
               <div className="flex items-center gap-2 flex-wrap">
                 <Badge variant="secondary" className="text-[11px]">
                   <Target className="mr-1 h-3 w-3" /> Saisie manuelle
@@ -559,16 +469,16 @@ export function SinglePredictionResult({
                 )}
               </div>
             </div>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 flex-wrap">
               <Button
                 variant="outline"
                 size="sm"
                 onClick={() => setOpenCfModal(true)}
-                className="border-amber-400/50 bg-amber-50/50 text-amber-700 hover:bg-amber-100/50 dark:bg-amber-950/20 dark:text-amber-300"
+                className="flex-1 sm:flex-none border-amber-400/50 bg-amber-50/50 text-amber-700 hover:bg-amber-100/50 dark:bg-amber-950/20 dark:text-amber-300"
               >
                 <Shuffle className="h-4 w-4 mr-2" /> Que changer ?
               </Button>
-              <Button variant="outline" size="sm" onClick={handleExportCsv} disabled={isExporting}>
+              <Button variant="outline" size="sm" onClick={exportCsv} disabled={isExporting} className="flex-1 sm:flex-none">
                 {isExporting ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Download className="h-4 w-4 mr-2" />}
                 Exporter CSV
               </Button>
@@ -624,12 +534,14 @@ export function SinglePredictionResult({
           </div>
         )}
 
-        {/* Hero */}
-        <HeroCard row={row} isClassification={isClassification} threshold={threshold} />
-
-        {/* Gauge — only for classification with a score */}
-        {isClassification && row.score !== null && (
-          <ConfidenceGauge score={row.score} threshold={threshold} />
+        {/* Hero + Gauge */}
+        {isClassification && row.score !== null ? (
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+            <HeroCard row={row} isClassification={isClassification} threshold={threshold} />
+            <ConfidenceGauge score={row.score} threshold={threshold} />
+          </div>
+        ) : (
+          <HeroCard row={row} isClassification={isClassification} threshold={threshold} />
         )}
 
         {/* Two-column: inputs + explanation */}

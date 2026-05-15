@@ -1,3 +1,4 @@
+import { useTranslation } from 'react-i18next';
 import { Search } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -5,12 +6,12 @@ import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import type { Step3StatusFilter, Step3TypeFilter } from './types';
 
-const STATUS_FILTERS: Array<{ value: Step3StatusFilter; label: string }> = [
-  { value: 'all', label: 'Tout' },
-  { value: 'active', label: 'Actives' },
-  { value: 'dropped', label: 'Exclues' },
-  { value: 'errors', label: 'Erreurs' },
-  { value: 'warnings', label: 'Avertissements' },
+const STATUS_FILTER_KEYS: Array<{ value: Step3StatusFilter; tk: string }> = [
+  { value: 'all', tk: 'preparation.columns.statusAll' },
+  { value: 'active', tk: 'preparation.columns.statusActive' },
+  { value: 'dropped', tk: 'preparation.columns.statusDropped' },
+  { value: 'errors', tk: 'preparation.columns.statusErrors' },
+  { value: 'warnings', tk: 'preparation.columns.statusWarnings' },
 ];
 
 interface ColumnFilterBarProps {
@@ -44,6 +45,7 @@ export function ColumnFilterBar({
   onTypeFilterChange,
   onResetFilters,
 }: ColumnFilterBarProps) {
+  const { t } = useTranslation();
   return (
     <div className="rounded-xl border border-border/70 bg-muted/20 p-3 space-y-3">
       <div className="flex flex-wrap items-center gap-2">
@@ -52,21 +54,21 @@ export function ColumnFilterBar({
           <Input
             value={searchQuery}
             onChange={(e) => onSearchChange(e.target.value)}
-            placeholder="Rechercher une colonne..."
+            placeholder={t('preparation.columns.filterSearchPlaceholder')}
             className="pl-8"
           />
         </div>
 
         <Select value={typeFilter} onValueChange={(v) => onTypeFilterChange(v as Step3TypeFilter)}>
           <SelectTrigger className="h-9 w-full sm:w-[180px]">
-            <SelectValue placeholder="Filtrer par type" />
+            <SelectValue placeholder={t('preparation.columns.filterTypePlaceholder')} />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="all">Tous les types</SelectItem>
-            <SelectItem value="numeric">Numérique</SelectItem>
-            <SelectItem value="categorical">Catégoriel</SelectItem>
-            <SelectItem value="ordinal">Ordinal</SelectItem>
-            <SelectItem value="auto">Auto</SelectItem>
+            <SelectItem value="all">{t('preparation.columns.filterAllTypes')}</SelectItem>
+            <SelectItem value="numeric">{t('preparation.columns.filterNumeric')}</SelectItem>
+            <SelectItem value="categorical">{t('preparation.columns.filterCategorical')}</SelectItem>
+            <SelectItem value="ordinal">{t('preparation.columns.filterOrdinal')}</SelectItem>
+            <SelectItem value="auto">{t('preparation.columns.filterAuto')}</SelectItem>
           </SelectContent>
         </Select>
 
@@ -77,12 +79,12 @@ export function ColumnFilterBar({
           disabled={!hasActiveFilters}
           onClick={onResetFilters}
         >
-          Réinitialiser
+          {t('preparation.columns.filterReset')}
         </Button>
       </div>
 
       <div className="flex flex-wrap items-center gap-1">
-        {STATUS_FILTERS.map((item) => (
+        {STATUS_FILTER_KEYS.map((item) => (
           <Button
             key={item.value}
             type="button"
@@ -91,7 +93,7 @@ export function ColumnFilterBar({
             onClick={() => onStatusFilterChange(item.value)}
             className="gap-1.5"
           >
-            {item.label}
+            {t(item.tk)}
             <Badge variant="outline" className="text-[10px] px-1 py-0 leading-4">
               {statusFilterCounts[item.value]}
             </Badge>
@@ -100,8 +102,8 @@ export function ColumnFilterBar({
       </div>
 
       <p className="text-xs text-muted-foreground">
-        {filteredCount} / {totalCount} colonne(s) affichée(s)
-        {filteredSelectedCount > 0 && ` · ${filteredSelectedCount} sélectionnée(s)`}
+        {t('preparation.columns.shown', { filtered: filteredCount, total: totalCount })}
+        {filteredSelectedCount > 0 && t('preparation.columns.selectedExtra', { n: filteredSelectedCount })}
       </p>
     </div>
   );

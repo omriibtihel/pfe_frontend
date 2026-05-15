@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { Info } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
@@ -19,7 +20,7 @@ import {
   gridValKey,
   gridValFromKey,
   parseFieldValue,
-  FRIENDLY_LABEL,
+  makeFriendlyLabel,
 } from "./modelHpHelpers";
 import { HpChipsInput } from "./HpChipsInput";
 import { HpRangeInput } from "./HpRangeInput";
@@ -65,12 +66,14 @@ export function HyperparamModal({
   searchType,
   onSetField,
 }: HyperparamModalProps) {
+  const { t } = useTranslation();
+  const friendlyLabel = useMemo(() => makeFriendlyLabel(t), [t]);
   const isSearchActive = (searchType ?? "none") !== "none";
   const isGridSearch = searchType === "grid";
   const isRandomSearch = searchType === "random" || searchType === "halving_random";
   const searchTypeLabel =
-    searchType === "grid" ? "GridSearch" :
-    searchType === "random" ? "Random Search" : "Successive Halving";
+    searchType === "grid" ? t("training.hp.gridSearch") :
+    searchType === "random" ? t("training.hp.randomSearch") : t("training.hp.halving");
 
   // Per-field custom-mode toggle state (keyed as `modelKey::fieldName`)
   const [customFields, setCustomFields] = useState<CustomFieldsState>({});
@@ -126,18 +129,18 @@ export function HyperparamModal({
   );
 
   const infoText = isGridSearch
-    ? "Utilisez \"Personnalisé\" pour définir les valeurs exactes à explorer. Laissez sur \"Défaut\" pour utiliser la grille optimisée du backend."
+    ? t("training.hp.infoGrid")
     : isRandomSearch
-    ? "Utilisez \"Personnalisé\" pour définir un intervalle [Min, Max] sur les paramètres numériques, ou une liste de valeurs sur les paramètres énumérés."
-    : "Les valeurs par défaut sont optimisées pour la plupart des cas médicaux. Ne modifiez que si vous avez une raison spécifique.";
+    ? t("training.hp.infoRandom")
+    : t("training.hp.infoNone");
 
   const modalDescription = isGridSearch
-    ? "En mode GridSearch, chaque paramètre peut utiliser la grille par défaut du backend ou une liste personnalisée."
+    ? t("training.hp.descGrid")
     : isRandomSearch
-    ? `En mode ${searchTypeLabel}, chaque paramètre peut utiliser la distribution par défaut du backend ou un intervalle personnalisé.`
+    ? t("training.hp.descRandom", { label: searchTypeLabel })
     : modelSelected
-    ? "Modifiez les hyperparamètres du modèle sélectionné."
-    : "Modèle non sélectionné : les valeurs seront conservées mais ignorées tant que le modèle n'est pas coché.";
+    ? t("training.hp.descSelected")
+    : t("training.hp.descUnselected");
 
   return (
     <Modal
@@ -146,13 +149,13 @@ export function HyperparamModal({
       size="2xl"
       title={
         <span className="flex items-center gap-2 flex-wrap">
-          Hyperparamètres
+          {t("training.hp.hyperparams")}
           <Badge variant="outline" className="uppercase text-[11px] font-semibold">
             {modelLabel ?? modelKey}
           </Badge>
           {isSearchActive && (
             <Badge variant="outline" className="text-[10px] border-amber-300 text-amber-600 dark:text-amber-400">
-              Mode {searchTypeLabel}
+              {t("training.hp.modeBadge", { label: searchTypeLabel })}
             </Badge>
           )}
         </span>
@@ -161,7 +164,7 @@ export function HyperparamModal({
     >
       {!activeModelFields.length ? (
         <div className="rounded-lg border border-border/60 p-3 text-sm text-muted-foreground">
-          Aucun réglage configurable pour ce modèle.
+          {t("training.hp.noFields")}
         </div>
       ) : (
         <div className="space-y-3">
@@ -201,7 +204,7 @@ export function HyperparamModal({
                 : gridValKey(rawModelValue as number | string | null);
             })();
 
-            const displayLabel = FRIENDLY_LABEL[fieldName] ?? fieldName;
+            const displayLabel = friendlyLabel(fieldName);
             const isCustom = isFieldCustom(fieldName, rawModelValue);
 
             // Chips for grid (numeric) and random (enum)
@@ -252,7 +255,7 @@ export function HyperparamModal({
                       : "text-muted-foreground hover:bg-muted/50",
                   )}
                 >
-                  Défaut
+                  {t("training.hp.modeDefault")}
                 </button>
                 <button
                   type="button"
@@ -264,7 +267,7 @@ export function HyperparamModal({
                       : "text-muted-foreground hover:bg-muted/50",
                   )}
                 >
-                  Personnalisé
+                  {t("training.hp.modeCustom")}
                 </button>
               </div>
             ) : null;
@@ -311,7 +314,7 @@ export function HyperparamModal({
                   <div className="flex items-center gap-2">
                     {ModeToggle}
                     <span className="text-[11px] text-muted-foreground">
-                      Défaut : {String(fieldSchema.default ?? "—")}
+                      {t("training.hp.defaultValue", { value: String(fieldSchema.default ?? "—") })}
                     </span>
                   </div>
                 </div>
@@ -330,7 +333,7 @@ export function HyperparamModal({
                       onValueChange={(next) => onSetField(modelKey, fieldName, next)}
                     >
                       <SelectTrigger className="h-8 text-xs">
-                        <SelectValue placeholder="Choisir..." />
+                        <SelectValue placeholder={t("training.hp.choosePlaceholder")} />
                       </SelectTrigger>
                       <SelectContent>
                         {enumOptions.map((opt) => (
@@ -353,17 +356,17 @@ export function HyperparamModal({
                   ) : (
                     <Select value={enumOrNullValue} onValueChange={handleEnumOrNull}>
                       <SelectTrigger className="h-8 text-xs">
-                        <SelectValue placeholder="Choisir..." />
+                        <SelectValue placeholder={t("training.hp.choosePlaceholder")} />
                       </SelectTrigger>
                       <SelectContent>
                         <SelectItem value="null">
-                          <span className="text-muted-foreground italic">null — désactivé</span>
+                          <span className="text-muted-foreground italic">{t("training.hp.nullDisabled")}</span>
                         </SelectItem>
                         {enumOptions.map((opt) => (
                           <SelectItem key={`${modelKey}-${fieldName}-${opt}`} value={String(opt)}>
                             {String(opt)}
                             {String(opt) === String(fieldSchema.default) && (
-                              <span className="ml-1.5 text-[10px] text-muted-foreground">(défaut)</span>
+                              <span className="ml-1.5 text-[10px] text-muted-foreground">{t("training.hp.defaultSuffix")}</span>
                             )}
                           </SelectItem>
                         ))}
@@ -385,7 +388,7 @@ export function HyperparamModal({
                     <SelectContent>
                       {gridValues.map((gv) => {
                         const key = gridValKey(gv);
-                        const label = gv === null ? "null — illimité" : String(gv);
+                        const label = gv === null ? t("training.hp.nullUnlimited") : String(gv);
                         const isDefault =
                           gv === fieldSchema.default ||
                           (gv === null && fieldSchema.default === null);
@@ -393,7 +396,7 @@ export function HyperparamModal({
                           <SelectItem key={key} value={key}>
                             {label}
                             {isDefault && (
-                              <span className="ml-1.5 text-[10px] text-muted-foreground">(défaut)</span>
+                              <span className="ml-1.5 text-[10px] text-muted-foreground">{t("training.hp.defaultSuffix")}</span>
                             )}
                           </SelectItem>
                         );
@@ -410,7 +413,7 @@ export function HyperparamModal({
                       onChange={(vals) => onSetField(modelKey, fieldName, vals)}
                     />
                   ) : isGridSearch ? (
-                    ReadOnlyChips("Grille du backend — basculez sur \"Personnalisé\" pour modifier")
+                    ReadOnlyChips(t("training.hp.readOnlyGrid"))
                   ) : isRandomSearch && isCustom ? (
                     <HpRangeInput
                       value={rangeValue}
@@ -419,7 +422,7 @@ export function HyperparamModal({
                       onChange={(r) => onSetField(modelKey, fieldName, r as unknown as ModelHyperparamValue)}
                     />
                   ) : (
-                    ReadOnlyChips("Valeurs de référence — basculez sur \"Personnalisé\" pour définir un intervalle")
+                    ReadOnlyChips(t("training.hp.readOnlyRandom"))
                   )
 
                 /* ── No grid_values (plain Input / chips / range) ────────────── */
@@ -438,7 +441,7 @@ export function HyperparamModal({
                       onChange={(r) => onSetField(modelKey, fieldName, r as unknown as ModelHyperparamValue)}
                     />
                   ) : isRandomSearch ? (
-                    DefaultPlaceholder("Distribution automatique du backend — basculez sur \"Personnalisé\" pour un intervalle personnalisé")
+                    DefaultPlaceholder(t("training.hp.autoDistribution"))
                   ) : (
                     <Input
                       type={fieldType === "int" || fieldType === "float" ? "number" : "text"}
@@ -452,7 +455,7 @@ export function HyperparamModal({
                         )
                       }
                       className={cn("h-8 text-xs", isSearchActive && "opacity-50 cursor-not-allowed")}
-                      placeholder={`ex: ${String(fieldSchema.default ?? "")}`}
+                      placeholder={t("training.hp.examplePlaceholder", { default: String(fieldSchema.default ?? "") })}
                     />
                   )
                 )}

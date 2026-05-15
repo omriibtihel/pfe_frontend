@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useNavigate, useParams } from 'react-router-dom';
 import { AlertTriangle, ArrowLeft, Loader2, Target } from 'lucide-react';
 
@@ -20,6 +21,7 @@ export function PredictionResultsPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const { toast } = useToast();
+  const { t } = useTranslation();
 
   const [result, setResult] = useState<PredictionResponse | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -34,8 +36,8 @@ export function PredictionResultsPage() {
       } catch (e) {
         console.error('[PredictionResultsPage] Failed to parse prediction response:', e);
         toast({
-          title: 'Erreur de chargement',
-          description: "Les résultats de prédiction n'ont pas pu être chargés. Réessayez.",
+          title: t('predictionResults.toastLoadErrTitle'),
+          description: t('predictionResults.toastLoadErrDesc'),
           variant: 'destructive',
         });
         setParseError(true);
@@ -51,7 +53,7 @@ export function PredictionResultsPage() {
       <AppLayout>
         <div className="flex flex-col items-center justify-center h-64 gap-3">
           <Loader2 className="h-7 w-7 animate-spin text-primary" />
-          <p className="text-xs text-muted-foreground uppercase tracking-wide">Chargement des résultats…</p>
+          <p className="text-xs text-muted-foreground uppercase tracking-wide">{t('predictionResults.loading')}</p>
         </div>
       </AppLayout>
     );
@@ -65,13 +67,13 @@ export function PredictionResultsPage() {
             <AlertTriangle className="h-7 w-7" />
           </div>
           <div className="space-y-1.5">
-            <h2 className="text-xl font-semibold tracking-tight">Erreur de chargement</h2>
+            <h2 className="text-xl font-semibold tracking-tight">{t('predictionResults.parseErrorTitle')}</h2>
             <p className="text-sm text-muted-foreground">
-              Les résultats de prédiction sont corrompus ou illisibles. Relancez une prédiction.
+              {t('predictionResults.parseErrorDesc')}
             </p>
           </div>
           <Button onClick={() => navigate(`/projects/${id}/predict`)}>
-            <ArrowLeft className="h-4 w-4 mr-2" /> Nouvelle prédiction
+            <ArrowLeft className="h-4 w-4 mr-2" /> {t('predictionResults.newPrediction')}
           </Button>
         </div>
       </AppLayout>
@@ -86,13 +88,13 @@ export function PredictionResultsPage() {
             <Target className="h-7 w-7 text-muted-foreground" />
           </div>
           <div className="space-y-1.5">
-            <h2 className="text-xl font-semibold tracking-tight">Aucun résultat disponible</h2>
+            <h2 className="text-xl font-semibold tracking-tight">{t('predictionResults.emptyTitle')}</h2>
             <p className="text-sm text-muted-foreground">
-              Retournez à la page de prédiction et lancez une analyse.
+              {t('predictionResults.emptyDesc')}
             </p>
           </div>
           <Button onClick={() => navigate(`/projects/${id}/predict`)}>
-            <ArrowLeft className="h-4 w-4 mr-2" /> Retour
+            <ArrowLeft className="h-4 w-4 mr-2" /> {t('predictionResults.back')}
           </Button>
         </div>
       </AppLayout>

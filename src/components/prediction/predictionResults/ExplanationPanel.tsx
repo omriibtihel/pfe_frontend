@@ -57,8 +57,7 @@ function SingleMethodPanel({
           return (
             <div
               key={item.feature}
-              className="grid items-center gap-2"
-              style={{ gridTemplateColumns: '140px 1fr 60px 52px' }}
+              className="grid items-center gap-2 grid-cols-[minmax(0,1fr)_1.4fr_auto] sm:grid-cols-[minmax(90px,140px)_minmax(0,1fr)_56px_52px]"
             >
               <span className="text-[11px] text-foreground truncate" title={item.feature}>
                 {item.feature}
@@ -75,12 +74,12 @@ function SingleMethodPanel({
                 />
                 <div className="absolute inset-y-0 left-1/2 w-px bg-border/80" />
               </div>
-              <span className="text-[11px] tabular-nums font-semibold text-right" style={{ color }}>
+              <span className="text-[11px] tabular-nums font-semibold text-right whitespace-nowrap" style={{ color }}>
                 {isPos ? '+' : ''}
                 {item.value.toFixed(3)}
               </span>
               <span
-                className="text-[10px] text-muted-foreground text-right truncate font-mono"
+                className="hidden sm:block text-[10px] text-muted-foreground text-right truncate font-mono"
                 title={item.data != null ? String(item.data) : ''}
               >
                 {item.data != null ? _fmt(item.data) : ''}
@@ -146,10 +145,7 @@ function ComparisonPanel({
 
   return (
     <div className="py-3 px-2 space-y-3">
-      <div
-        className="grid items-center gap-2 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground"
-        style={{ gridTemplateColumns: '140px 1fr 60px 1fr 60px' }}
-      >
+      <div className="hidden sm:grid items-center gap-2 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground grid-cols-[minmax(90px,140px)_minmax(0,1fr)_56px_minmax(0,1fr)_56px]">
         <span>Variable</span>
         <span className="text-violet-600 dark:text-violet-400 flex items-center gap-1">
           <Sparkles className="h-3 w-3" /> SHAP
@@ -161,7 +157,7 @@ function ComparisonPanel({
         <span className="text-right text-teal-600 dark:text-teal-400">Δ</span>
       </div>
 
-      <div className="space-y-1.5">
+      <div className="space-y-3 sm:space-y-1.5">
         {ranked.map(({ feature, shap, lime }) => {
           const sVal = shap?.value;
           const lVal = lime?.value;
@@ -172,38 +168,62 @@ function ComparisonPanel({
             Math.abs(sVal) > 1e-3 &&
             Math.abs(lVal) > 1e-3;
 
-          return (
-            <div
-              key={feature}
-              className="grid items-center gap-2"
-              style={{ gridTemplateColumns: '140px 1fr 60px 1fr 60px' }}
+          const sValSpan = (
+            <span
+              className="text-[11px] tabular-nums font-semibold text-right whitespace-nowrap"
+              style={{
+                color: sVal == null ? 'var(--muted-foreground)' : sVal > 0 ? '#f97316' : '#60a5fa',
+              }}
             >
-              <span className="text-[11px] text-foreground truncate flex items-center gap-1" title={feature}>
-                {disagree && (
-                  <span className="text-amber-500" title="SHAP et LIME divergent sur cette variable">
-                    ⚠
-                  </span>
-                )}
-                {feature}
-              </span>
-              {drawBar(sVal, 'violet')}
-              <span
-                className="text-[11px] tabular-nums font-semibold text-right"
-                style={{
-                  color: sVal == null ? 'var(--muted-foreground)' : sVal > 0 ? '#f97316' : '#60a5fa',
-                }}
-              >
-                {sVal == null ? '—' : `${sVal > 0 ? '+' : ''}${sVal.toFixed(3)}`}
-              </span>
-              {drawBar(lVal, 'teal')}
-              <span
-                className="text-[11px] tabular-nums font-semibold text-right"
-                style={{
-                  color: lVal == null ? 'var(--muted-foreground)' : lVal > 0 ? '#f97316' : '#60a5fa',
-                }}
-              >
-                {lVal == null ? '—' : `${lVal > 0 ? '+' : ''}${lVal.toFixed(3)}`}
-              </span>
+              {sVal == null ? '—' : `${sVal > 0 ? '+' : ''}${sVal.toFixed(3)}`}
+            </span>
+          );
+          const lValSpan = (
+            <span
+              className="text-[11px] tabular-nums font-semibold text-right whitespace-nowrap"
+              style={{
+                color: lVal == null ? 'var(--muted-foreground)' : lVal > 0 ? '#f97316' : '#60a5fa',
+              }}
+            >
+              {lVal == null ? '—' : `${lVal > 0 ? '+' : ''}${lVal.toFixed(3)}`}
+            </span>
+          );
+
+          return (
+            <div key={feature} className="space-y-1.5 sm:space-y-0">
+              {/* Mobile: stacked layout */}
+              <div className="sm:hidden space-y-1.5">
+                <span className="text-[11px] text-foreground truncate flex items-center gap-1" title={feature}>
+                  {disagree && (
+                    <span className="text-amber-500" title="SHAP et LIME divergent">⚠</span>
+                  )}
+                  {feature}
+                </span>
+                <div className="grid items-center gap-2 grid-cols-[40px_minmax(0,1fr)_auto]">
+                  <span className="text-[10px] font-semibold text-violet-600 dark:text-violet-400">SHAP</span>
+                  {drawBar(sVal, 'violet')}
+                  {sValSpan}
+                </div>
+                <div className="grid items-center gap-2 grid-cols-[40px_minmax(0,1fr)_auto]">
+                  <span className="text-[10px] font-semibold text-teal-600 dark:text-teal-400">LIME</span>
+                  {drawBar(lVal, 'teal')}
+                  {lValSpan}
+                </div>
+              </div>
+
+              {/* Desktop: 5-col grid */}
+              <div className="hidden sm:grid items-center gap-2 grid-cols-[minmax(90px,140px)_minmax(0,1fr)_56px_minmax(0,1fr)_56px]">
+                <span className="text-[11px] text-foreground truncate flex items-center gap-1" title={feature}>
+                  {disagree && (
+                    <span className="text-amber-500" title="SHAP et LIME divergent sur cette variable">⚠</span>
+                  )}
+                  {feature}
+                </span>
+                {drawBar(sVal, 'violet')}
+                {sValSpan}
+                {drawBar(lVal, 'teal')}
+                {lValSpan}
+              </div>
             </div>
           );
         })}

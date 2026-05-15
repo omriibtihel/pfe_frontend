@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { useParams, useNavigate } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import {
@@ -38,6 +39,7 @@ export function ImportPage() {
   const projectId = id!;
   const navigate = useNavigate();
   const { toast } = useToast();
+  const { t } = useTranslation();
 
   const [file, setFile] = useState<File | null>(null);
   const [datasets, setDatasets] = useState<DatasetOut[]>([]);
@@ -82,8 +84,8 @@ export function ImportPage() {
       }
     } catch (e) {
       toast({
-        title: "Erreur",
-        description: (e as Error).message || "Impossible de charger les datasets",
+        title: t("import.toastErrTitle"),
+        description: (e as Error).message || t("import.errLoadList"),
         variant: "destructive",
       });
     } finally {
@@ -99,9 +101,8 @@ export function ImportPage() {
     } catch (e) {
       setPreview(null);
       toast({
-        title: "Erreur",
-        description:
-          (e as Error).message || "Impossible de prévisualiser le dataset",
+        title: t("import.toastErrTitle"),
+        description: (e as Error).message || t("import.errPreview"),
         variant: "destructive",
       });
     } finally {
@@ -128,8 +129,8 @@ export function ImportPage() {
     try {
       const created = await datasetService.upload(projectId, uploadedFile);
       toast({
-        title: "Fichier importé",
-        description: "Votre dataset a été chargé avec succès",
+        title: t("import.toastImportedTitle"),
+        description: t("import.toastImportedDesc"),
       });
 
       await loadDatasets();
@@ -140,8 +141,8 @@ export function ImportPage() {
       setUploadComplete(true);
     } catch (e) {
       toast({
-        title: "Erreur",
-        description: (e as Error).message || "Échec de l'import",
+        title: t("import.toastErrTitle"),
+        description: (e as Error).message || t("import.errImport"),
         variant: "destructive",
       });
     } finally {
@@ -164,7 +165,7 @@ export function ImportPage() {
       await datasetService.delete(projectId, deleteTarget.id);
 
       toast({
-        title: "Dataset supprimé",
+        title: t("import.toastDeletedTitle"),
         description: deleteTarget.original_name,
       });
 
@@ -184,8 +185,8 @@ export function ImportPage() {
       }
     } catch (e) {
       toast({
-        title: "Erreur",
-        description: (e as Error).message || "Impossible de supprimer le dataset",
+        title: t("import.toastErrTitle"),
+        description: (e as Error).message || t("import.errDelete"),
         variant: "destructive",
       });
     } finally {
@@ -218,10 +219,10 @@ export function ImportPage() {
       >
         <motion.div variants={staggerItem}>
           <h1 className="text-3xl font-bold text-foreground">
-            Import de données
+            {t("import.title")}
           </h1>
           <p className="text-muted-foreground mt-1">
-            Chargez votre dataset médical pour commencer l'analyse
+            {t("import.subtitle")}
           </p>
         </motion.div>
 
@@ -231,15 +232,15 @@ export function ImportPage() {
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
                 <Upload className="h-5 w-5 text-primary" />
-                Charger un fichier
+                {t("import.uploadTitle")}
               </CardTitle>
-              <CardDescription>Formats acceptés: CSV, Excel (.xlsx)</CardDescription>
+              <CardDescription>{t("import.uploadDesc")}</CardDescription>
             </CardHeader>
             <CardContent>
               <FileUpload onUpload={handleUpload} />
               {isUploading && (
                 <p className="text-sm text-muted-foreground mt-3">
-                  Upload en cours…
+                  {t("import.uploading")}
                 </p>
               )}
             </CardContent>
@@ -250,21 +251,21 @@ export function ImportPage() {
         <motion.div variants={staggerItem}>
           <Card>
             <CardHeader className="flex-row items-center justify-between">
-              <CardTitle>Datasets du projet</CardTitle>
+              <CardTitle>{t("import.listTitle")}</CardTitle>
               <Button
                 variant="outline"
                 onClick={loadDatasets}
                 disabled={isLoadingList}
               >
-                Rafraîchir
+                {t("import.refresh")}
               </Button>
             </CardHeader>
             <CardContent>
               {isLoadingList ? (
-                <div className="text-sm text-muted-foreground">Chargement…</div>
+                <div className="text-sm text-muted-foreground">{t("import.loading")}</div>
               ) : datasets.length === 0 ? (
                 <div className="text-sm text-muted-foreground">
-                  Aucun dataset pour ce projet. Importez un fichier pour commencer.
+                  {t("import.noDatasets")}
                 </div>
               ) : (
                 <div className="space-y-2">
@@ -286,7 +287,7 @@ export function ImportPage() {
                         <p className="font-medium truncate">{d.original_name}</p>
                         <p className="text-xs text-muted-foreground">
                           {(d.size_bytes / 1024).toFixed(1)} KB •{" "}
-                          {new Date(d.created_at).toLocaleString("fr-FR")}
+                          {new Date(d.created_at).toLocaleString()}
                         </p>
                       </button>
 
@@ -298,7 +299,7 @@ export function ImportPage() {
                           variant="ghost"
                           size="icon"
                           onClick={() => setDeleteTarget(d)}
-                          aria-label="Supprimer le dataset"
+                          aria-label={t("import.deleteAria")}
                         >
                           <Trash2 className="h-4 w-4 text-destructive" />
                         </Button>
@@ -324,7 +325,7 @@ export function ImportPage() {
                   <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
                     <CardTitle className="flex items-center gap-2">
                       <FileSpreadsheet className="h-5 w-5 text-secondary" />
-                      Aperçu du dataset
+                      {t("import.previewTitle")}
                     </CardTitle>
 
                     <div className="flex items-center gap-2">
@@ -333,7 +334,7 @@ export function ImportPage() {
                         className="bg-gradient-to-r from-primary to-secondary"
                       >
                         <Database className="h-4 w-4 mr-2" />
-                        Menu d'analyse
+                        {t("import.analysisMenu")}
                       </Button>
                     </div>
                   </div>
@@ -343,7 +344,7 @@ export function ImportPage() {
                   {/* Left: rows input */}
                   <div className="flex flex-col gap-1">
                     <Label htmlFor="rows" className="text-sm">
-                      Nombre de lignes
+                      {t("import.rowsLabel")}
                     </Label>
 
                     <div className="flex items-center gap-3">
@@ -371,12 +372,12 @@ export function ImportPage() {
                       className="h-9"
                     >
                       <Eye className="h-4 w-4 mr-2" />
-                      Prévisualiser
+                      {t("import.preview")}
                     </Button>
 
                     <Button variant="outline" onClick={handleReset} className="h-9">
                       <RotateCcw className="h-4 w-4 mr-2" />
-                      Réinitialiser
+                      {t("import.reset")}
                     </Button>
                   </div>
                 </div>
@@ -386,14 +387,14 @@ export function ImportPage() {
                 <CardContent>
                   {isLoadingPreview ? (
                     <div className="text-sm text-muted-foreground">
-                      Chargement de l’aperçu…
+                      {t("import.loadingPreview")}
                     </div>
                   ) : !preview ? (
                     <div className="text-sm text-muted-foreground">
-                      Aucun aperçu disponible pour le moment.
+                      {t("import.noPreview")}
                     </div>
                   ) : previewRows.length === 0 ? (
-                    <div className="text-sm text-muted-foreground">Dataset vide.</div>
+                    <div className="text-sm text-muted-foreground">{t("import.emptyDataset")}</div>
                   ) : (
                     <div className="overflow-x-auto rounded-lg border border-border">
                       <table className="w-full text-sm">
@@ -435,10 +436,9 @@ export function ImportPage() {
             <CardContent className="flex items-start gap-3 py-4">
               <Info className="h-5 w-5 text-primary mt-0.5" />
               <div>
-                <p className="font-medium">Conseil</p>
+                <p className="font-medium">{t("import.tipTitle")}</p>
                 <p className="text-sm text-muted-foreground">
-                  Pour de meilleurs résultats, vérifie que la colonne cible est bien définie
-                  et que les valeurs manquantes sont gérées.
+                  {t("import.tipDesc")}
                 </p>
               </div>
             </CardContent>
@@ -450,10 +450,10 @@ export function ImportPage() {
         isOpen={!!deleteTarget}
         onClose={() => setDeleteTarget(null)}
         onConfirm={confirmDelete}
-        title="Supprimer le dataset"
-        description={`Êtes-vous sûr de vouloir supprimer "${deleteTarget?.original_name}" ?`}
+        title={t("import.deleteTitle")}
+        description={t("import.deleteDesc", { name: deleteTarget?.original_name ?? "" })}
         variant="destructive"
-        confirmText={isDeleting ? "Suppression..." : "Supprimer"}
+        confirmText={isDeleting ? t("import.deleting") : t("import.delete")}
       />
     </AppLayout>
   );

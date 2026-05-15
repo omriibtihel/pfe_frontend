@@ -26,14 +26,14 @@ export function HistPanel({ histCol, histBars, histBins, histOut, chartLoading, 
 
   const stats = numStats
     ? [
-        { label: "N",       v: numStats.count, d: 0 },
-        { label: "Moy.",    v: numStats.mean,  d: 3 },
-        { label: "Std",     v: numStats.std,   d: 3 },
-        { label: "Min",     v: numStats.min,   d: 3 },
-        { label: "P25",     v: numStats.p25,   d: 3 },
-        { label: "Médiane", v: numStats.p50,   d: 3 },
-        { label: "P75",     v: numStats.p75,   d: 3 },
-        { label: "Max",     v: numStats.max,   d: 3 },
+        { label: "Nombre",  v: numStats.count, d: 0, tip: "Nombre de valeurs non nulles" },
+        { label: "Moy.",    v: numStats.mean,  d: 3, tip: "Moyenne arithmétique" },
+        { label: "Std",     v: numStats.std,   d: 3, tip: "Écart-type (dispersion autour de la moyenne)" },
+        { label: "Min",     v: numStats.min,   d: 3, tip: "Valeur minimale" },
+        { label: "P25",     v: numStats.p25,   d: 3, tip: "1er quartile : 25 % des valeurs sont inférieures" },
+        { label: "Médiane", v: numStats.p50,   d: 3, tip: "Médiane : 50 % des valeurs sont inférieures" },
+        { label: "P75",     v: numStats.p75,   d: 3, tip: "3e quartile : 75 % des valeurs sont inférieures" },
+        { label: "Max",     v: numStats.max,   d: 3, tip: "Valeur maximale" },
       ]
     : null;
 
@@ -91,8 +91,8 @@ export function HistPanel({ histCol, histBars, histBins, histOut, chartLoading, 
             </span>
           </div>
           <div className="grid grid-cols-4 sm:grid-cols-8 gap-2">
-            {stats.map(({ label, v, d }) => (
-              <div key={label} className="text-center">
+            {stats.map(({ label, v, d, tip }) => (
+              <div key={label} className="text-center cursor-help" title={tip}>
                 <p className="text-[10px] text-muted-foreground mb-0.5">{label}</p>
                 <p className="text-xs font-semibold tabular-nums">{fmtN(v as number | null | undefined, d)}</p>
               </div>

@@ -22,12 +22,14 @@ import {
   Download,
   FileText,
   Loader2,
+  Target,
 } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
 import { Modal } from '@/components/ui/modal';
 import {
   streamPredictionReport,
+  type ReportChange,
   type ReportChunk,
   type ReportDoneMeta,
   type ReportFactor,
@@ -51,6 +53,7 @@ interface ReportState {
   context: string;
   limitations: string;
   next_steps: string;
+  what_to_change: ReportChange[];
   disclaimer: string;
 }
 
@@ -63,6 +66,7 @@ const EMPTY_STATE: ReportState = {
   context: '',
   limitations: '',
   next_steps: '',
+  what_to_change: [],
   disclaimer: '',
 };
 
@@ -469,6 +473,7 @@ export function PredictionReportPanel({
             if (chunk.section === 'context')     return { ...prev, context:     chunk.content };
             if (chunk.section === 'limitations') return { ...prev, limitations: chunk.content };
             if (chunk.section === 'next_steps')  return { ...prev, next_steps:  chunk.content };
+            if (chunk.section === 'what_to_change') return { ...prev, what_to_change: chunk.content };
             if (chunk.section === 'disclaimer')  return { ...prev, disclaimer:  chunk.content };
             return prev;
           });
@@ -508,6 +513,8 @@ export function PredictionReportPanel({
         direction: f.direction,
         weight:    f.weight,
       })),
+      // Actionable LLM sections
+      whatToChange:    report.what_to_change,
     });
   };
 
@@ -640,6 +647,43 @@ export function PredictionReportPanel({
           {report.next_steps && (
             <Section title={t('predictionReport.sections.nextSteps') as string}>
               <p>{report.next_steps}</p>
+            </Section>
+          )}
+
+          {/* What to change — actionable counterfactuals (DiCE-derived) */}
+          {report.what_to_change.length > 0 && (
+            <Section title={lang === 'fr' ? 'Que faudrait-il changer ?' : 'What would need to change?'}>
+              <p className="mb-2 text-xs text-muted-foreground">
+                {lang === 'fr'
+                  ? 'Pistes hypothétiques calculées par l\'outil pour rapprocher votre profil de la zone rassurante. Ce ne sont pas des promesses.'
+                  : 'Hypothetical paths the tool computed to move your profile toward the reassuring zone. These are not promises.'}
+              </p>
+              <ul className="space-y-2">
+                {report.what_to_change.map((c, i) => (
+                  <li key={i} className="rounded-md border bg-card p-3 text-sm shadow-sm">
+                    <div className="flex flex-wrap items-baseline gap-2 mb-1">
+                      <Target className="h-3.5 w-3.5 text-amber-600 dark:text-amber-400 shrink-0" />
+                      <span className="font-semibold">{c.factor}</span>
+                      <span className="text-xs text-muted-foreground">
+                        {c.current}
+                        <ArrowRight className="inline mx-1 h-3 w-3 align-middle" />
+                        <span className="font-medium text-foreground">{c.target}</span>
+                        <span className="ml-2 font-mono text-[11px] text-amber-700 dark:text-amber-400">
+                          {c.magnitude_text}
+                        </span>
+                      </span>
+                    </div>
+                    {c.change_text && (
+                      <p className="text-xs leading-relaxed text-foreground">{c.change_text}</p>
+                    )}
+                    {c.why_it_matters && (
+                      <p className="text-xs leading-relaxed text-muted-foreground mt-1">
+                        {c.why_it_matters}
+                      </p>
+                    )}
+                  </li>
+                ))}
+              </ul>
             </Section>
           )}
 

@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
-import { AnimatePresence, motion } from "framer-motion";
+import { Trans, useTranslation } from "react-i18next";
+import { motion } from "framer-motion";
 import { Brain, Info, MoreHorizontal } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -31,6 +32,7 @@ type ModelCardOption = ModelCatalogEntry & {
 };
 
 export function Step4Models({ projectId, config, onConfigChange }: Step4Props) {
+  const { t } = useTranslation();
   const [availableModels, setAvailableModels] = useState<ModelCardOption[]>(
     MODEL_CATALOG.map((m) => ({ ...m, installed: true, supportedTasks: m.supportedTasks ?? ["classification", "regression"] }))
   );
@@ -127,12 +129,12 @@ export function Step4Models({ projectId, config, onConfigChange }: Step4Props) {
       <div className="rounded-xl border border-sky-200/60 bg-sky-50/50 dark:border-sky-800/40 dark:bg-sky-950/20 p-4 flex gap-3">
         <Info className="h-4 w-4 text-sky-500 mt-0.5 shrink-0" />
         <div className="space-y-1.5 text-[12px] text-sky-800 dark:text-sky-300">
-          <p className="font-semibold">Comment choisir ?</p>
+          <p className="font-semibold">{t("training.step4.guidanceTitle")}</p>
           <ul className="space-y-1 text-sky-700 dark:text-sky-400">
-            <li>• <strong>Pour commencer</strong> : sélectionnez <em>Forêt Aléatoire + XGBoost + Régression Logistique</em> — le système les comparera et présentera le meilleur résultat.</li>
-            <li>• <strong>Explicabilité requise</strong> (audit, réglementaire) : ajoutez <em>Arbre de Décision</em> ou <em>Régression Logistique</em>.</li>
-            <li>• <strong>Peu de patients (&lt; 500)</strong> : préférez <em>SVM</em> ou <em>Régression Logistique</em>.</li>
-            <li>• <strong>Variables catégorielles</strong> (sexe, groupe sanguin…) : ajoutez <em>CatBoost</em>.</li>
+            <li>• <Trans i18nKey="training.step4.guidance1" components={{ strong: <strong />, em: <em /> }} /></li>
+            <li>• <Trans i18nKey="training.step4.guidance2" components={{ strong: <strong />, em: <em /> }} /></li>
+            <li>• <Trans i18nKey="training.step4.guidance3" components={{ strong: <strong />, em: <em /> }} /></li>
+            <li>• <Trans i18nKey="training.step4.guidance4" components={{ strong: <strong />, em: <em /> }} /></li>
           </ul>
         </div>
       </div>
@@ -143,14 +145,17 @@ export function Step4Models({ projectId, config, onConfigChange }: Step4Props) {
             <div className="p-2 rounded-xl bg-primary/10">
               <Brain className="h-4 w-4 text-primary" />
             </div>
-            Algorithmes d'apprentissage
-            <MedHelp title="Qu'est-ce qu'un algorithme ?" side="bottom">
-              <p>Un algorithme est une méthode mathématique qui apprend à reconnaître des schémas dans vos données pour faire des prédictions.</p>
-              <p className="mt-1">Chaque algorithme a ses forces : certains sont plus précis, d'autres plus rapides, d'autres plus faciles à expliquer à un comité d'éthique.</p>
-              <p className="mt-1">Il est recommandé d'en sélectionner plusieurs — le système les comparera automatiquement.</p>
+            {t("training.step4.cardTitle")}
+            <MedHelp title={t("training.step4.helpTitle")} side="bottom">
+              <p>{t("training.step4.helpP1")}</p>
+              <p className="mt-1">{t("training.step4.helpP2")}</p>
+              <p className="mt-1">{t("training.step4.helpP3")}</p>
             </MedHelp>
             <Badge variant="secondary" className="ml-auto text-xs">
-              {config.models.length} sélectionné{config.models.length > 1 ? "s" : ""}
+              {t(
+                config.models.length > 1 ? "training.step4.selectedCountOther" : "training.step4.selectedCountOne",
+                { n: config.models.length }
+              )}
             </Badge>
           </CardTitle>
         </CardHeader>
@@ -184,8 +189,8 @@ export function Step4Models({ projectId, config, onConfigChange }: Step4Props) {
                         e.stopPropagation();
                         setHpModalModel(modelKey);
                       }}
-                      aria-label={`Configurer hyperparametres ${m.label}`}
-                      title="Hyperparametres"
+                      aria-label={t("training.step4.configureHp", { label: t(`training.models.${m.value}.label`, m.label) })}
+                      title={t("training.step4.hpTooltip")}
                     >
                       <MoreHorizontal className="h-4 w-4" />
                     </Button>
@@ -199,13 +204,13 @@ export function Step4Models({ projectId, config, onConfigChange }: Step4Props) {
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-1.5">
                       <span className="text-primary"><m.Icon className="h-4 w-4" /></span>
-                      <span className="font-semibold text-sm">{m.label}</span>
-                      <MedHelp title={m.label} side="bottom">
-                        <p>{m.clinicalTip}</p>
+                      <span className="font-semibold text-sm">{t(`training.models.${m.value}.label`, m.label)}</span>
+                      <MedHelp title={t(`training.models.${m.value}.label`, m.label)} side="bottom">
+                        <p>{t(`training.models.${m.value}.tip`, m.clinicalTip)}</p>
                       </MedHelp>
                     </div>
-                    <p className="text-xs text-muted-foreground mt-1">{m.desc}</p>
-                    {!m.installed && <p className="text-[11px] text-destructive mt-1">Non installé sur le backend</p>}
+                    <p className="text-xs text-muted-foreground mt-1">{t(`training.models.${m.value}.desc`, m.desc)}</p>
+                    {!m.installed && <p className="text-[11px] text-destructive mt-1">{t("training.step4.notInstalled")}</p>}
                   </div>
                 </motion.label>
               );
@@ -218,7 +223,7 @@ export function Step4Models({ projectId, config, onConfigChange }: Step4Props) {
         isOpen={Boolean(hpModalModel)}
         onClose={() => setHpModalModel(null)}
         modelKey={activeModelKey}
-        modelLabel={activeModel?.label ?? null}
+        modelLabel={activeModel ? t(`training.models.${activeModel.value}.label`, activeModel.label) : null}
         modelSelected={activeModelSelected}
         fieldSchemas={activeModelSchema}
         modelHyperparams={modelHyperparams}

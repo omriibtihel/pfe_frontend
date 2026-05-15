@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { Link } from "react-router-dom";
 import { motion } from "framer-motion";
 import {
@@ -38,6 +39,7 @@ const EMPTY_VALIDATION: TrainingValidationResponse = {
 };
 
 export function Step6Summary({ projectId, config, onStartTraining, onGoToResults }: Step6Props) {
+  const { t } = useTranslation();
   const versionId = String(config.datasetVersionId ?? "").trim();
   const prepConfig = versionId ? loadPrepConfig(projectId, versionId) : null;
 
@@ -108,7 +110,7 @@ export function Step6Summary({ projectId, config, onStartTraining, onGoToResults
         effective_preprocessing_by_column: {},
         warnings: [],
         errors: showNetworkErrorInList
-          ? [e instanceof Error ? e.message : "Validation indisponible."]
+          ? [e instanceof Error ? e.message : t("training.step6.errValidationUnavailable")]
           : [],
       };
       if (seq === validationSeqRef.current) {
@@ -136,7 +138,7 @@ export function Step6Summary({ projectId, config, onStartTraining, onGoToResults
     if (validationOut.errors.length > 0) {
       setStatus("idle");
       setProgress(0);
-      setError("Validation bloquante: corrige les erreurs avant de lancer.");
+      setError(t("training.step6.errBlocking"));
       return;
     }
     const missingPositiveLabelWarning = (validationOut.warnings ?? []).some((msg) =>
@@ -146,7 +148,7 @@ export function Step6Summary({ projectId, config, onStartTraining, onGoToResults
     if (missingPositiveLabelWarning && !hasPositiveLabel) {
       setStatus("idle");
       setProgress(0);
-      setError("La classe positive est requise dans ce cas. Renseigne 'positiveLabel' à l'étape Métriques.");
+      setError(t("training.step6.errPositiveLabel"));
       return;
     }
 
@@ -164,7 +166,7 @@ export function Step6Summary({ projectId, config, onStartTraining, onGoToResults
             setStatus("idle");
             setProgress(0);
             setError(
-              `Stratégie non faisable (${selectedStrategy}). Suggestion: ${analysis.default_recommendation}.`
+              t("training.step6.errStrategy", { strategy: selectedStrategy, suggestion: analysis.default_recommendation })
             );
             return;
           }
@@ -177,7 +179,7 @@ export function Step6Summary({ projectId, config, onStartTraining, onGoToResults
     const sid = await onStartTraining();
     if (!sid) {
       setStatus("failed");
-      setError("Impossible de demarrer l'entrainement.");
+      setError(t("training.step6.errStart"));
       return;
     }
 
@@ -187,7 +189,7 @@ export function Step6Summary({ projectId, config, onStartTraining, onGoToResults
       await refresh(sid);
     } catch (e: unknown) {
       setStatus("failed");
-      setError(e instanceof Error ? e.message : "Erreur de suivi session.");
+      setError(e instanceof Error ? e.message : t("training.step6.errSession"));
       return;
     }
 
@@ -195,7 +197,7 @@ export function Step6Summary({ projectId, config, onStartTraining, onGoToResults
     pollingRef.current = window.setInterval(() => {
       refresh(sid).catch((e: unknown) => {
         setStatus("failed");
-        setError(e instanceof Error ? e.message : "Erreur de suivi session.");
+        setError(e instanceof Error ? e.message : t("training.step6.errSession"));
         stopPolling();
       });
     }, 1200);
@@ -232,31 +234,31 @@ export function Step6Summary({ projectId, config, onStartTraining, onGoToResults
   const applyThreshold = prepConfig?.balancing?.applyThreshold ?? config.balancing?.applyThreshold ?? false;
 
   const summaryItems = [
-    { label: "Dataset Version", value: config.datasetVersionId || "-" },
-    { label: "Variable cible", value: config.targetColumn },
-    { label: "Type de tache", value: config.taskType },
+    { label: t("training.step6.summary.datasetVersion"), value: config.datasetVersionId || "-" },
+    { label: t("training.step6.summary.target"), value: config.targetColumn },
+    { label: t("training.step6.summary.task"), value: config.taskType },
     {
-      label: "Split",
+      label: t("training.step6.summary.split"),
       value:
         splitMethod === "holdout"
-          ? `Holdout ${trainRatio}/${valRatio}/${testRatio}`
-          : `${splitMethod} (${kFolds} folds)`,
+          ? t("training.step6.summary.holdoutDisplay", { train: trainRatio, val: valRatio, test: testRatio })
+          : t("training.step6.summary.cvDisplay", { method: splitMethod, k: kFolds }),
     },
-    { label: "Modeles", value: `${config.models.length} selectionne(s)` },
-    { label: "Metriques", value: `${config.metrics.length} selectionnee(s)` },
-    { label: "Balancing", value: balancingStrategy },
-    { label: "Seuil optimise", value: applyThreshold ? "Oui" : "Non" },
-    { label: "Classe positive", value: config.positiveLabel == null || String(config.positiveLabel).trim() === "" ? "-" : String(config.positiveLabel) },
+    { label: t("training.step6.summary.models"), value: t("training.step6.summary.modelsCount", { n: config.models.length }) },
+    { label: t("training.step6.summary.metrics"), value: t("training.step6.summary.metricsCount", { n: config.metrics.length }) },
+    { label: t("training.step6.summary.balancing"), value: balancingStrategy },
+    { label: t("training.step6.summary.threshold"), value: applyThreshold ? t("training.step6.summary.thresholdYes") : t("training.step6.summary.thresholdNo") },
+    { label: t("training.step6.summary.positive"), value: config.positiveLabel == null || String(config.positiveLabel).trim() === "" ? "-" : String(config.positiveLabel) },
     {
-      label: "Optimisation HP",
+      label: t("training.step6.summary.hpo"),
       value:
         config.searchType === "grid"
-          ? `GridSearch (${config.gridCvFolds} folds)`
+          ? t("training.step6.summary.grid", { k: config.gridCvFolds })
           : config.searchType === "random"
-          ? `RandomizedSearch (${config.nIterRandomSearch ?? 40} iters, ${config.gridCvFolds} folds)`
+          ? t("training.step6.summary.random", { iters: config.nIterRandomSearch ?? 40, k: config.gridCvFolds })
           : config.searchType === "halving_random"
-          ? `Successive Halving (${config.nIterRandomSearch ?? 60} candidats, ${config.gridCvFolds} folds)`
-          : "Desactivee",
+          ? t("training.step6.summary.halving", { iters: config.nIterRandomSearch ?? 60, k: config.gridCvFolds })
+          : t("training.step6.summary.disabled"),
     },
   ];
 
@@ -266,15 +268,15 @@ export function Step6Summary({ projectId, config, onStartTraining, onGoToResults
         <div className="rounded-lg border border-amber-300/50 bg-amber-50/60 dark:bg-amber-950/20 p-3 text-sm flex items-start gap-3">
           <AlertTriangle className="h-4 w-4 text-amber-600 mt-0.5 shrink-0" />
           <span className="text-amber-800 dark:text-amber-300">
-            Aucune configuration de préparation trouvée pour cette version.{" "}
+            {t("training.step6.noPrepWarning")}{" "}
             <Link
               to={`/projects/${projectId}/preparation`}
               className="underline font-medium inline-flex items-center gap-1"
             >
               <Sliders className="h-3.5 w-3.5" />
-              Configurer maintenant
-            </Link>{" "}
-            (split, prétraitement, rééquilibrage). Les valeurs par défaut seront utilisées.
+              {t("training.step6.configureNow")}
+            </Link>
+            {t("training.step6.noPrepSuffix")}
           </span>
         </div>
       )}
@@ -285,13 +287,13 @@ export function Step6Summary({ projectId, config, onStartTraining, onGoToResults
             <div className="p-2 rounded-xl bg-primary/10">
               <Rocket className="h-4 w-4 text-primary" />
             </div>
-            Recapitulatif
+            {t("training.step6.cardTitle")}
             <button
               onClick={() => setShowJson(!showJson)}
               className="ml-auto text-xs text-muted-foreground hover:text-primary transition-colors flex items-center gap-1"
             >
               <FileJson className="h-3.5 w-3.5" />
-              {showJson ? "Masquer JSON" : "Voir JSON"}
+              {showJson ? t("training.step6.hideJson") : t("training.step6.showJson")}
             </button>
           </CardTitle>
         </CardHeader>
@@ -318,10 +320,10 @@ export function Step6Summary({ projectId, config, onStartTraining, onGoToResults
           <CardHeader className="pb-2">
             <CardTitle className="text-sm flex items-center gap-2">
               <ShieldAlert className="h-4 w-4 text-primary" />
-              Validation pre-lancement
+              {t("training.step6.validationTitle")}
               {validating ? (
                 <Badge variant="outline" className="ml-auto text-xs">
-                  Verification...
+                  {t("training.step6.validationChecking")}
                 </Badge>
               ) : (
                 <Badge
@@ -329,8 +331,8 @@ export function Step6Summary({ projectId, config, onStartTraining, onGoToResults
                   className="ml-auto text-xs"
                 >
                   {validation.errors.length
-                    ? `${validation.errors.length} erreur(s)`
-                    : `${validation.warnings.length} warning(s)`}
+                    ? t("training.step6.validationErrors", { n: validation.errors.length })
+                    : t("training.step6.validationWarnings", { n: validation.warnings.length })}
                 </Badge>
               )}
             </CardTitle>
@@ -338,7 +340,7 @@ export function Step6Summary({ projectId, config, onStartTraining, onGoToResults
           <CardContent className="space-y-3">
             {!!validation.errors.length && (
               <div className="rounded-lg border border-destructive/30 bg-destructive/5 p-3">
-                <p className="text-xs font-semibold text-destructive mb-2">Erreurs bloquantes</p>
+                <p className="text-xs font-semibold text-destructive mb-2">{t("training.step6.blockingErrors")}</p>
                 <div className="space-y-1">
                   {validation.errors.map((msg, i) => (
                     <p key={`${i}-${msg}`} className="text-xs text-destructive">
@@ -362,7 +364,7 @@ export function Step6Summary({ projectId, config, onStartTraining, onGoToResults
 
             {!!validation.warnings.length && (
               <div className="rounded-lg border border-warning/30 bg-warning/5 p-3">
-                <p className="text-xs font-semibold mb-2">Warnings</p>
+                <p className="text-xs font-semibold mb-2">{t("training.step6.warnings")}</p>
                 <div className="space-y-1">
                   {validation.warnings.map((msg, i) => (
                     <p key={`${i}-${msg}`} className="text-xs">
@@ -387,9 +389,9 @@ export function Step6Summary({ projectId, config, onStartTraining, onGoToResults
             {!!Object.keys(validation.effective_preprocessing_by_column ?? {}).length && (
               <details className="rounded-lg border border-border/60 bg-muted/30 p-3 group">
                 <summary className="text-xs font-semibold cursor-pointer select-none list-none flex items-center justify-between">
-                  <span>Effective preprocessing by column</span>
-                  <span className="text-muted-foreground text-[10px] group-open:hidden">Afficher</span>
-                  <span className="text-muted-foreground text-[10px] hidden group-open:inline">Masquer</span>
+                  <span>{t("training.step6.effectivePrep")}</span>
+                  <span className="text-muted-foreground text-[10px] group-open:hidden">{t("training.step6.show")}</span>
+                  <span className="text-muted-foreground text-[10px] hidden group-open:inline">{t("training.step6.hide")}</span>
                 </summary>
                 <pre className="mt-2 text-[11px] overflow-auto max-h-56 font-mono">
                   {JSON.stringify(validation.effective_preprocessing_by_column, null, 2)}
@@ -408,9 +410,12 @@ export function Step6Summary({ projectId, config, onStartTraining, onGoToResults
           disabled={config.models.length === 0 || config.metrics.length === 0 || validating}
         >
           <Play className="h-5 w-5 mr-3" />
-          Lancer l'entrainement
+          {t("training.step6.btnLaunch")}
           <span className="ml-2 text-sm opacity-80">
-            ({config.models.length} modele{config.models.length > 1 ? "s" : ""})
+            {t(
+              config.models.length > 1 ? "training.step6.btnLaunchSuffixOther" : "training.step6.btnLaunchSuffixOne",
+              { n: config.models.length }
+            )}
           </span>
         </Button>
       )}
@@ -422,11 +427,14 @@ export function Step6Summary({ projectId, config, onStartTraining, onGoToResults
               <Loader2 className="h-5 w-5 text-primary animate-spin" />
               <div>
                 <p className="font-semibold text-sm">
-                  {status === "queued" ? "En file d'attente..." : "Entrainement en cours..."}
+                  {status === "queued" ? t("training.step6.stateQueued") : t("training.step6.stateRunning")}
                 </p>
                 <p className="text-xs text-muted-foreground">
-                  Session {sessionId ? `#${sessionId}` : ""} | {config.models.length} modele
-                  {config.models.length > 1 ? "s" : ""}
+                  {t("training.step6.sessionInfo", {
+                    sid: sessionId ? `#${sessionId}` : "",
+                    n: config.models.length,
+                    plural: config.models.length > 1 ? "s" : "",
+                  })}
                 </p>
               </div>
               <Badge className="ml-auto" variant="secondary">
@@ -446,8 +454,13 @@ export function Step6Summary({ projectId, config, onStartTraining, onGoToResults
               <div className="flex items-center gap-3 mb-4">
                 <CheckCircle2 className="h-6 w-6 text-success" />
                 <div>
-                  <p className="font-semibold">Entrainement termine avec succes.</p>
-                  <p className="text-xs text-muted-foreground">{config.models.length} modele(s) entraine(s)</p>
+                  <p className="font-semibold">{t("training.step6.success")}</p>
+                  <p className="text-xs text-muted-foreground">
+                    {t(
+                      config.models.length > 1 ? "training.step6.successDescOther" : "training.step6.successDescOne",
+                      { n: config.models.length }
+                    )}
+                  </p>
                 </div>
               </div>
               <Button
@@ -455,7 +468,7 @@ export function Step6Summary({ projectId, config, onStartTraining, onGoToResults
                 className="w-full gradient-premium text-primary-foreground"
                 onClick={() => sessionId && onGoToResults(sessionId)}
               >
-                Voir les resultats
+                {t("training.step6.viewResults")}
                 <ArrowRight className="h-4 w-4 ml-2" />
               </Button>
             </CardContent>
@@ -470,7 +483,7 @@ export function Step6Summary({ projectId, config, onStartTraining, onGoToResults
               <div className="flex items-center gap-3 mb-4">
                 <XCircle className="h-6 w-6 text-destructive" />
                 <div>
-                  <p className="font-semibold text-destructive">Echec de l'entrainement</p>
+                  <p className="font-semibold text-destructive">{t("training.step6.failed")}</p>
                   <p className="text-xs text-muted-foreground">{error}</p>
                 </div>
               </div>
@@ -483,7 +496,7 @@ export function Step6Summary({ projectId, config, onStartTraining, onGoToResults
                   setError(null);
                 }}
               >
-                Reessayer
+                {t("training.step6.retry")}
               </Button>
             </CardContent>
           </Card>

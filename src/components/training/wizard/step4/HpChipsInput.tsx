@@ -1,4 +1,5 @@
 import { useState, useRef, type KeyboardEvent } from "react";
+import { useTranslation } from "react-i18next";
 import { X } from "lucide-react";
 import type { ModelHyperparamScalar, TrainingHyperparamFieldSchema } from "@/types";
 import { cn } from "@/lib/utils";
@@ -9,12 +10,15 @@ interface HpChipsInputProps {
   onChange: (values: ModelHyperparamScalar[]) => void;
 }
 
+type TFn = (key: string, opts?: Record<string, unknown>) => string;
+
 function parseAndValidate(
   token: string,
   schema: TrainingHyperparamFieldSchema,
+  t: TFn,
 ): { ok: true; value: ModelHyperparamScalar } | { ok: false; reason: string } {
   const trimmed = token.trim();
-  if (!trimmed) return { ok: false, reason: "vide" };
+  if (!trimmed) return { ok: false, reason: t("training.hp.chipErrEmpty") };
 
   const type = schema.type;
   const lower = trimmed.toLowerCase();
@@ -25,13 +29,13 @@ function parseAndValidate(
 
   if (type === "int" || type === "int_or_none") {
     const n = Number.parseInt(trimmed, 10);
-    if (!Number.isFinite(n)) return { ok: false, reason: `"${trimmed}" n'est pas un entier` };
+    if (!Number.isFinite(n)) return { ok: false, reason: t("training.hp.chipErrNotInt", { token: trimmed }) };
     return { ok: true, value: n };
   }
 
   if (type === "float") {
     const n = Number.parseFloat(trimmed);
-    if (!Number.isFinite(n)) return { ok: false, reason: `"${trimmed}" n'est pas un nombre` };
+    if (!Number.isFinite(n)) return { ok: false, reason: t("training.hp.chipErrNotNumber", { token: trimmed }) };
     return { ok: true, value: n };
   }
 
@@ -39,13 +43,13 @@ function parseAndValidate(
     const allowed = (schema.enum ?? []).map((x) => x.toLowerCase());
     if (allowed.includes(lower)) return { ok: true, value: lower };
     const n = Number.parseFloat(trimmed);
-    if (!Number.isFinite(n)) return { ok: false, reason: `"${trimmed}" n'est pas un nombre ni une option valide` };
+    if (!Number.isFinite(n)) return { ok: false, reason: t("training.hp.chipErrNotValid", { token: trimmed }) };
     return { ok: true, value: n };
   }
 
   if (type === "enum" || type === "enum_or_null") {
     const allowed = (schema.enum ?? []).map((x) => x.toLowerCase());
-    if (!allowed.includes(lower)) return { ok: false, reason: `"${trimmed}" non reconnu (options : ${allowed.join(", ")})` };
+    if (!allowed.includes(lower)) return { ok: false, reason: t("training.hp.chipErrUnknown", { token: trimmed, options: allowed.join(", ") }) };
     return { ok: true, value: lower };
   }
 
@@ -57,6 +61,7 @@ function chipLabel(v: ModelHyperparamScalar): string {
 }
 
 export function HpChipsInput({ chips, fieldSchema, onChange }: HpChipsInputProps) {
+  const { t } = useTranslation();
   const [inputText, setInputText] = useState("");
   const [error, setError] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -65,7 +70,7 @@ export function HpChipsInput({ chips, fieldSchema, onChange }: HpChipsInputProps
     const trimmed = raw.trim();
     if (!trimmed) return;
 
-    const result = parseAndValidate(trimmed, fieldSchema);
+    const result = parseAndValidate(trimmed, fieldSchema, t);
     if (!result.ok) {
       setError(result.reason);
       return;
@@ -113,7 +118,7 @@ export function HpChipsInput({ chips, fieldSchema, onChange }: HpChipsInputProps
             {chipLabel(chip)}
             <button
               type="button"
-              aria-label={`Supprimer ${chipLabel(chip)}`}
+              aria-label={t("training.hp.chipAriaRemove", { value: chipLabel(chip) })}
               onClick={(e) => { e.stopPropagation(); removeChip(i); }}
               className="hover:text-destructive focus:outline-none"
             >
@@ -128,14 +133,14 @@ export function HpChipsInput({ chips, fieldSchema, onChange }: HpChipsInputProps
           onKeyDown={handleKeyDown}
           onBlur={() => { if (inputText.trim()) tryAdd(inputText); }}
           className="flex-1 min-w-[60px] bg-transparent text-xs outline-none placeholder:text-muted-foreground"
-          placeholder={chips.length === 0 ? "Valeur + Entrée (ou virgule)" : ""}
-          aria-label="Ajouter une valeur"
+          placeholder={chips.length === 0 ? t("training.hp.chipPlaceholder") : ""}
+          aria-label={t("training.hp.chipAriaAdd")}
         />
       </div>
       {error && <p className="text-[10px] text-destructive">{error}</p>}
       {!error && chips.length === 0 && (
         <p className="text-[10px] text-muted-foreground italic">
-          Aucune valeur — le backend utilisera ses propres defaults.
+          {t("training.hp.chipNoneHint")}
         </p>
       )}
     </div>

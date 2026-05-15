@@ -1,4 +1,5 @@
 import { useState, useCallback, useMemo, useEffect } from "react";
+import { useTranslation } from "react-i18next";
 import { useParams, useNavigate } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import {
@@ -52,12 +53,12 @@ import { Step6Summary } from "@/components/training/wizard/Step6Summary";
 import { loadPrepConfig, savePrepConfig } from "@/utils/prepConfig";
 import dataService from "@/services/dataService";
 
-const steps = [
-  { label: "Dataset & Cible",  icon: <Database       className="h-5 w-5" /> },
-  { label: "Modeles",          icon: <Brain           className="h-5 w-5" /> },
-  { label: "Metriques",        icon: <BarChart3       className="h-5 w-5" /> },
-  { label: "Lancer",           icon: <Rocket          className="h-5 w-5" /> },
-];
+const STEP_KEYS = [
+  { tk: "training.steps.datasetTarget", icon: <Database  className="h-5 w-5" /> },
+  { tk: "training.steps.models",        icon: <Brain     className="h-5 w-5" /> },
+  { tk: "training.steps.metrics",       icon: <BarChart3 className="h-5 w-5" /> },
+  { tk: "training.steps.launch",        icon: <Rocket    className="h-5 w-5" /> },
+] as const;
 
 // ── Mode dialog (shown after step 1 is complete) ─────────────────────────────
 
@@ -78,6 +79,7 @@ function ModeDialog({
   onClose,
   onAutoMLSessionStarted,
 }: ModeDialogProps) {
+  const { t } = useTranslation();
   const [showAutoML, setShowAutoML] = useState(false);
 
   useEffect(() => {
@@ -100,11 +102,11 @@ function ModeDialog({
       preventCloseOnOutside
       size="2xl"
       icon={<Sparkles className="h-4 w-4" />}
-      title="Configuration de l'entraînement"
+      title={t("training.modeDialog.title")}
       description={
         showAutoML
-          ? "Paramétrez le budget temps puis lancez AutoML."
-          : "Choisissez votre mode d'entraînement."
+          ? t("training.modeDialog.descAutoml")
+          : t("training.modeDialog.descPick")
       }
     >
       {!showAutoML && (
@@ -117,25 +119,19 @@ function ModeDialog({
             <CardHeader className="pb-2">
               <CardTitle className="flex items-center gap-2 text-sm">
                 <Bot className="h-4 w-4 text-primary" />
-                AutoML
-                <Badge variant="secondary" className="ml-auto text-[10px]">
-                  Recommandé
-                </Badge>
+                {t("training.modeDialog.automlTitle")}
               </CardTitle>
             </CardHeader>
             <CardContent className="text-xs text-muted-foreground space-y-1">
-              <p>
-                FLAML explore automatiquement les modèles, le preprocessing et les
-                hyperparamètres dans le budget temps que vous définissez.
-              </p>
+              <p>{t("training.modeDialog.automlDesc")}</p>
               <ul className="mt-2 space-y-1">
                 <li className="flex items-center gap-1">
                   <CheckCircle2 className="h-3 w-3 text-green-500" />
-                  Pipeline complet automatique
+                  {t("training.modeDialog.automlBullet1")}
                 </li>
                 <li className="flex items-center gap-1">
                   <CheckCircle2 className="h-3 w-3 text-green-500" />
-                  Un seul paramètre : le budget temps
+                  {t("training.modeDialog.automlBullet2")}
                 </li>
               </ul>
             </CardContent>
@@ -149,22 +145,19 @@ function ModeDialog({
             <CardHeader className="pb-2">
               <CardTitle className="flex items-center gap-2 text-sm">
                 <SlidersHorizontal className="h-4 w-4 text-primary" />
-                Mode manuel
+                {t("training.modeDialog.manualTitle")}
               </CardTitle>
             </CardHeader>
             <CardContent className="text-xs text-muted-foreground space-y-1">
-              <p>
-                Contrôle total : choisissez chaque modèle, métrique, étape de preprocessing et
-                stratégie HPO vous-même.
-              </p>
+              <p>{t("training.modeDialog.manualDesc")}</p>
               <ul className="mt-2 space-y-1">
                 <li className="flex items-center gap-1">
                   <CheckCircle2 className="h-3 w-3 text-green-500" />
-                  Vos choix, vos règles
+                  {t("training.modeDialog.manualBullet1")}
                 </li>
                 <li className="flex items-center gap-1">
                   <CheckCircle2 className="h-3 w-3 text-green-500" />
-                  Wizard en 4 étapes
+                  {t("training.modeDialog.manualBullet2")}
                 </li>
               </ul>
             </CardContent>
@@ -196,6 +189,11 @@ export function TrainingPage() {
 
   const navigate = useNavigate();
   const { toast } = useToast();
+  const { t } = useTranslation();
+  const steps = useMemo(
+    () => STEP_KEYS.map((s) => ({ label: t(s.tk), icon: s.icon })),
+    [t]
+  );
 
   // ── Hooks du wizard tabulaire ──────────────────────────────────────────────
   const [trainingMode, setTrainingMode] = useState<TrainingMode | null>(null);
@@ -338,7 +336,7 @@ export function TrainingPage() {
 
   const handleStartTraining = async (): Promise<string | null> => {
     if (!projectId) {
-      toast({ title: "Erreur", description: "Project ID introuvable.", variant: "destructive" });
+      toast({ title: t("training.studio.toastErr"), description: t("training.studio.errProjectId"), variant: "destructive" });
       return null;
     }
     try {
@@ -369,16 +367,20 @@ export function TrainingPage() {
           }
         : config;
       const session = await trainingService.startTraining(projectId, mergedConfig);
+      const nModels = (config.models || []).length;
       toast({
-        title: "Entraînement lancé",
-        description: `${(config.models || []).length} modèle(s) en cours…`,
+        title: t("training.studio.toastStartedTitle"),
+        description: t(
+          nModels > 1 ? "training.studio.toastStartedDescOther" : "training.studio.toastStartedDescOne",
+          { n: nModels }
+        ),
       });
       const sessionOut = session as { id?: string | number; session_id?: string | number };
       return String(sessionOut.id ?? sessionOut.session_id ?? "");
     } catch (error: unknown) {
       const message =
-        error instanceof Error ? error.message : "Une erreur est survenue lors de l'entrainement.";
-      toast({ title: "Erreur", description: message, variant: "destructive" });
+        error instanceof Error ? error.message : t("training.studio.errStart");
+      toast({ title: t("training.studio.toastErr"), description: message, variant: "destructive" });
       return null;
     }
   };
@@ -388,8 +390,8 @@ export function TrainingPage() {
     const versionId = String(config.datasetVersionId || routeVersionId || "").trim();
     if (!versionId) {
       toast({
-        title: "Erreur",
-        description: "Version du dataset introuvable.",
+        title: t("training.studio.toastErr"),
+        description: t("training.studio.errVersion"),
         variant: "destructive",
       });
       return;
@@ -410,9 +412,9 @@ export function TrainingPage() {
       <AppLayout>
         <div className="w-full py-8">
           <div className="ai-surface rounded-2xl p-6">
-            <h1 className="text-xl font-semibold">Entraînement</h1>
+            <h1 className="text-xl font-semibold">{t("training.studio.noProject")}</h1>
             <p className="mt-2 text-sm text-muted-foreground">
-              Impossible de récupérer l'ID du projet depuis la route.
+              {t("training.studio.noProjectDesc")}
             </p>
           </div>
         </div>
@@ -435,50 +437,50 @@ export function TrainingPage() {
           <div className="relative space-y-4">
             <span className="ai-chip">
               <Sparkles className="h-3.5 w-3.5" />
-              Studio IA
+              {t("training.studio.chip")}
             </span>
             <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
               <div>
                 <h1 className="text-3xl font-bold tracking-tight sm:text-4xl">
-                  Studio d'entraînement
+                  {t("training.studio.title")}
                   {trainingMode && (
                     <Badge
                       variant={trainingMode === "automl" ? "default" : "secondary"}
                       className="ml-3 align-middle text-xs"
                     >
-                      {trainingMode === "automl" ? "AutoML" : "Mode manuel"}
+                      {trainingMode === "automl" ? t("training.studio.modeAutoml") : t("training.studio.modeManual")}
                     </Badge>
                   )}
                 </h1>
                 <p className="mt-2 text-sm text-muted-foreground sm:text-base">
                   {trainingMode === null
-                    ? "Sélectionnez un dataset et une cible, puis choisissez votre mode."
+                    ? t("training.studio.subtitleInit")
                     : trainingMode === "automl"
-                    ? "FLAML explore automatiquement les modèles et hyperparamètres."
-                    : `Configurez vos modèles en ${steps.length} étapes.`}
+                    ? t("training.studio.subtitleAutoml")
+                    : t("training.studio.subtitleManual", { n: steps.length })}
                 </p>
               </div>
               <div className="grid grid-cols-3 gap-3 text-xs sm:text-sm">
                 <div className="rounded-xl border border-border/60 bg-card/70 px-3 py-2 text-center">
                   <p className="font-semibold text-foreground">
-                    {config.datasetVersionId ? "OK" : "N/A"}
+                    {config.datasetVersionId ? t("training.studio.statOk") : t("training.studio.statNa")}
                   </p>
-                  <p className="text-muted-foreground">Dataset</p>
+                  <p className="text-muted-foreground">{t("training.studio.statDataset")}</p>
                 </div>
                 <div className="rounded-xl border border-border/60 bg-card/70 px-3 py-2 text-center">
                   <p className="font-semibold text-foreground">{config.models.length}</p>
-                  <p className="text-muted-foreground">Modèles</p>
+                  <p className="text-muted-foreground">{t("training.studio.statModels")}</p>
                 </div>
                 <div className="rounded-xl border border-border/60 bg-card/70 px-3 py-2 text-center">
                   <p className="font-semibold text-foreground">{config.metrics.length}</p>
-                  <p className="text-muted-foreground">Métriques</p>
+                  <p className="text-muted-foreground">{t("training.studio.statMetrics")}</p>
                 </div>
               </div>
             </div>
 
             <div className="space-y-1.5">
               <div className="flex items-center justify-between text-xs text-muted-foreground">
-                <span>Progression</span>
+                <span>{t("training.studio.progressLabel")}</span>
                 <span>{progressValue}%</span>
               </div>
               <div className="h-2 overflow-hidden rounded-full bg-muted">
@@ -557,14 +559,14 @@ export function TrainingPage() {
               className="gap-2"
             >
               <ChevronLeft className="h-4 w-4" />
-              Précédent
+              {t("training.studio.prev")}
             </Button>
 
             <div className="hidden items-center gap-2 text-sm text-muted-foreground sm:flex">
               <CheckCircle2 className="h-4 w-4 text-success" />
               {currentStep === 0 && trainingMode === null
-                ? "Choisissez votre mode après avoir sélectionné la cible"
-                : `Étape ${currentStep + 1} / ${steps.length}`}
+                ? t("training.studio.chooseModeHint")
+                : t("training.studio.stepCounter", { current: currentStep + 1, total: steps.length })}
             </div>
 
             <Button
@@ -575,11 +577,11 @@ export function TrainingPage() {
               {currentStep === 0 && trainingMode === null ? (
                 <>
                   <Sparkles className="h-4 w-4" />
-                  Choisir le mode
+                  {t("training.studio.chooseModeBtn")}
                 </>
               ) : (
                 <>
-                  Suivant
+                  {t("training.studio.next")}
                   <ChevronRight className="h-4 w-4" />
                 </>
               )}
@@ -594,7 +596,7 @@ export function TrainingPage() {
             data-testid="history-load-failed"
           >
             <History className="h-3.5 w-3.5 shrink-0" />
-            <span>Historique indisponible</span>
+            <span>{t("training.studio.historyUnavailable")}</span>
             <button
               type="button"
               className="ml-auto flex items-center gap-1 rounded px-2 py-1 hover:bg-muted transition-colors"
@@ -607,7 +609,7 @@ export function TrainingPage() {
               data-testid="history-retry-btn"
             >
               <RefreshCw className="h-3 w-3" />
-              Réessayer
+              {t("training.studio.historyRetry")}
             </button>
           </div>
         )}
@@ -618,8 +620,13 @@ export function TrainingPage() {
             <div className="ai-surface p-4 sm:p-5">
               <div className="flex items-center gap-2 mb-3">
                 <History className="h-4 w-4 text-muted-foreground" />
-                <h2 className="text-sm font-semibold text-foreground">Sessions précédentes</h2>
-                <span className="ml-auto text-xs text-muted-foreground">{filteredSessions.length} session{filteredSessions.length > 1 ? "s" : ""}</span>
+                <h2 className="text-sm font-semibold text-foreground">{t("training.studio.historyTitle")}</h2>
+                <span className="ml-auto text-xs text-muted-foreground">
+                  {t(
+                    filteredSessions.length > 1 ? "training.studio.sessionsCountOther" : "training.studio.sessionsCountOne",
+                    { n: filteredSessions.length }
+                  )}
+                </span>
               </div>
               <div className="space-y-2">
                 {filteredSessions.slice(0, 8).map((s) => {
@@ -664,7 +671,7 @@ export function TrainingPage() {
                                         )
                                       );
                                     })
-                                    .catch(() => toast({ title: "Erreur", description: "Impossible de renommer la session", variant: "destructive" }));
+                                    .catch(() => toast({ title: t("training.studio.toastErr"), description: t("training.studio.errRename"), variant: "destructive" }));
                                   setRenamingSessionId(null);
                                 } else if (e.key === "Escape") {
                                   setRenamingSessionId(null);
@@ -674,7 +681,7 @@ export function TrainingPage() {
                             />
                           ) : (
                             <span className="font-medium truncate">
-                              {displayName ?? `Session #${sid}`}
+                              {displayName ?? t("training.studio.sessionFallbackName", { id: sid })}
                             </span>
                           )}
                           <span className={`text-xs font-medium ${statusColor}`}>{s.status}</span>
@@ -683,8 +690,8 @@ export function TrainingPage() {
                           )}
                         </div>
                         <p className="text-xs text-muted-foreground mt-0.5">
-                          {date} · {nModels} modèle{nModels !== 1 ? "s" : ""}
-                          {s.config?.datasetVersionId ? ` · v${s.config.datasetVersionId}` : ""}
+                          {t("training.studio.sessionDate", { date, n: nModels, plural: nModels !== 1 ? "s" : "" })}
+                          {s.config?.datasetVersionId ? t("training.studio.sessionVersionSuffix", { id: s.config.datasetVersionId }) : ""}
                         </p>
                       </div>
                       <div className="flex shrink-0 items-center gap-1">
@@ -696,7 +703,7 @@ export function TrainingPage() {
                             onClick={() => navigate(href)}
                           >
                             <ExternalLink className="h-3.5 w-3.5" />
-                            Voir
+                            {t("training.studio.viewSession")}
                           </Button>
                         )}
                         <DropdownMenu>
@@ -708,12 +715,12 @@ export function TrainingPage() {
                           <DropdownMenuContent align="end" className="w-40">
                             <DropdownMenuItem
                               onClick={() => {
-                                setRenameValue(displayName ?? `Session #${sid}`);
+                                setRenameValue(displayName ?? t("training.studio.sessionFallbackName", { id: sid }));
                                 setRenamingSessionId(sid);
                               }}
                             >
                               <Pencil className="mr-2 h-3.5 w-3.5" />
-                              Renommer
+                              {t("training.studio.renameSession")}
                             </DropdownMenuItem>
                             <DropdownMenuSeparator />
                             <DropdownMenuItem
@@ -721,7 +728,7 @@ export function TrainingPage() {
                               onClick={() => setDeletingSessionId(sid)}
                             >
                               <Trash2 className="mr-2 h-3.5 w-3.5" />
-                              Supprimer
+                              {t("training.studio.deleteSession")}
                             </DropdownMenuItem>
                           </DropdownMenuContent>
                         </DropdownMenu>
@@ -740,14 +747,14 @@ export function TrainingPage() {
       <Modal
         isOpen={deletingSessionId !== null}
         onClose={() => setDeletingSessionId(null)}
-        title="Supprimer la session"
+        title={t("training.studio.deleteModalTitle")}
       >
         <p className="text-sm text-muted-foreground mb-4">
-          Cette action supprimera définitivement la session et tous ses modèles entraînés. Elle est irréversible.
+          {t("training.studio.deleteModalDesc")}
         </p>
         <div className="flex justify-end gap-2">
           <Button variant="outline" size="sm" onClick={() => setDeletingSessionId(null)}>
-            Annuler
+            {t("training.studio.cancel")}
           </Button>
           <Button
             variant="destructive"
@@ -758,11 +765,11 @@ export function TrainingPage() {
               setDeletingSessionId(null);
               trainingService.deleteSession(String(projectId), sid)
                 .then(() => setPastSessions((prev) => prev.filter((ps) => String(ps.id) !== sid)))
-                .catch(() => toast({ title: "Erreur", description: "Impossible de supprimer la session", variant: "destructive" }));
+                .catch(() => toast({ title: t("training.studio.toastErr"), description: t("training.studio.errDelete"), variant: "destructive" }));
             }}
           >
             <Trash2 className="mr-1.5 h-3.5 w-3.5" />
-            Supprimer
+            {t("training.studio.deleteSession")}
           </Button>
         </div>
       </Modal>

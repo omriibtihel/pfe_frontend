@@ -70,7 +70,24 @@ export function gridValFromKey(key: string, fieldSchema: TrainingHyperparamField
   return parseScalarToken(key, fieldSchema);
 }
 
-/** Human-friendly label mapping for technical hyperparameter names. */
+/** List of hyperparameter names that have an i18n-localised friendly label. */
+const FRIENDLY_LABEL_KEYS = new Set([
+  "n_estimators", "max_depth", "min_samples_split", "min_samples_leaf",
+  "C", "gamma", "kernel", "n_neighbors", "learning_rate", "max_iter",
+  "class_weight", "alpha", "max_features", "subsample", "colsample_bytree",
+  "min_child_weight", "reg_alpha", "reg_lambda", "num_leaves", "var_smoothing",
+  "hidden_layer_sizes", "activation", "learning_rate_init", "l1_ratio",
+]);
+
+/** Build a localized friendly-label lookup using the provided translation function. */
+export function makeFriendlyLabel(t: (key: string) => string): (fieldName: string) => string {
+  return (fieldName: string) =>
+    FRIENDLY_LABEL_KEYS.has(fieldName)
+      ? t(`training.hp.fieldLabel.${fieldName}`)
+      : fieldName;
+}
+
+/** @deprecated Plain FR fallback — prefer makeFriendlyLabel(t) inside components. */
 export const FRIENDLY_LABEL: Record<string, string> = {
   n_estimators: "Nombre d'arbres",
   max_depth: "Profondeur maximale",

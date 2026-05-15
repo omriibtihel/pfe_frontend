@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { Trans, useTranslation } from "react-i18next";
 import { AlertTriangle, CheckCircle2, Info } from "lucide-react";
 import { MedHelp } from "@/components/ui/med-help";
 import { Badge } from "@/components/ui/badge";
@@ -33,66 +34,38 @@ interface BalancingPanelProps {
   onConfigChange: (updates: { balancing?: TrainingBalancingConfig; useSmote?: boolean }) => void;
 }
 
-const LEVEL_LABELS: Record<string, { label: string; color: string }> = {
-  balanced:  { label: "Équilibré",  color: "text-emerald-600 dark:text-emerald-400" },
-  mild:      { label: "Léger",      color: "text-sky-600 dark:text-sky-400" },
-  moderate:  { label: "Modéré",     color: "text-amber-600 dark:text-amber-400" },
-  severe:    { label: "Sévère",     color: "text-orange-600 dark:text-orange-400" },
-  critical:  { label: "Critique",   color: "text-red-600 dark:text-red-400" },
+const LEVEL_COLORS: Record<string, string> = {
+  balanced: "text-emerald-600 dark:text-emerald-400",
+  mild: "text-sky-600 dark:text-sky-400",
+  moderate: "text-amber-600 dark:text-amber-400",
+  severe: "text-orange-600 dark:text-orange-400",
+  critical: "text-red-600 dark:text-red-400",
 };
 
-const SCALE_LABELS: Record<string, string> = {
-  tiny:   "très petit (< 200 lignes)",
-  small:  "petit (200–2 000 lignes)",
-  medium: "moyen (2 000–50 000 lignes)",
-  large:  "grand (> 50 000 lignes)",
+const SCALE_KEYS: Record<string, string> = {
+  tiny: "preparation.balancing.scaleTiny",
+  small: "preparation.balancing.scaleSmall",
+  medium: "preparation.balancing.scaleMedium",
+  large: "preparation.balancing.scaleLarge",
 };
 
-const fallbackBalancingStrategies: Array<{ id: TrainingBalancingStrategy; label: string }> = [
-  { id: "none",                  label: "Aucune correction" },
-  { id: "class_weight",          label: "Poids adaptatifs (recommandé)" },
-  { id: "smote",                 label: "Génération de cas synthétiques (SMOTE)" },
-  { id: "smote_tomek",           label: "SMOTE + nettoyage des frontières" },
-  { id: "random_undersampling",  label: "Réduction de la classe majoritaire" },
-  { id: "threshold_optimization","label": "Ajustement du seuil de décision uniquement" },
+const FALLBACK_STRATEGY_IDS: TrainingBalancingStrategy[] = [
+  "none",
+  "class_weight",
+  "smote",
+  "smote_tomek",
+  "random_undersampling",
+  "threshold_optimization",
 ];
 
-const thresholdStrategyOptions: Array<{ id: TrainingThresholdStrategy; label: string; help: string }> = [
-  {
-    id: "youden",
-    label: "Index de Youden (standard médical)",
-    help: "Maximise simultanément la sensibilité et la spécificité — le meilleur équilibre global entre détecter les malades et ne pas alarmer les sains. Référence internationale pour les tests diagnostiques. Ex : dépistage du VIH, où une fausse alarme entraîne un traitement inutile et un cas manqué favorise la transmission.",
-  },
-  {
-    id: "maximize_f1",
-    label: "Équilibre détection / précision (F1)",
-    help: "Trouve le seuil qui équilibre au mieux la détection des malades et la précision des alertes. Bon choix quand une fausse alarme coûte presque autant qu'un cas manqué. Ex : détection de pneumonie à la radio — un faux positif déclenche un examen complémentaire, un faux négatif retarde le traitement.",
-  },
-  {
-    id: "maximize_f2",
-    label: "Priorité sensibilité — F2 (dépistage)",
-    help: "Favorise la détection des malades 2× plus que la précision. Recommandé quand manquer un malade est nettement plus grave qu'une fausse alarme. Ex : dépistage néonatal de maladies métaboliques — mieux vaut 10 rappels inutiles qu'un seul enfant non traité.",
-  },
-  {
-    id: "maximize_f_beta",
-    label: "Priorité ajustable (F-bêta)",
-    help: "Permet de régler précisément le compromis sensibilité / précision. Beta > 1 = plus de sensibilité (moins de malades manqués) | Beta < 1 = plus de précision (moins de fausses alarmes) | Beta = 1 = équivalent F1. Ex : si une maladie manquée est 3× plus grave qu'une fausse alarme, choisir beta = 3.",
-  },
-  {
-    id: "minimize_cost",
-    label: "Coût clinique personnalisé (FN vs FP)",
-    help: "Le critère le plus adapté à la pratique clinique réelle. Vous indiquez le coût relatif d'une maladie manquée (FN) vs une fausse alarme (FP) — le système calcule le seuil optimal. Ex : cancer du sein → Coût FN = 10, Coût FP = 1 (une mammographie supplémentaire est acceptable ; manquer un cancer ne l'est pas).",
-  },
-  {
-    id: "min_recall",
-    label: "Sensibilité minimale garantie",
-    help: "Impose que le modèle détecte au moins X % des vrais malades, puis maximise la précision dans cette contrainte. Utile quand un protocole ou une réglementation fixe un seuil de sensibilité. Ex : un protocole hospitalier exige que le modèle détecte ≥ 95 % des sepsis avant l'admission en réanimation.",
-  },
-  {
-    id: "precision_recall_balance",
-    label: "Équilibre parfait détection = précision",
-    help: "Trouve le seuil où le taux de détection des malades et la précision des alertes sont strictement égaux. Utile lorsque les deux types d'erreurs (manquer un cas, fausse alarme) ont exactement le même impact. Ex : triage aux urgences où admettre un patient sain ou renvoyer un patient malade ont des conséquences comparables.",
-  },
+const THRESHOLD_STRATEGY_IDS: TrainingThresholdStrategy[] = [
+  "youden",
+  "maximize_f1",
+  "maximize_f2",
+  "maximize_f_beta",
+  "minimize_cost",
+  "min_recall",
+  "precision_recall_balance",
 ];
 
 function isSmoteStrategy(strategy: TrainingBalancingStrategy): boolean {
@@ -100,6 +73,7 @@ function isSmoteStrategy(strategy: TrainingBalancingStrategy): boolean {
 }
 
 export function BalancingPanel({ projectId, config, onConfigChange }: BalancingPanelProps) {
+  const { t } = useTranslation();
   const [balanceAnalysis, setBalanceAnalysis] = useState<TrainingBalanceAnalysis | null>(null);
   const [balanceLoading, setBalanceLoading] = useState(false);
   const [balanceError, setBalanceError] = useState<string | null>(null);
@@ -158,7 +132,7 @@ export function BalancingPanel({ projectId, config, onConfigChange }: BalancingP
       } catch (e: unknown) {
         if (!mounted) return;
         setBalanceAnalysis(null);
-        setBalanceError(e instanceof Error ? e.message : "Analyse du déséquilibre indisponible.");
+        setBalanceError(e instanceof Error ? e.message : t("preparation.balancing.analysisError"));
       } finally {
         if (mounted) setBalanceLoading(false);
       }
@@ -197,30 +171,25 @@ export function BalancingPanel({ projectId, config, onConfigChange }: BalancingP
         <CardContent className="py-5 space-y-4">
           <div className="space-y-1">
             <div className="flex items-center gap-2">
-              <span className="font-semibold text-sm">Gestion du déséquilibre</span>
+              <span className="font-semibold text-sm">{t("preparation.balancing.title")}</span>
               <Badge variant="outline" className="text-[10px]">
-                Classification binaire
+                {t("preparation.balancing.binaryBadge")}
               </Badge>
-              <MedHelp title="Qu'est-ce que le déséquilibre des classes ?">
+              <MedHelp title={t("preparation.balancing.helpTitle")}>
+                <p>{t("preparation.balancing.helpP1")}</p>
                 <p>
-                  Un dataset déséquilibré contient beaucoup plus d'exemples d'une catégorie que de l'autre.
-                  Par exemple&nbsp;: 95&nbsp;% de patients sains, 5&nbsp;% de malades.
+                  {t("preparation.balancing.helpP2Pre")}{" "}
+                  <strong>{t("preparation.balancing.helpP2Bold")}</strong>{" "}
+                  {t("preparation.balancing.helpP2Suf")}
                 </p>
-                <p>
-                  Sans correction, le modèle apprend à tout classer «&nbsp;sain&nbsp;» car c'est toujours
-                  vrai à 95&nbsp;%. Il <strong>manque tous les malades</strong> — exactitude 95&nbsp;%,
-                  sensibilité 0&nbsp;%.
-                </p>
-                <p>
-                  Les stratégies ci-dessous corrigent ce biais pour que le modèle détecte réellement les cas rares.
-                </p>
+                <p>{t("preparation.balancing.helpP3")}</p>
               </MedHelp>
             </div>
             {config.taskType !== "classification" && (
-              <p className="text-xs text-warning mt-1">Disponible uniquement en classification.</p>
+              <p className="text-xs text-warning mt-1">{t("preparation.balancing.onlyClassification")}</p>
             )}
             {config.taskType === "classification" && balanceLoading && (
-              <p className="text-xs text-muted-foreground mt-1">Analyse du déséquilibre en cours…</p>
+              <p className="text-xs text-muted-foreground mt-1">{t("preparation.balancing.analyzing")}</p>
             )}
             {config.taskType === "classification" && !balanceLoading && !!balanceError && (
               <p className="text-xs text-warning mt-1">{balanceError}</p>
@@ -231,7 +200,7 @@ export function BalancingPanel({ projectId, config, onConfigChange }: BalancingP
                 {/* ── Distribution visuelle ── */}
                 <div className="space-y-2">
                   <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
-                    Distribution de la colonne cible
+                    {t("preparation.balancing.distTitle")}
                   </p>
 
                   {/* Barre empilée */}
@@ -279,14 +248,16 @@ export function BalancingPanel({ projectId, config, onConfigChange }: BalancingP
                 {/* ── Stats condensées ── */}
                 <div className="grid grid-cols-3 gap-2">
                   {[
-                    { label: "Total",  value: balanceAnalysis.n_samples.toLocaleString() },
+                    { label: t("preparation.balancing.total"), value: balanceAnalysis.n_samples.toLocaleString() },
                     {
-                      label: "Ratio IR",
+                      label: t("preparation.balancing.ratioIR"),
                       value: `${Number(balanceAnalysis.imbalance_ratio).toFixed(1)} : 1`,
                     },
                     {
-                      label: "Taille",
-                      value: SCALE_LABELS[balanceAnalysis.dataset_scale] ?? balanceAnalysis.dataset_scale,
+                      label: t("preparation.balancing.size"),
+                      value: SCALE_KEYS[balanceAnalysis.dataset_scale]
+                        ? t(SCALE_KEYS[balanceAnalysis.dataset_scale])
+                        : balanceAnalysis.dataset_scale,
                     },
                   ].map(({ label, value }) => (
                     <div key={label} className="rounded-md bg-muted/40 px-2.5 py-1.5 text-center">
@@ -311,19 +282,23 @@ export function BalancingPanel({ projectId, config, onConfigChange }: BalancingP
                   }
                   <div className="space-y-0.5">
                     <p className="font-semibold">
-                      <span className={LEVEL_LABELS[balanceAnalysis.imbalance_level]?.color ?? ""}>
-                        {LEVEL_LABELS[balanceAnalysis.imbalance_level]?.label ?? balanceAnalysis.imbalance_level}
+                      <span className={LEVEL_COLORS[balanceAnalysis.imbalance_level] ?? ""}>
+                        {t(`preparation.balancing.level.${balanceAnalysis.imbalance_level}`, balanceAnalysis.imbalance_level)}
                       </span>
                       {" — "}
                       {balanceAnalysis.needs_balancing
-                        ? `pour ${Number(balanceAnalysis.imbalance_ratio).toFixed(1)} exemple${Number(balanceAnalysis.imbalance_ratio) >= 2 ? "s" : ""} « ${String(balanceAnalysis.majority.label)} », il n'y a qu'un seul « ${String(balanceAnalysis.minority.label)} ».`
-                        : "les deux classes sont bien représentées."
+                        ? t("preparation.balancing.needsBalancing", {
+                            ratio: Number(balanceAnalysis.imbalance_ratio).toFixed(1),
+                            plural: Number(balanceAnalysis.imbalance_ratio) >= 2 ? "s" : "",
+                            majority: String(balanceAnalysis.majority.label),
+                            minority: String(balanceAnalysis.minority.label),
+                          })
+                        : t("preparation.balancing.balanced")
                       }
                     </p>
                     {balanceAnalysis.needs_balancing && (
                       <p className="text-muted-foreground">
-                        Sans correction, le modèle risque d'ignorer la classe minoritaire et de n'apprendre qu'à prédire
-                        {" «"}{String(balanceAnalysis.majority.label)}{"»"}.
+                        {t("preparation.balancing.noBalanceHint", { majority: String(balanceAnalysis.majority.label) })}
                       </p>
                     )}
                   </div>
@@ -342,17 +317,19 @@ export function BalancingPanel({ projectId, config, onConfigChange }: BalancingP
           </div>
 
           <div className="space-y-2">
-            <label className="text-xs text-muted-foreground">Stratégie de correction</label>
+            <label className="text-xs text-muted-foreground">{t("preparation.balancing.strategyLabel")}</label>
             <Select
               value={balancing.strategy}
               onValueChange={(value) => handleStrategyChange(value as TrainingBalancingStrategy)}
               disabled={config.taskType !== "classification"}
             >
               <SelectTrigger className="h-8 text-xs">
-                <SelectValue placeholder="Choisir une strategie" />
+                <SelectValue placeholder={t("preparation.balancing.strategyPlaceholder")} />
               </SelectTrigger>
               <SelectContent>
-                {(balanceAnalysis?.available_strategies ?? fallbackBalancingStrategies).map((strategy) => (
+                {(balanceAnalysis?.available_strategies
+                  ?? FALLBACK_STRATEGY_IDS.map((id) => ({ id, label: t(`preparation.balancing.strategyFallback.${id}`) }))
+                ).map((strategy) => (
                   <SelectItem
                     key={strategy.id}
                     value={strategy.id}
@@ -362,11 +339,11 @@ export function BalancingPanel({ projectId, config, onConfigChange }: BalancingP
                       <span>{strategy.label}</span>
                       {"recommended" in strategy && strategy.recommended && (
                         <span className="text-[10px] rounded-full bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-400 px-1.5 py-0.5 font-medium leading-none">
-                          recommandé
+                          {t("preparation.balancing.recommended")}
                         </span>
                       )}
                       {"feasible" in strategy && !strategy.feasible && (
-                        <span className="text-[10px] text-muted-foreground">(non faisable)</span>
+                        <span className="text-[10px] text-muted-foreground">{t("preparation.balancing.notFeasible")}</span>
                       )}
                     </span>
                   </SelectItem>
@@ -375,7 +352,9 @@ export function BalancingPanel({ projectId, config, onConfigChange }: BalancingP
             </Select>
             {currentStrategyInfo && !currentStrategyInfo.feasible && (
               <p className="text-[11px] text-destructive">
-                Strategie non faisable: {currentStrategyInfo.infeasible_reason ?? "condition non satisfaite"}.
+                {t("preparation.balancing.strategyNotFeasible", {
+                  reason: currentStrategyInfo.infeasible_reason ?? t("preparation.balancing.defaultReason"),
+                })}
               </p>
             )}
           </div>
@@ -387,19 +366,11 @@ export function BalancingPanel({ projectId, config, onConfigChange }: BalancingP
                 disabled={config.taskType !== "classification" || balancing.strategy === "threshold_optimization"}
                 onCheckedChange={(checked) => applyBalancing({ applyThreshold: Boolean(checked) })}
               />
-              <span className="text-xs font-medium">Ajuster le seuil de décision</span>
-              <MedHelp title="À quoi sert le seuil de décision ?">
-                <p>
-                  Par défaut, le modèle prédit «&nbsp;positif&nbsp;» dès que sa probabilité dépasse 50&nbsp;%.
-                  Ce seuil est rarement optimal en médecine.
-                </p>
-                <p>
-                  En abaissant le seuil (ex&nbsp;: 30&nbsp;%), le modèle détecte plus de vrais malades
-                  mais génère plus de fausses alarmes. En le relevant (ex&nbsp;: 70&nbsp;%), l'inverse.
-                </p>
-                <p>
-                  Les stratégies ci-dessous trouvent automatiquement le meilleur seuil selon vos priorités cliniques.
-                </p>
+              <span className="text-xs font-medium">{t("preparation.balancing.thresholdToggle")}</span>
+              <MedHelp title={t("preparation.balancing.thresholdHelpTitle")}>
+                <p>{t("preparation.balancing.thresholdHelpP1")}</p>
+                <p>{t("preparation.balancing.thresholdHelpP2")}</p>
+                <p>{t("preparation.balancing.thresholdHelpP3")}</p>
               </MedHelp>
             </label>
             {/* ── Bannière de guidance clinique — visible seulement si seuil activé ── */}
@@ -407,16 +378,12 @@ export function BalancingPanel({ projectId, config, onConfigChange }: BalancingP
             <div className="rounded-xl border border-sky-200/60 bg-sky-50/50 dark:border-sky-800/40 dark:bg-sky-950/20 p-3.5 flex gap-3">
               <Info className="h-4 w-4 text-sky-500 mt-0.5 shrink-0" />
               <div className="space-y-1.5 text-[11px] text-sky-800 dark:text-sky-300">
-                <p className="font-semibold">Quel critère pour quel contexte ?</p>
+                <p className="font-semibold">{t("preparation.balancing.bannerTitle")}</p>
                 <ul className="space-y-1 text-sky-700 dark:text-sky-400">
-                  <li>• <strong>Dépistage</strong> (cancer, diabète, sepsis…) — manquer un cas est grave
-                    → <em>F2</em> ou <em>Coût clinique personnalisé</em></li>
-                  <li>• <strong>Test de confirmation</strong> — fausses alarmes ont un coût élevé
-                    → <em>Équilibre F1</em> ou <em>Index de Youden</em></li>
-                  <li>• <strong>Seuil réglementaire</strong> — sensibilité imposée (ex : ≥ 90&nbsp;%)
-                    → <em>Sensibilité minimale garantie</em></li>
-                  <li>• <strong>Usage général</strong> sans contrainte particulière
-                    → <em>Index de Youden</em> (recommandé)</li>
+                  <li>• <Trans i18nKey="preparation.balancing.bannerScreening" components={{ strong: <strong />, em: <em /> }} /></li>
+                  <li>• <Trans i18nKey="preparation.balancing.bannerConfirm" components={{ strong: <strong />, em: <em /> }} /></li>
+                  <li>• <Trans i18nKey="preparation.balancing.bannerRegulatory" components={{ strong: <strong />, em: <em /> }} /></li>
+                  <li>• <Trans i18nKey="preparation.balancing.bannerGeneral" components={{ strong: <strong />, em: <em /> }} /></li>
                 </ul>
               </div>
             </div>
@@ -424,7 +391,7 @@ export function BalancingPanel({ projectId, config, onConfigChange }: BalancingP
 
             <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
               <div className="space-y-1 sm:col-span-2">
-                <label className="text-[11px] text-muted-foreground">Critère d'optimisation du seuil</label>
+                <label className="text-[11px] text-muted-foreground">{t("preparation.balancing.criterionLabel")}</label>
                 <Select
                   value={balancing.thresholdStrategy}
                   onValueChange={(value) =>
@@ -440,27 +407,26 @@ export function BalancingPanel({ projectId, config, onConfigChange }: BalancingP
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    {thresholdStrategyOptions.map((item) => (
-                      <SelectItem key={item.id} value={item.id}>
-                        {item.label}
+                    {THRESHOLD_STRATEGY_IDS.map((id) => (
+                      <SelectItem key={id} value={id}>
+                        {t(`preparation.balancing.thresholdStrategies.${id}.label`)}
                       </SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
                 {/* Clinical explanation for selected strategy */}
-                {(() => {
-                  const current = thresholdStrategyOptions.find((o) => o.id === balancing.thresholdStrategy);
-                  return current ? (
-                    <div className="rounded-md border border-sky-200/40 bg-sky-50/30 dark:border-sky-800/30 dark:bg-sky-950/20 px-2.5 py-2 mt-1.5 flex gap-2">
-                      <Info className="h-3.5 w-3.5 text-sky-500 shrink-0 mt-0.5" />
-                      <p className="text-[11px] text-sky-800 dark:text-sky-300 leading-relaxed">{current.help}</p>
-                    </div>
-                  ) : null;
-                })()}
+                {THRESHOLD_STRATEGY_IDS.includes(balancing.thresholdStrategy) && (
+                  <div className="rounded-md border border-sky-200/40 bg-sky-50/30 dark:border-sky-800/30 dark:bg-sky-950/20 px-2.5 py-2 mt-1.5 flex gap-2">
+                    <Info className="h-3.5 w-3.5 text-sky-500 shrink-0 mt-0.5" />
+                    <p className="text-[11px] text-sky-800 dark:text-sky-300 leading-relaxed">
+                      {t(`preparation.balancing.thresholdStrategies.${balancing.thresholdStrategy}.help`)}
+                    </p>
+                  </div>
+                )}
               </div>
               {balancing.thresholdStrategy === "min_recall" && (
                 <div className="space-y-1">
-                  <label className="text-[11px] text-muted-foreground">Sensibilité minimale garantie</label>
+                  <label className="text-[11px] text-muted-foreground">{t("preparation.balancing.minRecallLabel")}</label>
                   <Input
                     type="number"
                     step={0.01}
@@ -476,7 +442,7 @@ export function BalancingPanel({ projectId, config, onConfigChange }: BalancingP
                     className="h-8 text-xs"
                   />
                   <p className="text-[10px] text-muted-foreground">
-                    Proportion de vrais malades à détecter (ex&nbsp;: 0.90 = 90&nbsp;%)
+                    {t("preparation.balancing.minRecallHint")}
                   </p>
                 </div>
               )}
@@ -491,12 +457,12 @@ export function BalancingPanel({ projectId, config, onConfigChange }: BalancingP
                   </label>
                   <span className="text-[10px] font-medium text-primary">
                     {(balancing.fBeta ?? 2.0) < 0.8
-                      ? "Confirmation diagnostique (haute précision)"
+                      ? t("preparation.balancing.betaDiagnostic")
                       : (balancing.fBeta ?? 2.0) < 1.2
-                      ? "Équilibre classique (F1)"
+                      ? t("preparation.balancing.betaBalanced")
                       : (balancing.fBeta ?? 2.0) < 2.5
-                      ? "Dépistage large (sensibilité 2×)"
-                      : "Sensibilité maximale"}
+                      ? t("preparation.balancing.betaScreening")
+                      : t("preparation.balancing.betaMax")}
                   </span>
                 </div>
                 <input
@@ -511,10 +477,9 @@ export function BalancingPanel({ projectId, config, onConfigChange }: BalancingP
                 />
                 {/* Repères cliniques nommés */}
                 <div className="relative flex justify-between text-[9px] text-muted-foreground px-0.5">
-                  <span className="text-center">0.1<br/>précision<br/>max</span>
-                  <span className="text-center">1.0<br/>F1<br/>défaut</span>
-                  <span className="text-center">2.0<br/>F2<br/>dépistage</span>
-                  <span className="text-center">5.0<br/>sensibilité<br/>max</span>
+                  {(["betaMark01", "betaMark1", "betaMark2", "betaMark5"] as const).map((k) => (
+                    <span key={k} className="text-center whitespace-pre-line">{t(`preparation.balancing.${k}`)}</span>
+                  ))}
                 </div>
               </div>
             )}
@@ -524,27 +489,28 @@ export function BalancingPanel({ projectId, config, onConfigChange }: BalancingP
               <div className="mt-2 space-y-2 rounded-md border border-border/40 bg-muted/20 p-2.5">
                 {/* Encadré d'ancrage clinique */}
                 <div className="rounded-md bg-amber-50/60 dark:bg-amber-950/20 border border-amber-200/50 px-2.5 py-2 text-[10px] text-amber-800 dark:text-amber-300 leading-relaxed">
-                  Repère clinique — <strong>cancer du sein</strong>&nbsp;: Coût FN&nbsp;=&nbsp;<strong>10</strong>, Coût FP&nbsp;=&nbsp;<strong>1</strong> (une mammographie supplémentaire est acceptable, manquer un cancer ne l'est pas).
-                  Pour une <strong>pathologie moins sévère</strong>, Coût FN&nbsp;=&nbsp;2–3 suffit.
+                  <Trans i18nKey="preparation.balancing.costAnchor" components={{ strong: <strong /> }} />
                 </div>
                 <div className="flex items-center gap-1.5">
                   <Info className="h-3.5 w-3.5 text-sky-500 shrink-0" />
                   <p className="text-[11px] text-muted-foreground">
-                    Ratio coût ={" "}
-                    <span className="font-semibold text-foreground">
-                      {((balancing.costFn ?? 1) / Math.max(balancing.costFp ?? 1, 0.01)).toFixed(1)}×
-                    </span>{" "}
-                    — manquer un positif coûte{" "}
-                    <span className="font-semibold">
-                      {((balancing.costFn ?? 1) / Math.max(balancing.costFp ?? 1, 0.01)).toFixed(1)}×
-                    </span>{" "}
-                    plus qu'une fausse alarme.
+                    <Trans
+                      i18nKey="preparation.balancing.costRatio"
+                      components={{ strong: <strong className="font-semibold text-foreground" /> }}
+                      values={{
+                        ratio: ((balancing.costFn ?? 1) / Math.max(balancing.costFp ?? 1, 0.01)).toFixed(1),
+                      }}
+                    />
                   </p>
                 </div>
                 <div className="grid grid-cols-2 gap-3">
                   <div className="space-y-1">
                     <label className="text-[11px] text-muted-foreground">
-                      Coût FN (maladie manquée) — <span className="font-semibold text-foreground">{balancing.costFn ?? 1}</span>
+                      <Trans
+                        i18nKey="preparation.balancing.costFnLabel"
+                        components={{ strong: <span className="font-semibold text-foreground" /> }}
+                        values={{ value: balancing.costFn ?? 1 }}
+                      />
                     </label>
                     <input
                       type="range"
@@ -562,7 +528,11 @@ export function BalancingPanel({ projectId, config, onConfigChange }: BalancingP
                   </div>
                   <div className="space-y-1">
                     <label className="text-[11px] text-muted-foreground">
-                      Coût FP (fausse alarme) — <span className="font-semibold text-foreground">{balancing.costFp ?? 1}</span>
+                      <Trans
+                        i18nKey="preparation.balancing.costFpLabel"
+                        components={{ strong: <span className="font-semibold text-foreground" /> }}
+                        values={{ value: balancing.costFp ?? 1 }}
+                      />
                     </label>
                     <input
                       type="range"
@@ -587,14 +557,18 @@ export function BalancingPanel({ projectId, config, onConfigChange }: BalancingP
             <div className="rounded-lg border border-warning/40 bg-warning/5 p-3 text-[11px] flex items-start gap-2">
               <AlertTriangle className="h-3.5 w-3.5 text-warning mt-0.5 shrink-0" />
               <span>
-                Dataset equilibre — la strategie <strong>{balancing.strategy}</strong> est appliquee sur demande.
+                <Trans
+                  i18nKey="preparation.balancing.balancedWarning"
+                  components={{ strong: <strong /> }}
+                  values={{ strategy: balancing.strategy }}
+                />
               </span>
             </div>
           )}
 
           {!!( balanceAnalysis?.warnings ?? []).filter((w) => w !== "dataset_is_already_balanced").length && (
             <div className="rounded-lg border border-amber-300/50 bg-amber-50/60 dark:bg-amber-950/20 p-3 text-[11px]">
-              <p className="mb-1 font-medium text-amber-900 dark:text-amber-300">Avertissements</p>
+              <p className="mb-1 font-medium text-amber-900 dark:text-amber-300">{t("preparation.balancing.warningsTitle")}</p>
               <ul className="space-y-1 text-amber-800 dark:text-amber-400">
                 {(balanceAnalysis?.warnings ?? [])
                   .filter((w) => w !== "dataset_is_already_balanced")
@@ -614,12 +588,12 @@ export function BalancingPanel({ projectId, config, onConfigChange }: BalancingP
         isOpen={pendingStrategy !== null}
         onClose={() => setPendingStrategy(null)}
         icon={<AlertTriangle className="h-4 w-4 text-warning" />}
-        title="Dataset équilibré — stratégie non nécessaire"
+        title={t("preparation.balancing.modalTitle")}
         size="md"
         footer={
           <div className="flex justify-end gap-2">
             <Button variant="outline" size="sm" onClick={() => setPendingStrategy(null)}>
-              Annuler
+              {t("preparation.balancing.modalCancel")}
             </Button>
             <Button
               variant="destructive"
@@ -629,7 +603,7 @@ export function BalancingPanel({ projectId, config, onConfigChange }: BalancingP
                 setPendingStrategy(null);
               }}
             >
-              Appliquer quand même
+              {t("preparation.balancing.modalApply")}
             </Button>
           </div>
         }
@@ -637,8 +611,11 @@ export function BalancingPanel({ projectId, config, onConfigChange }: BalancingP
         <div className="space-y-2 text-sm text-muted-foreground">
           {balanceAnalysis?.summary_message && <p>{balanceAnalysis.summary_message}</p>}
           <p>
-            La stratégie <strong>{pendingStrategy}</strong> n'est pas nécessaire sur un dataset équilibré et pourrait
-            déséquilibrer artificiellement l'entraînement. Voulez-vous quand même l'appliquer ?
+            <Trans
+              i18nKey="preparation.balancing.modalQuestion"
+              components={{ strong: <strong /> }}
+              values={{ strategy: pendingStrategy ?? "" }}
+            />
           </p>
         </div>
       </Modal>

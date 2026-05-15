@@ -1,4 +1,4 @@
-import { Loader2, Sparkles } from 'lucide-react';
+import { Info, Loader2, Sparkles } from 'lucide-react';
 import { Modal } from '@/components/ui/modal';
 import { PredictionReportPanel } from '@/components/prediction/PredictionReportPanel';
 import type { ExplanationMethod, LimeLocalItem, PredictionRow, ShapLocalItem } from '@/types';
@@ -40,6 +40,13 @@ export function ExplanationModal({
 
   const titlePrefix = method === 'shap' ? 'SHAP' : method === 'lime' ? 'LIME' : 'SHAP vs LIME';
 
+  const methodDescription =
+    method === 'shap'
+      ? "SHAP mesure la contribution réelle de chaque variable à la prédiction, en comparant à une moyenne de référence. Vue globale et fiable."
+      : method === 'lime'
+        ? "LIME explique la prédiction en testant de petites variations autour de cette ligne. Vue locale, intuitive et rapide."
+        : "Comparaison des deux approches : SHAP (contribution globale et exacte) et LIME (explication locale par variations). Si elles divergent (⚠), la variable est instable.";
+
   // Inject the latest LIME items into the row so the report panel can use them.
   const rowWithLime: PredictionRow = { ...row, lime: limeItems ?? row.lime ?? null };
 
@@ -72,6 +79,10 @@ export function ExplanationModal({
         <div className="flex items-center justify-between px-2">
           <span className="text-[11px] text-muted-foreground">Méthode d'explication</span>
           <MethodToggle value={method} onChange={onMethodChange} />
+        </div>
+        <div className="mx-2 flex items-start gap-2 rounded-md border border-border/60 bg-muted/30 px-3 py-2">
+          <Info className="mt-0.5 h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+          <p className="text-[11px] leading-relaxed text-muted-foreground">{methodDescription}</p>
         </div>
         {isLoading ? (
           <div className="flex items-center justify-center py-10">

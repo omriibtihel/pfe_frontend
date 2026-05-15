@@ -136,11 +136,21 @@ export const DEFAULT_TRAINING_BALANCING: TrainingBalancingConfig = {
 
 // ── Feature Engineering ──────────────────────────────────────────────────────
 
+export type FeatureDefMode = "builder" | "advanced";
+
 export interface FeatureDef {
   name: string;
   enabled: boolean;
-  /** Python expression sent to the backend (user-editable, built with operation snippets). */
+  /** Python expression sent to the backend (the only field consumed server-side). */
   expression: string;
+  /** Frontend-only: builder-vs-advanced mode (ignored by backend). */
+  mode?: FeatureDefMode;
+  /** Frontend-only: selected operation id (builder mode). */
+  opId?: string;
+  /** Frontend-only: column picks keyed by operation-input key (builder mode). */
+  colSelections?: Record<string, string>;
+  /** Frontend-only: numeric constants keyed by operation-input key (builder mode). */
+  constants?: Record<string, number>;
 }
 
 export interface FeatureEngineeringConfig {

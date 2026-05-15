@@ -1,3 +1,4 @@
+import { useTranslation } from "react-i18next";
 import { Columns3, XCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -11,6 +12,7 @@ import type {
 import { BulkActionsBar } from "./BulkActionsBar";
 import { ColumnFilterBar } from "./ColumnFilterBar";
 import { ColumnRow } from "./ColumnRow";
+import { makeLabelForMethod } from "./helpers";
 import type { Step3ColumnRowData, Step3Options, Step3StatusFilter, Step3TypeFilter } from "./types";
 
 const AUTO_TYPE = "auto" as const;
@@ -97,6 +99,8 @@ export function ColumnsCard({
   onRegisterRowRef,
   onUpdateColumnConfig,
 }: ColumnsCardProps) {
+  const { t } = useTranslation();
+  const labelForMethod = makeLabelForMethod(t);
   // Derived — computed from props already in scope
   const rowNameSet = new Set(rows.map((r) => r.columnName));
   const selectedCount = [...selectedColumns].filter((n) => rowNameSet.has(n)).length;
@@ -118,14 +122,14 @@ export function ColumnsCard({
           <div className="p-2 rounded-xl bg-secondary/10">
             <Columns3 className="h-4 w-4 text-secondary" />
           </div>
-          Colonnes
+          {t("preparation.columns.cardTitle")}
         </CardTitle>
       </CardHeader>
       <CardContent className="space-y-4">
         {counts.errors > 0 && (
           <div className="rounded-lg border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive flex items-start gap-2">
             <XCircle className="h-4 w-4 mt-0.5" />
-            <span>Configuration invalide : corrigez les erreurs avant de continuer.</span>
+            <span>{t("preparation.columns.configInvalid")}</span>
           </div>
         )}
 
@@ -177,11 +181,11 @@ export function ColumnsCard({
           </div>
         ) : !rows.length ? (
           <div className="rounded-lg border border-border/60 p-4 text-sm text-muted-foreground">
-            Aucune feature disponible. Selectionnez une version et une cible.
+            {t("preparation.columns.noFeatures")}
           </div>
         ) : !visibleRows.length ? (
           <div className="rounded-lg border border-border/60 p-4 text-sm text-muted-foreground">
-            Aucun resultat pour ce filtre.
+            {t("preparation.columns.noFilterResult")}
           </div>
         ) : (
           <>
@@ -190,14 +194,21 @@ export function ColumnsCard({
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      {["État", "Sél.", "Colonne", "Inclure", "Type", "Valeurs manquantes", "Transformation", "Normalisation / Encodage"].map((header, i) => (
+                      {[
+                        { tk: "preparation.columns.headerStatus", w: "w-20" },
+                        { tk: "preparation.columns.headerSel", w: "w-12" },
+                        { tk: "preparation.columns.headerColumn", w: "" },
+                        { tk: "preparation.columns.headerInclude", w: "w-24" },
+                        { tk: "preparation.columns.headerType", w: "w-44" },
+                        { tk: "preparation.columns.headerMissing", w: "w-48" },
+                        { tk: "preparation.columns.headerTransform", w: "w-44" },
+                        { tk: "preparation.columns.headerScaling", w: "w-44" },
+                      ].map((header) => (
                         <TableHead
-                          key={header}
-                          className={`sticky top-0 z-20 bg-background/95 backdrop-blur ${
-                            i === 0 ? "w-20" : i === 1 ? "w-12" : i === 3 ? "w-24" : i === 4 ? "w-44" : i === 5 ? "w-48" : i === 6 ? "w-44" : i === 7 ? "w-44" : ""
-                          }`}
+                          key={header.tk}
+                          className={`sticky top-0 z-20 bg-background/95 backdrop-blur ${header.w}`}
                         >
-                          {header}
+                          {t(header.tk)}
                         </TableHead>
                       ))}
                     </TableRow>
@@ -211,7 +222,7 @@ export function ColumnsCard({
                         autoTypeValue={AUTO_TYPE}
                         isSelected={selectedColumns.has(row.columnName)}
                         isExpanded={expandedIssueRows.has(row.columnName)}
-                        labelForMethod={(m) => m}
+                        labelForMethod={labelForMethod}
                         onRegisterRowRef={(node) => onRegisterRowRef(row.columnName, node)}
                         onToggleSelected={(checked) => onToggleSelected(row.columnName, checked)}
                         onToggleUse={(checked) =>
@@ -274,11 +285,11 @@ export function ColumnsCard({
             {shouldPaginate && (
               <div className="flex flex-wrap items-center justify-end gap-2">
                 <Button type="button" size="sm" variant="outline" disabled={currentPage <= 1} onClick={onPagePrev}>
-                  Précédent
+                  {t("preparation.columns.previous")}
                 </Button>
-                <span className="text-xs text-muted-foreground">Page {currentPage} / {totalPages}</span>
+                <span className="text-xs text-muted-foreground">{t("preparation.columns.page", { current: currentPage, total: totalPages })}</span>
                 <Button type="button" size="sm" variant="outline" disabled={currentPage >= totalPages} onClick={onPageNext}>
-                  Suivant
+                  {t("preparation.columns.next")}
                 </Button>
               </div>
             )}

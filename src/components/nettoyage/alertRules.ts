@@ -49,6 +49,36 @@ export const ALERT_THRESHOLDS: AlertThresholds = {
 
 const SEVERITY_ORDER: Record<AlertSeverity, number> = { error: 0, warning: 1, info: 2 };
 
+/**
+ * A column typed as "categorical" is only worth flagging for re-verification
+ * when there is genuine ambiguity. Two signals qualify:
+ *   1. The backend's own confidence in the inferred kind is low.
+ *   2. The sample values look mostly numeric (likely numbers stored as text).
+ * Obviously-textual columns ({"M","F"}, {"FR","DE","US"}…) are skipped to
+ * avoid flooding the alerts panel with a "please review" item per column.
+ */
+const VERIFY_CAT_CONFIDENCE_MAX = 0.7;
+const VERIFY_CAT_NUMERIC_SAMPLE_RATIO = 0.7;
+const VERIFY_CAT_MIN_SAMPLE_SIZE = 3;
+
+function looksNumeric(raw: string): boolean {
+  const v = raw.replace(',', '.');
+  const n = Number(v);
+  return v !== '' && Number.isFinite(n);
+}
+
+function isAmbiguousCategorical(meta: ColumnMeta): boolean {
+  if (typeof meta.confidence === 'number' && meta.confidence < VERIFY_CAT_CONFIDENCE_MAX) {
+    return true;
+  }
+  const samples = (meta.sample ?? [])
+    .map((s) => (s == null ? '' : String(s).trim()))
+    .filter((s) => s !== '');
+  if (samples.length < VERIFY_CAT_MIN_SAMPLE_SIZE) return false;
+  const numericLike = samples.filter(looksNumeric).length;
+  return numericLike / samples.length >= VERIFY_CAT_NUMERIC_SAMPLE_RATIO;
+}
+
 // ── Builder ────────────────────────────────────────────────────────────────────
 
 export function buildAlerts(
@@ -107,9 +137,11 @@ export function buildAlerts(
       alerts.push({ type: 'likely_id', severity: 'warning', column: col });
     }
 
-    // ── 6. Unverified categorical type ────────────────────────────────────
+    // ── 6. Ambiguous categorical type ─────────────────────────────────────
+    // Only flag when there is real ambiguity (low confidence or numeric-looking
+    // samples). Obvious categoricals are skipped to avoid noise.
     const alreadyHandled = verifiedCategorical.has(col) || kindOverrides[col] != null;
-    if (kind === 'categorical' && !alreadyHandled) {
+    if (kind === 'categorical' && !alreadyHandled && isAmbiguousCategorical(meta)) {
       alerts.push({ type: 'verify_cat', severity: 'info', column: col });
     }
 

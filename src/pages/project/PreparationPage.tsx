@@ -1,10 +1,13 @@
 import { useCallback, useEffect, useState } from "react";
-import { Link, useParams } from "react-router-dom";
+import { useTranslation } from "react-i18next";
+import { Link, useNavigate, useParams } from "react-router-dom";
 import {
   ArrowRight,
+  Brain,
   ChevronRight,
   Columns,
   FlaskConical,
+  Info,
   Lock,
   RefreshCw,
   Save,
@@ -75,6 +78,8 @@ export function PreparationPage() {
   const { id } = useParams();
   const projectId = id!;
   const { toast } = useToast();
+  const navigate = useNavigate();
+  const { t } = useTranslation();
 
   const [isLoading, setIsLoading] = useState(true);
   const [versions, setVersions] = useState<VersionUI[]>([]);
@@ -106,8 +111,8 @@ export function PreparationPage() {
         }
       } catch (e) {
         toast({
-          title: "Erreur",
-          description: (e as Error).message || "Impossible de charger les versions",
+          title: t("preparation.page.toastVersionsErrorTitle"),
+          description: (e as Error).message || t("preparation.page.toastVersionsErrorDesc"),
           variant: "destructive",
         });
       } finally {
@@ -123,14 +128,61 @@ export function PreparationPage() {
     if (!selectedVersionId) return;
 
     const load = async () => {
+      // Live target = version.targetColumn first, then fallback to source dataset target.
+      // (Changing target via the Nettoyage UI updates dataset.target_column but not the version.)
+      let liveTarget: string | null =
+        versions.find((v) => String(v.id) === selectedVersionId)?.targetColumn ?? null;
+      if (!liveTarget) {
+        try {
+          const datasets = await datasetService.list(projectId);
+          const sourceDataset = datasets[0] ?? null;
+          if (sourceDataset) {
+            const tgt = await databaseService.getDatasetTarget(projectId, sourceDataset.id);
+            liveTarget = tgt.target_column ?? null;
+          }
+        } catch {
+          /* best-effort */
+        }
+      }
+
+      // Auto-resync: if the saved prep-config references a stale target, override
+      // it with the live target and reset balancing (its analysis depends on the
+      // target distribution).
+      const resyncIfTargetChanged = (cfg: PrepConfig): { config: PrepConfig; resynced: boolean } => {
+        const target = liveTarget;
+        if (target && cfg.targetColumn && cfg.targetColumn !== target) {
+          toast({
+            title: t("preparation.page.toastTargetResyncTitle", {
+              defaultValue: "Cible mise à jour",
+            }),
+            description: t("preparation.page.toastTargetResyncDesc", {
+              old: cfg.targetColumn,
+              new: target,
+              defaultValue:
+                "La cible a changé ({{old}} → {{new}}). Le rééquilibrage a été réinitialisé.",
+            }),
+          });
+          return {
+            config: {
+              ...cfg,
+              targetColumn: target,
+              balancing: { ...DEFAULT_TRAINING_BALANCING },
+              useSmote: false,
+            },
+            resynced: true,
+          };
+        }
+        return { config: cfg, resynced: false };
+      };
+
       // 1. Essayer le backend (source de vérité)
       const backendConfig = await dataService.getPrepConfig(projectId, selectedVersionId);
       if (backendConfig) {
-        const cfg = backendConfig as unknown as PrepConfig;
+        const { config: cfg, resynced } = resyncIfTargetChanged(backendConfig as unknown as PrepConfig);
         setPrepConfig(cfg);
         savePrepConfig(projectId, selectedVersionId, cfg); // mettre à jour le cache local
-        setSavedVersionId(selectedVersionId);
-        setIsSaved(true);
+        setSavedVersionId(resynced ? null : selectedVersionId);
+        setIsSaved(!resynced);
         setActiveTab("split");
         return;
       }
@@ -138,9 +190,13 @@ export function PreparationPage() {
       // 2. Fallback localStorage
       const saved = loadPrepConfig(projectId, selectedVersionId);
       if (saved) {
-        setPrepConfig(saved);
-        setSavedVersionId(selectedVersionId);
-        setIsSaved(true);
+        const { config: cfg, resynced } = resyncIfTargetChanged(saved);
+        setPrepConfig(cfg);
+        if (resynced) {
+          savePrepConfig(projectId, selectedVersionId, cfg);
+        }
+        setSavedVersionId(resynced ? null : selectedVersionId);
+        setIsSaved(!resynced);
         setActiveTab("split");
         return;
       }
@@ -233,11 +289,11 @@ export function PreparationPage() {
     // 2. Persistance backend (source de vérité)
     try {
       await dataService.savePrepConfigToBackend(projectId, selectedVersionId, toSave as unknown as Record<string, unknown>);
-      toast({ title: "Configuration enregistrée", description: "La configuration de préparation ML a été sauvegardée." });
+      toast({ title: t("preparation.page.toastSavedTitle"), description: t("preparation.page.toastSavedDesc") });
     } catch {
       toast({
-        title: "Config enregistrée localement",
-        description: "La synchronisation serveur a échoué. La config sera utilisée depuis ce navigateur.",
+        title: t("preparation.page.toastLocalTitle"),
+        description: t("preparation.page.toastLocalDesc"),
         variant: "destructive",
       });
     }
@@ -254,10 +310,10 @@ export function PreparationPage() {
         {/* Breadcrumb */}
         <div className="flex items-center gap-2 text-sm text-muted-foreground">
           <Link to={`/projects/${projectId}/versions`} className="hover:text-foreground transition-colors">
-            Versions
+            {t("preparation.page.breadcrumbVersions")}
           </Link>
           <ChevronRight className="h-4 w-4" />
-          <span className="text-foreground font-medium">Préparation ML</span>
+          <span className="text-foreground font-medium">{t("preparation.page.breadcrumbCurrent")}</span>
         </div>
 
         {/* Hero */}
@@ -270,10 +326,10 @@ export function PreparationPage() {
               </div>
               <div>
                 <h1 className="text-3xl md:text-4xl font-bold tracking-tight text-slate-900 dark:text-slate-50">
-                  Préparation ML
+                  {t("preparation.page.title")}
                 </h1>
                 <p className="mt-1 text-slate-600 dark:text-slate-300">
-                  Configurez le prétraitement, le split et le rééquilibrage avant l'entraînement.
+                  {t("preparation.page.subtitle")}
                 </p>
               </div>
             </div>
@@ -281,15 +337,15 @@ export function PreparationPage() {
             <div className="mt-5 flex flex-wrap items-center gap-3">
               {/* Version selector */}
               <div className="flex items-center gap-2">
-                <span className="text-xs text-muted-foreground font-medium">Version :</span>
+                <span className="text-xs text-muted-foreground font-medium">{t("preparation.page.versionLabel")}</span>
                 <Select value={selectedVersionId} onValueChange={setSelectedVersionId}>
                   <SelectTrigger className="h-8 w-48 rounded-xl text-xs">
-                    <SelectValue placeholder="Choisir une version" />
+                    <SelectValue placeholder={t("preparation.page.versionPlaceholder")} />
                   </SelectTrigger>
                   <SelectContent>
                     {versions.map((v) => (
                       <SelectItem key={v.id} value={String(v.id)}>
-                        {v.name ?? `Version #${v.id}`}
+                        {v.name ?? t("preparation.page.versionFallback", { id: v.id })}
                       </SelectItem>
                     ))}
                   </SelectContent>
@@ -315,7 +371,7 @@ export function PreparationPage() {
                       {type === "classification"
                         ? <Tags className="h-3 w-3" />
                         : <TrendingUp className="h-3 w-3" />}
-                      {type === "classification" ? "Classification" : "Régression"}
+                      {type === "classification" ? t("preparation.page.taskClassification") : t("preparation.page.taskRegression")}
                     </button>
                   );
                 })}
@@ -323,12 +379,12 @@ export function PreparationPage() {
 
               {isSaved && savedVersionId === selectedVersionId && (
                 <Badge variant="outline" className="border-emerald-500 text-emerald-600 text-xs">
-                  Config enregistrée
+                  {t("preparation.page.saved")}
                 </Badge>
               )}
               {!isSaved && (
                 <Badge variant="outline" className="border-amber-400 text-amber-600 text-xs">
-                  Modifications non sauvegardées
+                  {t("preparation.page.unsaved")}
                 </Badge>
               )}
             </div>
@@ -338,19 +394,30 @@ export function PreparationPage() {
         {!selectedVersionId ? (
           <Card>
             <CardContent className="py-10 text-center text-sm text-muted-foreground">
-              Aucune version disponible. Créez d'abord une version via{" "}
+              {t("preparation.page.noVersion")}{" "}
               <Link to={`/projects/${projectId}/nettoyage`} className="underline">
-                Pretraitement
+                {t("preparation.page.noVersionLink")}
               </Link>.
             </CardContent>
           </Card>
         ) : (
+          <>
+          <div className="flex items-start gap-2 rounded-xl border border-blue-200 bg-blue-50 dark:border-blue-900/50 dark:bg-blue-950/30 p-3 text-sm">
+            <Info className="h-4 w-4 mt-0.5 text-blue-600 dark:text-blue-400 shrink-0" />
+            <p className="text-blue-900 dark:text-blue-100">
+              {t("preparation.page.infoBannerPrefix")} <b>{t("preparation.page.infoBannerBold")}</b>{" "}
+              {prepConfig.taskType === "classification"
+                ? t("preparation.page.infoBannerListClass")
+                : t("preparation.page.infoBannerListReg")}{" "}
+              {t("preparation.page.infoBannerSuffix")}
+            </p>
+          </div>
           <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
             <div className="flex items-center justify-between">
               <TabsList>
                 <TabsTrigger value="split" className="gap-2">
                   <Scissors className="h-4 w-4" />
-                  1. Split
+                  {t("preparation.page.tabSplit")}
                 </TabsTrigger>
 
                 <Tooltip>
@@ -359,7 +426,7 @@ export function PreparationPage() {
                       <TabsTrigger value="columns" className="gap-2" disabled={!splitDone}>
                         {!splitDone && <Lock className="h-3.5 w-3.5 text-muted-foreground" />}
                         <Columns className="h-4 w-4" />
-                        2. Colonnes
+                        {t("preparation.page.tabColumns")}
                         {step3Validation.errorCount > 0 && (
                           <Badge variant="destructive" className="ml-1 text-[10px] h-4 px-1">
                             {step3Validation.errorCount}
@@ -369,7 +436,7 @@ export function PreparationPage() {
                     </span>
                   </TooltipTrigger>
                   {!splitDone && (
-                    <TooltipContent>Validez d'abord le split</TooltipContent>
+                    <TooltipContent>{t("preparation.page.tabLocked")}</TooltipContent>
                   )}
                 </Tooltip>
 
@@ -380,12 +447,12 @@ export function PreparationPage() {
                       <TabsTrigger value="balancing" className="gap-2" disabled={!splitDone}>
                         {!splitDone && <Lock className="h-3.5 w-3.5 text-muted-foreground" />}
                         <RefreshCw className="h-4 w-4" />
-                        3. Rééquilibrage
+                        {t("preparation.page.tabBalancing")}
                       </TabsTrigger>
                     </span>
                   </TooltipTrigger>
                   {!splitDone && (
-                    <TooltipContent>Validez d'abord le split</TooltipContent>
+                    <TooltipContent>{t("preparation.page.tabLocked")}</TooltipContent>
                   )}
                 </Tooltip>
                 )}
@@ -396,7 +463,9 @@ export function PreparationPage() {
                       <TabsTrigger value="features" className="gap-2" disabled={!splitDone}>
                         {!splitDone && <Lock className="h-3.5 w-3.5 text-muted-foreground" />}
                         <FlaskConical className="h-4 w-4" />
-                        {prepConfig.taskType === "classification" ? "4." : "3."} Features
+                        {prepConfig.taskType === "classification"
+                          ? t("preparation.page.tabFeaturesClass")
+                          : t("preparation.page.tabFeaturesReg")}
                         {(prepConfig.featureEngineering?.features.filter((f) => f.enabled).length ?? 0) > 0 && (
                           <Badge variant="secondary" className="ml-1 text-[10px] h-4 px-1">
                             {prepConfig.featureEngineering!.features.filter((f) => f.enabled).length}
@@ -406,20 +475,34 @@ export function PreparationPage() {
                     </span>
                   </TooltipTrigger>
                   {!splitDone && (
-                    <TooltipContent>Validez d'abord le split</TooltipContent>
+                    <TooltipContent>{t("preparation.page.tabLocked")}</TooltipContent>
                   )}
                 </Tooltip>
               </TabsList>
 
-              <Button
-                onClick={handleSave}
-                disabled={step3Validation.hasErrors || !splitDone}
-                className="gap-2"
-                size="sm"
-              >
-                <Save className="h-4 w-4" />
-                Enregistrer
-              </Button>
+              <div className="flex items-center gap-2">
+                <Button
+                  onClick={handleSave}
+                  disabled={step3Validation.hasErrors || !splitDone}
+                  className="gap-2"
+                  size="sm"
+                >
+                  <Save className="h-4 w-4" />
+                  {t("preparation.page.btnSave")}
+                </Button>
+                {isSaved && savedVersionId === selectedVersionId && (
+                  <Button
+                    onClick={() => navigate(`/projects/${projectId}/versions/${selectedVersionId}/training`)}
+                    className="gap-2"
+                    size="sm"
+                    variant="secondary"
+                  >
+                    <Brain className="h-4 w-4" />
+                    {t("preparation.page.btnGoTraining")}
+                    <ArrowRight className="h-4 w-4" />
+                  </Button>
+                )}
+              </div>
             </div>
 
             <TabsContent value="split">
@@ -434,7 +517,7 @@ export function PreparationPage() {
                   onClick={() => setActiveTab("columns")}
                   className="gap-2"
                 >
-                  Suivant : Colonnes
+                  {t("preparation.page.nextColumns")}
                   <ArrowRight className="h-4 w-4" />
                 </Button>
               </div>
@@ -457,7 +540,7 @@ export function PreparationPage() {
                   className="gap-2"
                   disabled={step3Validation.hasErrors}
                 >
-                  {prepConfig.taskType === "classification" ? "Suivant : Rééquilibrage" : "Suivant : Features"}
+                  {prepConfig.taskType === "classification" ? t("preparation.page.nextBalancing") : t("preparation.page.nextFeatures")}
                   <ArrowRight className="h-4 w-4" />
                 </Button>
               </div>
@@ -481,7 +564,7 @@ export function PreparationPage() {
                   onClick={() => setActiveTab("features")}
                   className="gap-2"
                 >
-                  Suivant : Features
+                  {t("preparation.page.nextFeatures")}
                   <ArrowRight className="h-4 w-4" />
                 </Button>
               </div>
@@ -497,6 +580,7 @@ export function PreparationPage() {
               />
             </TabsContent>
           </Tabs>
+          </>
         )}
       </div>
     </AppLayout>

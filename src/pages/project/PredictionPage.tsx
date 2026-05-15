@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useNavigate, useParams } from 'react-router-dom';
 import {
   AlertCircle,
@@ -57,6 +58,7 @@ export function PredictionPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const { toast } = useToast();
+  const { t } = useTranslation();
 
   const [savedModels, setSavedModels] = useState<SavedModelSummary[]>([]);
   const [selectedVersionId, setSelectedVersionId] = useState<string>('');
@@ -82,7 +84,7 @@ export function PredictionPage() {
         setNoModelError(null);
       })
       .catch((err: Error) => {
-        setNoModelError(err.message || 'Impossible de charger les modèles sauvegardés.');
+        setNoModelError(err.message || t('prediction.page.errLoadModels'));
       })
       .finally(() => setLoadingModels(false));
   }, [id]);
@@ -127,9 +129,9 @@ export function PredictionPage() {
       await trainingService.deleteModel(id, model.sessionId, model.id);
       setSavedModels((prev) => prev.filter((m) => m.id !== model.id));
       if (selectedModelId === model.id) setSelectedModelId('');
-      toast({ title: 'Modèle supprimé', description: `${model.modelType.toUpperCase()} supprimé définitivement.` });
+      toast({ title: t('prediction.page.toastModelDeletedTitle'), description: t('prediction.page.toastModelDeletedDesc', { model: model.modelType.toUpperCase() }) });
     } catch (err) {
-      toast({ title: 'Erreur', description: err instanceof Error ? err.message : 'Impossible de supprimer le modèle.', variant: 'destructive' });
+      toast({ title: t('prediction.page.toastErrTitle'), description: err instanceof Error ? err.message : t('prediction.page.errDeleteModel'), variant: 'destructive' });
     } finally {
       setDeletingModelId(null);
     }
@@ -142,7 +144,7 @@ export function PredictionPage() {
       let result: PredictionResponse;
       if (mode === 'file') {
         if (!file) {
-          toast({ title: 'Veuillez sélectionner un fichier', variant: 'destructive' });
+          toast({ title: t('prediction.page.errPickFile'), variant: 'destructive' });
           return;
         }
         result = await predictionService.predictWithSavedModel(id, selectedModel.id, file);
@@ -162,12 +164,12 @@ export function PredictionPage() {
 
       sessionStorage.setItem('lastPrediction', JSON.stringify(result));
       sessionStorage.setItem('lastPredictionFile', file?.name ?? 'manual');
-      toast({ title: `Prédiction terminée — ${result.nRows} ligne(s)` });
+      toast({ title: t('prediction.page.toastPredictionDone', { n: result.nRows }) });
       navigate(`/projects/${id}/predict/results`);
     } catch (error) {
       toast({
-        title: 'Erreur de prédiction',
-        description: error instanceof Error ? error.message : 'Une erreur est survenue.',
+        title: t('prediction.page.toastPredictionErrTitle'),
+        description: error instanceof Error ? error.message : t('prediction.page.toastGenericErr'),
         variant: 'destructive',
       });
     } finally {
@@ -185,13 +187,13 @@ export function PredictionPage() {
       <div className="w-full space-y-6">
         <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
           <div>
-            <h1 className="text-3xl font-bold text-foreground">Prédiction</h1>
+            <h1 className="text-3xl font-bold text-foreground">{t('prediction.page.title')}</h1>
             <p className="mt-1 text-muted-foreground">
-              Utilisez vos modèles entraînés pour faire des prédictions.
+              {t('prediction.page.subtitle')}
             </p>
           </div>
           <Badge variant="secondary" className="self-start">
-            <Target className="mr-1 h-3 w-3" /> Inférence
+            <Target className="mr-1 h-3 w-3" /> {t('prediction.page.badgeInference')}
           </Badge>
         </div>
 
@@ -199,7 +201,7 @@ export function PredictionPage() {
           <Card>
             <CardContent className="flex items-center gap-3 py-4">
               <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
-              <span className="text-muted-foreground">Chargement des modèles sauvegardés…</span>
+              <span className="text-muted-foreground">{t('prediction.page.loadingModels')}</span>
             </CardContent>
           </Card>
         ) : noModelError || savedModels.length === 0 ? (
@@ -207,17 +209,16 @@ export function PredictionPage() {
             <CardContent className="flex items-start gap-3 py-4">
               <AlertCircle className="mt-0.5 h-5 w-5 shrink-0 text-destructive" />
               <div>
-                <p className="font-medium text-destructive">Aucun modèle sauvegardé</p>
+                <p className="font-medium text-destructive">{t('prediction.page.noModelTitle')}</p>
                 <p className="mt-1 text-sm text-muted-foreground">
-                  {noModelError ??
-                    "Entraînez des modèles puis cliquez sur 'Enregistrer' pour les sauvegarder."}
+                  {noModelError ?? t('prediction.page.noModelHint')}
                 </p>
                 <Button
                   variant="link"
                   className="mt-1 h-auto p-0 text-sm"
                   onClick={() => navigate(`/projects/${id}/training`)}
                 >
-                  Aller vers l'entraînement →
+                  {t('prediction.page.goToTraining')}
                 </Button>
               </div>
             </CardContent>
@@ -227,12 +228,15 @@ export function PredictionPage() {
             <CardHeader className="pb-3">
               <CardTitle className="flex items-center gap-2 text-base">
                 <Brain className="h-5 w-5 text-primary" />
-                Sélection du modèle
+                {t('prediction.page.modelSelection')}
               </CardTitle>
               <CardDescription>
-                {savedModels.length} modèle{savedModels.length > 1 ? 's' : ''} sauvegardé
-                {savedModels.length > 1 ? 's' : ''} sur {versionGroups.length} version
-                {versionGroups.length > 1 ? 's' : ''} de données
+                {t(
+                  savedModels.length > 1 || versionGroups.length > 1
+                    ? 'prediction.page.summaryCountOther'
+                    : 'prediction.page.summaryCountOne',
+                  { models: savedModels.length, versions: versionGroups.length }
+                )}
               </CardDescription>
             </CardHeader>
 
@@ -241,23 +245,23 @@ export function PredictionPage() {
               <div className="space-y-2">
                 <Label htmlFor="prediction-version-select" className="flex items-center gap-1.5">
                   <Layers className="h-3.5 w-3.5 text-muted-foreground" />
-                  Version de données
+                  {t('prediction.page.versionLabel')}
                 </Label>
                 <Select value={selectedVersionId} onValueChange={setSelectedVersionId}>
                   <SelectTrigger id="prediction-version-select" className="w-full">
-                    <SelectValue placeholder="Choisir une version de données…" />
+                    <SelectValue placeholder={t('prediction.page.versionPlaceholder')} />
                   </SelectTrigger>
                   <SelectContent>
                     {versionGroups.map((group) => (
                       <SelectItem
                         key={group.id}
                         value={group.id}
-                        textValue={`${group.label} (${group.models.length} modèle${group.models.length > 1 ? 's' : ''})`}
+                        textValue={`${group.label} (${t(group.models.length > 1 ? 'prediction.page.modelsCountOther' : 'prediction.page.modelsCountOne', { n: group.models.length })})`}
                       >
                         <div className="flex items-center justify-between gap-3">
                           <span className="font-medium">{group.label}</span>
                           <span className="rounded-full bg-muted px-2 py-0.5 text-xs text-muted-foreground">
-                            {group.models.length} modèle{group.models.length > 1 ? 's' : ''}
+                            {t(group.models.length > 1 ? 'prediction.page.modelsCountOther' : 'prediction.page.modelsCountOne', { n: group.models.length })}
                           </span>
                         </div>
                       </SelectItem>
@@ -270,15 +274,15 @@ export function PredictionPage() {
               <div className="space-y-2">
                 <Label className="flex items-center gap-1.5">
                   <Bookmark className="h-3.5 w-3.5 text-muted-foreground" />
-                  Modèle sauvegardé
+                  {t('prediction.page.modelLabel')}
                 </Label>
                 {modelsForSelectedVersion.length === 0 ? (
-                  <p className="text-sm text-muted-foreground">Aucun modèle pour cette version.</p>
+                  <p className="text-sm text-muted-foreground">{t('prediction.page.noModelForVersion')}</p>
                 ) : (
                   <div className="flex items-center gap-2">
                     <Select value={selectedModelId} onValueChange={setSelectedModelId}>
                       <SelectTrigger className="flex-1">
-                        <SelectValue placeholder="Choisir un modèle…" />
+                        <SelectValue placeholder={t('prediction.page.modelPlaceholder')} />
                       </SelectTrigger>
                       <SelectContent>
                         {modelsForSelectedVersion.map((model) => {
@@ -290,7 +294,7 @@ export function PredictionPage() {
                             <SelectItem key={model.id} value={model.id}>
                               <span className="font-medium uppercase">{model.modelType}</span>
                               {model.isActive && (
-                                <span className="ml-1.5 text-xs text-primary font-semibold">(actif)</span>
+                                <span className="ml-1.5 text-xs text-primary font-semibold">{t('prediction.page.modelActive')}</span>
                               )}
                               {scoreLabel && (
                                 <span className="ml-1 text-xs text-emerald-600 dark:text-emerald-400">
@@ -305,7 +309,7 @@ export function PredictionPage() {
                     {selectedModelId && (
                       <button
                         type="button"
-                        aria-label="Supprimer le modèle sélectionné"
+                        aria-label={t('prediction.page.deleteModelAria')}
                         disabled={!!deletingModelId}
                         onClick={() => {
                           const model = modelsForSelectedVersion.find((m) => m.id === selectedModelId);
@@ -328,28 +332,28 @@ export function PredictionPage() {
               {selectedModel && (
                 <div className="rounded-lg border border-border/60 bg-muted/30 p-3 space-y-2">
                   <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                    Détails du modèle sélectionné
+                    {t('prediction.page.detailsTitle')}
                   </p>
                   <div className="grid grid-cols-2 gap-x-4 gap-y-1.5 text-xs">
                     <ModelDetailRow
                       icon={<Brain className="h-3 w-3" />}
-                      label="Type"
+                      label={t('prediction.page.detailType')}
                       value={selectedModel.modelType.toUpperCase()}
                     />
                     <ModelDetailRow
                       icon={<Target className="h-3 w-3" />}
-                      label="Tâche"
-                      value={selectedModel.taskType === 'classification' ? 'Classification' : 'Régression'}
+                      label={t('prediction.page.detailTask')}
+                      value={selectedModel.taskType === 'classification' ? t('prediction.page.taskClassification') : t('prediction.page.taskRegression')}
                     />
                     <ModelDetailRow
                       icon={<CheckCircle2 className="h-3 w-3" />}
-                      label="Variables"
-                      value={`${selectedModel.featureNames.length} colonne${selectedModel.featureNames.length > 1 ? 's' : ''}`}
+                      label={t('prediction.page.detailVariables')}
+                      value={t(selectedModel.featureNames.length > 1 ? 'prediction.page.colsCountOther' : 'prediction.page.colsCountOne', { n: selectedModel.featureNames.length })}
                     />
                     {selectedModel.testScore != null && (
                       <ModelDetailRow
                         icon={<Target className="h-3 w-3" />}
-                        label={selectedModel.primaryMetric?.displayName ?? selectedModel.primaryMetric?.name ?? 'Score'}
+                        label={selectedModel.primaryMetric?.displayName ?? selectedModel.primaryMetric?.name ?? t('prediction.page.detailScore')}
                         value={formatScore(selectedModel.testScore, selectedModel)}
                         highlight
                       />
@@ -357,22 +361,22 @@ export function PredictionPage() {
                     {selectedModel.threshold !== 0.5 && (
                       <ModelDetailRow
                         icon={<ChevronRight className="h-3 w-3" />}
-                        label="Seuil"
+                        label={t('prediction.page.detailThreshold')}
                         value={selectedModel.threshold.toFixed(3)}
                       />
                     )}
                     {selectedModel.trainingTime != null && (
                       <ModelDetailRow
                         icon={<Clock className="h-3 w-3" />}
-                        label="Durée"
+                        label={t('prediction.page.detailDuration')}
                         value={`${selectedModel.trainingTime.toFixed(1)}s`}
                       />
                     )}
                     {selectedModel.trainedAt && (
                       <ModelDetailRow
                         icon={<CalendarDays className="h-3 w-3" />}
-                        label="Entraîné le"
-                        value={new Date(selectedModel.trainedAt).toLocaleString('fr-FR', {
+                        label={t('prediction.page.detailTrainedAt')}
+                        value={new Date(selectedModel.trainedAt).toLocaleString(undefined, {
                           day: '2-digit',
                           month: 'short',
                           hour: '2-digit',
@@ -398,9 +402,9 @@ export function PredictionPage() {
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
                 <FormInput className="h-5 w-5 text-primary" />
-                Saisie manuelle
+                {t('prediction.page.manualTitle')}
               </CardTitle>
-              <CardDescription>Entrez les données d'un patient manuellement</CardDescription>
+              <CardDescription>{t('prediction.page.manualDesc')}</CardDescription>
             </CardHeader>
             <CardContent className="space-y-3">
               <Button
@@ -413,7 +417,7 @@ export function PredictionPage() {
                   setShowManualModal(true);
                 }}
               >
-                Remplir les champs
+                {t('prediction.page.fillFields')}
               </Button>
               {/* SHAP toggle — only visible in manual mode */}
               {mode === 'manual' && (
@@ -434,10 +438,10 @@ export function PredictionPage() {
                   <div>
                     <p className="text-xs font-medium flex items-center gap-1">
                       <Sparkles className="h-3 w-3 text-violet-500" />
-                      Expliquer avec SHAP
+                      {t('prediction.page.shapToggleTitle')}
                     </p>
                     <p className="text-[11px] text-muted-foreground">
-                      Affiche l'impact de chaque variable
+                      {t('prediction.page.shapToggleHint')}
                     </p>
                   </div>
                 </label>
@@ -454,16 +458,16 @@ export function PredictionPage() {
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
                 <FileUp className="h-5 w-5 text-secondary" />
-                Import de fichier
+                {t('prediction.page.fileTitle')}
               </CardTitle>
-              <CardDescription>Chargez un fichier CSV / JSON / Parquet</CardDescription>
+              <CardDescription>{t('prediction.page.fileDesc')}</CardDescription>
             </CardHeader>
             <CardContent>
               {mode === 'file' ? (
                 <FileUpload onUpload={(uploadedFile) => setFile(uploadedFile)} />
               ) : (
                 <div className="flex h-24 items-center justify-center rounded-lg border-2 border-dashed border-border text-sm text-muted-foreground">
-                  Sélectionnez ce mode
+                  {t('prediction.page.pickModeHint')}
                 </div>
               )}
             </CardContent>
@@ -479,12 +483,12 @@ export function PredictionPage() {
           {isPredicting ? (
             <>
               <Loader2 className="mr-2 h-5 w-5 animate-spin" />
-              Prédiction en cours…
+              {t('prediction.page.predicting')}
             </>
           ) : (
             <>
               <Play className="mr-2 h-5 w-5" />
-              Prédire le diagnostic
+              {t('prediction.page.predictBtn')}
               {withShap && mode === 'manual' && (
                 <span className="ml-2 text-sm opacity-70">+ SHAP</span>
               )}
@@ -496,7 +500,7 @@ export function PredictionPage() {
       <Modal
         isOpen={showManualModal}
         onClose={() => setShowManualModal(false)}
-        title="Saisie des données patient"
+        title={t('prediction.page.manualModalTitle')}
         size="lg"
       >
         {selectedModel && (selectedModel.featureNames ?? []).length > 0 ? (
@@ -511,21 +515,21 @@ export function PredictionPage() {
                     id={column}
                     value={manualData[column] ?? ''}
                     onChange={(event) => updateManualField(column, event.target.value)}
-                    placeholder={`Entrez ${column}`}
+                    placeholder={t('prediction.page.manualInputPlaceholder', { name: column })}
                   />
                 </div>
               ))}
             </div>
             <div className="mt-6 flex justify-end gap-2">
               <Button variant="outline" onClick={() => setShowManualModal(false)}>
-                Annuler
+                {t('prediction.page.cancel')}
               </Button>
-              <Button onClick={() => setShowManualModal(false)}>Valider</Button>
+              <Button onClick={() => setShowManualModal(false)}>{t('prediction.page.validate')}</Button>
             </div>
           </>
         ) : (
           <p className="text-muted-foreground">
-            Impossible de charger les colonnes du modèle sélectionné.
+            {t('prediction.page.modalNoColumns')}
           </p>
         )}
       </Modal>
@@ -549,7 +553,7 @@ function ModelDetailRow({
       <span className="shrink-0 text-muted-foreground" aria-hidden="true">
         {icon}
       </span>
-      <span className="text-muted-foreground">{label} :</span>
+      <span className="text-muted-foreground">{label}:</span>
       <span className={`font-medium ${highlight ? 'text-primary' : 'text-foreground'}`}>
         {value}
       </span>

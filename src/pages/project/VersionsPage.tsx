@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { useNavigate, useParams } from "react-router-dom";
 import { motion } from "framer-motion";
 import {
@@ -30,23 +31,15 @@ import { staggerContainer, staggerItem } from "@/components/ui/page-transition";
 
 // ── Label maps ────────────────────────────────────────────────────────────────
 
-const OP_LABELS: Record<string, string> = {
-  drop_columns: "Suppression colonnes",
-  rename_columns: "Renommage colonnes",
-  drop_duplicates: "Doublons supprimés",
-  fill_missing: "Valeurs manquantes",
-  standard_scaling: "Normalisation std",
-  minmax_scaling: "Normalisation minmax",
-  robust_scaling: "Normalisation robuste",
-  label_encoding: "Encodage labels",
-  onehot_encoding: "One-hot encoding",
-  drop_outliers: "Outliers supprimés",
-  clip_outliers: "Outliers clipés",
-  set_target: "Cible définie",
-};
+const OP_KEYS = new Set([
+  "drop_columns", "rename_columns", "drop_duplicates", "fill_missing",
+  "standard_scaling", "minmax_scaling", "robust_scaling",
+  "label_encoding", "onehot_encoding", "drop_outliers", "clip_outliers", "set_target",
+]);
 
-function opLabel(op: string): string {
-  return OP_LABELS[op] ?? op.replace(/_/g, " ");
+function makeOpLabel(t: (key: string) => string) {
+  return (op: string): string =>
+    OP_KEYS.has(op) ? t(`versions.opLabels.${op}`) : op.replace(/_/g, " ");
 }
 
 // ── Size formatter ─────────────────────────────────────────────────────────────
@@ -58,11 +51,11 @@ function formatBytes(bytes: number | null | undefined): string | null {
   return `${(bytes / (1024 * 1024)).toFixed(1)} Mo`;
 }
 
-function formatDateFR(iso: string | null | undefined) {
+function formatDate(iso: string | null | undefined) {
   if (!iso) return "—";
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return "—";
-  return d.toLocaleDateString("fr-FR");
+  return d.toLocaleDateString();
 }
 
 // ── Inline rename input ───────────────────────────────────────────────────────
@@ -123,6 +116,8 @@ export function VersionsPage() {
   const projectId = id!;
   const navigate = useNavigate();
   const { toast } = useToast();
+  const { t } = useTranslation();
+  const opLabel = useMemo(() => makeOpLabel(t), [t]);
 
   const [datasets, setDatasets] = useState<DatasetListItem[]>([]);
   const [versions, setVersions] = useState<VersionUI[]>([]);
@@ -144,7 +139,7 @@ export function VersionsPage() {
         setDatasets(ds ?? []);
         setVersions(vs ?? []);
       })
-      .catch((e) => toast({ title: "Erreur", description: (e as Error).message, variant: "destructive" }))
+      .catch((e) => toast({ title: t("versions.toastErrTitle"), description: (e as Error).message, variant: "destructive" }))
       .finally(() => { if (mounted) setIsLoading(false); });
     return () => { mounted = false; };
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -155,9 +150,9 @@ export function VersionsPage() {
     try {
       await dataService.deleteVersion(projectId, deleteVersion.id);
       setVersions((prev) => prev.filter((v) => v.id !== deleteVersion.id));
-      toast({ title: "Version supprimée" });
+      toast({ title: t("versions.toastDeleted") });
     } catch (e) {
-      toast({ title: "Erreur", description: (e as Error).message, variant: "destructive" });
+      toast({ title: t("versions.toastErrTitle"), description: (e as Error).message, variant: "destructive" });
     } finally {
       setDeleteVersion(null);
     }
@@ -169,8 +164,8 @@ export function VersionsPage() {
     );
     if (isDuplicate) {
       toast({
-        title: "Nom déjà utilisé",
-        description: `Une version nommée "${newName}" existe déjà dans ce projet.`,
+        title: t("versions.toastDuplicateTitle"),
+        description: t("versions.toastDuplicateDesc", { name: newName }),
         variant: "destructive",
       });
       return;
@@ -187,7 +182,7 @@ export function VersionsPage() {
       setVersions((prev) =>
         prev.map((v) => (v.id === versionId ? { ...v, name: previous ?? v.name } : v)),
       );
-      toast({ title: "Erreur", description: "Impossible de renommer la version.", variant: "destructive" });
+      toast({ title: t("versions.toastErrTitle"), description: t("versions.toastRenameErr"), variant: "destructive" });
     }
   };
 
@@ -250,13 +245,13 @@ export function VersionsPage() {
 
               <div className="flex shrink-0 items-center gap-1">
                 {canPredict && (
-                  <Badge className="bg-success text-success-foreground text-[10px]">Prêt</Badge>
+                  <Badge className="bg-success text-success-foreground text-[10px]">{t("versions.cardReady")}</Badge>
                 )}
                 {!isRenaming && (
                   <button
                     className="rounded p-1 text-muted-foreground hover:bg-muted hover:text-foreground"
                     onClick={() => setRenamingVersionId(v.id)}
-                    title="Renommer"
+                    title={t("versions.renameTooltip")}
                   >
                     <Pencil className="h-3.5 w-3.5" />
                   </button>
@@ -270,7 +265,7 @@ export function VersionsPage() {
             <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted-foreground">
               <span className="flex items-center gap-1">
                 <Calendar className="h-3.5 w-3.5" />
-                {formatDateFR(v.createdAt)}
+                {formatDate(v.createdAt)}
               </span>
               {sizeLabel && (
                 <span className="flex items-center gap-1">
@@ -310,7 +305,7 @@ export function VersionsPage() {
                 onClick={() => navigate(`/projects/${projectId}/nettoyage?version=${v.id}`)}
               >
                 <Target className="mr-1 h-3.5 w-3.5" />
-                Prétraiter
+                {t("versions.preprocess")}
               </Button>
 
               <Button
@@ -318,11 +313,11 @@ export function VersionsPage() {
                 variant="secondary"
                 className="flex-1"
                 disabled={!canPredict}
-                title={canPredict ? undefined : "Définis une target pour pouvoir entraîner"}
+                title={canPredict ? undefined : t("versions.trainDisabledTooltip")}
                 onClick={() => navigate(`/projects/${projectId}/versions/${v.id}/training`)}
               >
                 <GitBranch className="mr-1 h-3.5 w-3.5" />
-                Entraîner
+                {t("versions.train")}
               </Button>
 
               <Button variant="ghost" size="icon" onClick={() => setDeleteVersion(v)}>
@@ -346,18 +341,18 @@ export function VersionsPage() {
         <div className="flex items-center justify-between gap-2">
           <div className="min-w-0">
             <h2 className="truncate text-base font-semibold">{ds.original_name}</h2>
-            <p className="text-xs text-muted-foreground">Dataset importé #{ds.id}</p>
+            <p className="text-xs text-muted-foreground">{t("versions.datasetIdLabel", { id: ds.id })}</p>
           </div>
           <Badge variant="secondary">
             <GitBranch className="mr-1 h-3 w-3" />
-            {list.length} version{list.length > 1 ? "s" : ""}
+            {t(list.length > 1 ? "versions.badgeCountOther" : "versions.badgeCountOne", { n: list.length })}
           </Badge>
         </div>
 
         {list.length === 0 ? (
           <Card>
             <CardContent className="py-8 text-center text-sm text-muted-foreground">
-              Aucune version sauvegardée pour ce dataset.
+              {t("versions.noVersions")}
             </CardContent>
           </Card>
         ) : (
@@ -379,14 +374,14 @@ export function VersionsPage() {
         {/* Header */}
         <motion.div variants={staggerItem} className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
           <div>
-            <h1 className="text-3xl font-bold text-foreground">Historique des versions</h1>
+            <h1 className="text-3xl font-bold text-foreground">{t("versions.title")}</h1>
             <p className="mt-1 text-muted-foreground">
-              Versions prétraitées groupées par dataset source.
+              {t("versions.subtitle")}
             </p>
           </div>
           <Badge variant="secondary" className="self-start md:self-auto">
             <GitBranch className="mr-1 h-3 w-3" />
-            {visibleCount} version{visibleCount > 1 ? "s" : ""}
+            {t(visibleCount > 1 ? "versions.badgeCountOther" : "versions.badgeCountOne", { n: visibleCount })}
           </Badge>
         </motion.div>
 
@@ -397,7 +392,7 @@ export function VersionsPage() {
             <div className="relative min-w-[200px] flex-1">
               <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
               <Input
-                placeholder="Rechercher une version..."
+                placeholder={t("versions.searchPlaceholder")}
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
                 className="pl-9"
@@ -409,10 +404,10 @@ export function VersionsPage() {
             <Select value={datasetFilter} onValueChange={setDatasetFilter} disabled={isLoading || datasets.length === 0}>
               <SelectTrigger className="w-52">
                 <Layers className="mr-2 h-4 w-4 text-muted-foreground" />
-                <SelectValue placeholder="Tous les datasets" />
+                <SelectValue placeholder={t("versions.allDatasets")} />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="all">Tous les datasets</SelectItem>
+                <SelectItem value="all">{t("versions.allDatasets")}</SelectItem>
                 {datasets.map((ds) => (
                   <SelectItem key={ds.id} value={String(ds.id)}>
                     {ds.original_name}
@@ -424,11 +419,11 @@ export function VersionsPage() {
             {/* Status filter */}
             <Select value={filter} onValueChange={(v) => setFilter(v as "all" | "predictable")} disabled={isLoading}>
               <SelectTrigger className="w-48">
-                <SelectValue placeholder="Statut" />
+                <SelectValue placeholder={t("versions.statusPlaceholder")} />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="all">Toutes les versions</SelectItem>
-                <SelectItem value="predictable">Prêtes à prédire</SelectItem>
+                <SelectItem value="all">{t("versions.statusAll")}</SelectItem>
+                <SelectItem value="predictable">{t("versions.statusPredictable")}</SelectItem>
               </SelectContent>
             </Select>
           </div>
@@ -439,13 +434,13 @@ export function VersionsPage() {
           {isLoading ? (
             <Card>
               <CardContent className="py-12 text-center text-sm text-muted-foreground">
-                Chargement...
+                {t("versions.loading")}
               </CardContent>
             </Card>
           ) : datasets.length === 0 ? (
             <Card>
               <CardContent className="py-12 text-center text-sm text-muted-foreground">
-                Aucun dataset importé pour ce projet.
+                {t("versions.noDatasets")}
               </CardContent>
             </Card>
           ) : (
@@ -456,9 +451,9 @@ export function VersionsPage() {
                 <div className="space-y-3">
                   <div className="flex items-center justify-between gap-2">
                     <div>
-                      <h2 className="text-base font-semibold">Versions sans dataset source</h2>
+                      <h2 className="text-base font-semibold">{t("versions.unknownSectionTitle")}</h2>
                       <p className="text-xs text-muted-foreground">
-                        Non rattachées à un dataset importé.
+                        {t("versions.unknownSectionHint")}
                       </p>
                     </div>
                     <Badge variant="secondary">
@@ -480,10 +475,10 @@ export function VersionsPage() {
         isOpen={!!deleteVersion}
         onClose={() => setDeleteVersion(null)}
         onConfirm={handleDelete}
-        title="Supprimer la version"
-        description={`Êtes-vous sûr de vouloir supprimer "${deleteVersion?.name}" ?`}
+        title={t("versions.deleteTitle")}
+        description={t("versions.deleteDesc", { name: deleteVersion?.name ?? "" })}
         variant="destructive"
-        confirmText="Supprimer"
+        confirmText={t("versions.deleteConfirm")}
       />
     </AppLayout>
   );

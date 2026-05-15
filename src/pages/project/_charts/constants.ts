@@ -37,56 +37,75 @@ export const fmtAxisVal = (v: number): string => {
   return v % 1 === 0 ? String(v) : v.toFixed(2);
 };
 
+/** Chart group structure — labels resolved via i18n at render time. */
 export const CHART_GROUPS: Array<{
-  label: string;
-  items: { key: ChartKind; label: string; Icon: LucideIcon }[];
+  groupKey: "distribution" | "aggregation" | "composition" | "relations" | "advanced";
+  items: { key: ChartKind; Icon: LucideIcon }[];
 }> = [
   {
-    label: "Distribution",
+    groupKey: "distribution",
     items: [
-      { key: "hist",    label: "Histogramme", Icon: BarChart3 },
-      { key: "boxplot", label: "Boxplot",      Icon: BoxSelect },
+      { key: "hist",    Icon: BarChart3 },
+      { key: "boxplot", Icon: BoxSelect },
     ],
   },
   {
-    label: "Agrégation",
+    groupKey: "aggregation",
     items: [
-      { key: "bar",  label: "Bar",  Icon: BarChart3 },
-      { key: "line", label: "Line", Icon: LineIcon },
-      { key: "area", label: "Area", Icon: AreaIcon },
+      { key: "bar",  Icon: BarChart3 },
+      { key: "line", Icon: LineIcon },
+      { key: "area", Icon: AreaIcon },
     ],
   },
   {
-    label: "Composition",
+    groupKey: "composition",
     items: [
-      { key: "pie",      label: "Pie",    Icon: PieIcon },
-      { key: "doughnut", label: "Anneau", Icon: PieIcon },
+      { key: "pie",      Icon: PieIcon },
+      { key: "doughnut", Icon: PieIcon },
     ],
   },
   {
-    label: "Relations",
+    groupKey: "relations",
     items: [
-      { key: "scatter", label: "Scatter", Icon: ScatterIcon },
-      { key: "bubble",  label: "Bubble",  Icon: CircleDot },
+      { key: "scatter", Icon: ScatterIcon },
+      { key: "bubble",  Icon: CircleDot },
     ],
   },
   {
-    label: "Avancé",
+    groupKey: "advanced",
     items: [
-      { key: "radar",   label: "Radar",      Icon: RadarIcon },
-      { key: "heatmap", label: "Corrélation", Icon: Grid3X3 },
+      { key: "radar",   Icon: RadarIcon },
+      { key: "heatmap", Icon: Grid3X3 },
     ],
   },
 ];
 
-/** Title prefix for each aggregation chart kind */
+export const AGG_TITLE_KEYS: Record<"bar" | "line" | "area", string> = {
+  bar:  "charts.page.aggTitles.bar",
+  line: "charts.page.aggTitles.line",
+  area: "charts.page.aggTitles.area",
+};
+
+/** Hint keys, keyed by chart kind (use "agg" for bar/line/area, "pie" for pie/doughnut) */
+export const CHART_HINT_KEYS: Record<string, string> = {
+  agg:     "charts.page.hints.agg",
+  pie:     "charts.page.hints.pie",
+  hist:    "charts.page.hints.hist",
+  boxplot: "charts.page.hints.boxplot",
+  scatter: "charts.page.hints.scatter",
+  bubble:  "charts.page.hints.bubble",
+  radar:   "charts.page.hints.radar",
+  heatmap: "charts.page.hints.heatmap",
+};
+
+/** @deprecated kept for compatibility — prefer i18n keys */
 export const AGG_TITLES: Record<"bar" | "line" | "area", string> = {
   bar:  "Distribution",
   line: "Évolution",
   area: "Courbe de surface",
 };
 
-/** Bottom hint text, keyed by chart kind (use "agg" for bar/line/area, "pie" for pie/doughnut) */
+/** @deprecated kept for compatibility — prefer i18n keys */
 export const CHART_HINT: Record<string, string> = {
   agg:     'Agrégation de Y par valeurs de X (Top K catégories). Agrégation "count" ne nécessite pas de colonne Y.',
   pie:     'Répartition Top K + "Autres". La légende ci-dessous affiche les comptages exacts.',

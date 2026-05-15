@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
-import { Plus, FolderOpen, Loader2 } from "lucide-react";
+import { ArrowLeft, FolderOpen, Loader2, Plus } from "lucide-react";
 import { useTranslation } from "react-i18next";
 
 import { AppLayout } from "@/layouts/AppLayout";
@@ -14,6 +14,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/AuthContext";
 import { projectService } from "@/services/projectService";
 import { fadeInUp } from "@/components/ui/page-transition";
+import { ProfileMenu } from "@/components/ProfileMenu";
 
 export function NewProjectPage() {
   const { t } = useTranslation();
@@ -59,27 +60,49 @@ export function NewProjectPage() {
   };
 
   return (
-    <AppLayout>
+    <AppLayout hideSidebar>
       <motion.div
-        className="max-w-2xl mx-auto space-y-6"
+        className="mx-auto w-full max-w-2xl space-y-5 sm:space-y-6 lg:space-y-8"
         initial="initial"
         animate="animate"
         variants={fadeInUp}
       >
-        <div>
-          <h1 className="text-3xl font-bold text-foreground">{t("newProject.title")}</h1>
-          <p className="text-muted-foreground mt-1">{t("newProject.subtitle")}</p>
+        {/* Top bar: back button on the left, profile menu on the right */}
+        <div className="flex items-center justify-between gap-3">
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            onClick={() => navigate("/dashboard")}
+            className="-ml-2 gap-2"
+            disabled={isCreating}
+          >
+            <ArrowLeft className="h-4 w-4" />
+            <span className="hidden sm:inline">{t("common.back")}</span>
+          </Button>
+          <ProfileMenu variant="inline" />
         </div>
 
+        {/* Title */}
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight text-foreground sm:text-3xl lg:text-4xl">
+            {t("newProject.title")}
+          </h1>
+          <p className="mt-1.5 text-sm text-muted-foreground sm:mt-2 sm:text-base">
+            {t("newProject.subtitle")}
+          </p>
+        </div>
+
+        {/* Form card */}
         <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <FolderOpen className="h-5 w-5 text-primary" />
+          <CardHeader className="px-4 py-4 sm:px-6 sm:py-5">
+            <CardTitle className="flex items-center gap-2 text-base sm:text-lg">
+              <FolderOpen className="h-4 w-4 flex-shrink-0 text-primary sm:h-5 sm:w-5" />
               {t("newProject.typeLabel")}
             </CardTitle>
           </CardHeader>
-          <CardContent>
-            <form onSubmit={handleCreate} className="space-y-6">
+          <CardContent className="px-4 pb-5 sm:px-6 sm:pb-6">
+            <form onSubmit={handleCreate} className="space-y-5 sm:space-y-6">
               <div className="space-y-2">
                 <Label htmlFor="name">{t("newProject.nameLabel")}</Label>
                 <Input
@@ -104,12 +127,12 @@ export function NewProjectPage() {
                 />
               </div>
 
-              <div className="flex gap-4">
+              <div className="flex flex-col-reverse gap-3 sm:flex-row sm:gap-4">
                 <Button
                   type="button"
                   variant="outline"
                   onClick={() => navigate("/dashboard")}
-                  className="flex-1"
+                  className="w-full sm:flex-1"
                   disabled={isCreating}
                 >
                   {t("common.cancel")}
@@ -118,12 +141,12 @@ export function NewProjectPage() {
                 <Button
                   type="submit"
                   disabled={isCreating || !name.trim()}
-                  className="flex-1 bg-gradient-to-r from-primary to-secondary"
+                  className="w-full bg-gradient-to-r from-primary to-secondary sm:flex-1"
                 >
                   {isCreating ? (
-                    <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                   ) : (
-                    <Plus className="h-4 w-4 mr-2" />
+                    <Plus className="mr-2 h-4 w-4" />
                   )}
                   {isCreating ? t("newProject.submitting") : t("newProject.submit")}
                 </Button>

@@ -1,4 +1,5 @@
 import { useRef, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import {
   User, Mail, Phone, Building2, Stethoscope, MapPin,
   Calendar, Edit2, Save, X, Loader2, Camera, ShieldCheck,
@@ -38,6 +39,7 @@ function ProfileField({
   isEditing: boolean;
   onChange: (k: string, v: string) => void;
 }) {
+  const { t } = useTranslation();
   return (
     <div className="group relative flex items-start gap-3 p-3.5 rounded-2xl border border-transparent hover:border-border/40 hover:bg-muted/20 transition-all duration-200">
       <div className="w-9 h-9 rounded-xl bg-primary/10 flex items-center justify-center flex-shrink-0 mt-0.5 group-hover:bg-primary/15 transition-colors">
@@ -72,7 +74,7 @@ function ProfileField({
               transition={{ duration: 0.15 }}
               className="text-sm font-medium truncate"
             >
-              {value || <span className="text-muted-foreground/60 italic font-normal">Non renseigné</span>}
+              {value || <span className="text-muted-foreground/60 italic font-normal">{t('profileDialog.notFilled')}</span>}
             </motion.p>
           )}
         </AnimatePresence>
@@ -85,6 +87,7 @@ function ProfileField({
 export function UserProfileDialog({ open, onOpenChange }: UserProfileDialogProps) {
   const { user, updateUser, logout } = useAuth();
   const { toast } = useToast();
+  const { t } = useTranslation();
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [isEditing, setIsEditing] = useState(false);
@@ -129,9 +132,9 @@ export function UserProfileDialog({ open, onOpenChange }: UserProfileDialogProps
       setPhotoFile(null);
       setPhotoPreview(null);
       setIsEditing(false);
-      toast({ title: 'Profil mis à jour', description: 'Vos informations ont été sauvegardées.' });
+      toast({ title: t('profileDialog.toastSavedTitle'), description: t('profileDialog.toastSavedDesc') });
     } catch (err) {
-      toast({ title: 'Erreur', description: (err as Error).message, variant: 'destructive' });
+      toast({ title: t('profileDialog.toastErrTitle'), description: (err as Error).message, variant: 'destructive' });
     } finally {
       setIsSaving(false);
     }
@@ -203,8 +206,8 @@ export function UserProfileDialog({ open, onOpenChange }: UserProfileDialogProps
                   : "bg-white/15 text-white"
               )}>
                 {isAdmin
-                  ? <><ShieldCheck className="w-3 h-3" />Admin</>
-                  : <><Stethoscope className="w-3 h-3" />Médecin</>
+                  ? <><ShieldCheck className="w-3 h-3" />{t('profileDialog.roleAdmin')}</>
+                  : <><Stethoscope className="w-3 h-3" />{t('profileDialog.roleDoctor')}</>
                 }
               </div>
             </div>
@@ -212,7 +215,7 @@ export function UserProfileDialog({ open, onOpenChange }: UserProfileDialogProps
             {/* Active dot top right */}
             <div className="absolute top-4 right-10 flex items-center gap-1.5">
               <span className="w-2 h-2 rounded-full bg-emerald-400 shadow-lg shadow-emerald-500/50 animate-pulse" />
-              <span className="text-[11px] text-white/80 font-medium">Actif</span>
+              <span className="text-[11px] text-white/80 font-medium">{t('profileDialog.active')}</span>
             </div>
           </div>
 
@@ -253,7 +256,7 @@ export function UserProfileDialog({ open, onOpenChange }: UserProfileDialogProps
                       className="absolute inset-0 bg-black/50 flex flex-col items-center justify-center gap-1"
                     >
                       <Camera className="w-5 h-5 text-white" />
-                      <span className="text-[9px] text-white font-semibold">Changer</span>
+                      <span className="text-[9px] text-white font-semibold">{t('profileDialog.changePhoto')}</span>
                     </motion.div>
                   )}
                 </AnimatePresence>
@@ -274,7 +277,7 @@ export function UserProfileDialog({ open, onOpenChange }: UserProfileDialogProps
                       value={edited.fullName}
                       onChange={(e) => fieldChange('fullName', e.target.value)}
                       className="text-center font-bold text-base h-9 w-48"
-                      placeholder="Nom complet"
+                      placeholder={t('profileDialog.namePlaceholder')}
                     />
                   </motion.div>
                 ) : (
@@ -291,17 +294,17 @@ export function UserProfileDialog({ open, onOpenChange }: UserProfileDialogProps
 
           {/* ── Tabs ── */}
           <div className="px-5 mt-1 flex gap-1 border-b border-border/30">
-            {([['contact', 'Contact'], ['pro', 'Professionnel']] as [Tab, string][]).map(([t, label]) => (
+            {([['contact', t('profileDialog.tabContact')], ['pro', t('profileDialog.tabPro')]] as [Tab, string][]).map(([key, label]) => (
               <button
-                key={t}
-                onClick={() => setActiveTab(t)}
+                key={key}
+                onClick={() => setActiveTab(key)}
                 className={cn(
                   "relative px-4 py-2.5 text-sm font-medium transition-colors",
-                  activeTab === t ? "text-primary" : "text-muted-foreground hover:text-foreground"
+                  activeTab === key ? "text-primary" : "text-muted-foreground hover:text-foreground"
                 )}
               >
                 {label}
-                {activeTab === t && (
+                {activeTab === key && (
                   <motion.div
                     layoutId="tab-indicator"
                     className="absolute bottom-0 left-0 right-0 h-0.5 rounded-full bg-gradient-to-r from-primary to-secondary"
@@ -329,14 +332,14 @@ export function UserProfileDialog({ open, onOpenChange }: UserProfileDialogProps
                       <Mail className="h-4 w-4 text-primary" />
                     </div>
                     <div className="flex-1 min-w-0">
-                      <p className="text-[11px] text-muted-foreground font-semibold uppercase tracking-wider mb-0.5">Email</p>
+                      <p className="text-[11px] text-muted-foreground font-semibold uppercase tracking-wider mb-0.5">{t('profileDialog.email')}</p>
                       <p className="text-sm font-medium truncate">{user?.email}</p>
                     </div>
                   </div>
 
-                  <ProfileField icon={Phone}    label="Téléphone"          fieldKey="phone"        value={edited.phone}       isEditing={isEditing} onChange={fieldChange} />
-                  <ProfileField icon={MapPin}   label="Adresse"            fieldKey="address"      value={edited.address}     isEditing={isEditing} onChange={fieldChange} />
-                  <ProfileField icon={Calendar} label="Date de naissance"  fieldKey="dateOfBirth"  value={edited.dateOfBirth} isEditing={isEditing} onChange={fieldChange} type="date" />
+                  <ProfileField icon={Phone}    label={t('profileDialog.phone')}        fieldKey="phone"       value={edited.phone}       isEditing={isEditing} onChange={fieldChange} />
+                  <ProfileField icon={MapPin}   label={t('profileDialog.address')}      fieldKey="address"     value={edited.address}     isEditing={isEditing} onChange={fieldChange} />
+                  <ProfileField icon={Calendar} label={t('profileDialog.dateOfBirth')}  fieldKey="dateOfBirth" value={edited.dateOfBirth} isEditing={isEditing} onChange={fieldChange} type="date" />
                 </motion.div>
               ) : (
                 <motion.div
@@ -347,8 +350,8 @@ export function UserProfileDialog({ open, onOpenChange }: UserProfileDialogProps
                   transition={{ duration: 0.18 }}
                   className="space-y-1"
                 >
-                  <ProfileField icon={Stethoscope} label="Spécialité"          fieldKey="specialty" value={edited.specialty} isEditing={isEditing} onChange={fieldChange} />
-                  <ProfileField icon={Building2}   label="Établissement"       fieldKey="hospital"  value={edited.hospital}  isEditing={isEditing} onChange={fieldChange} />
+                  <ProfileField icon={Stethoscope} label={t('profileDialog.specialty')} fieldKey="specialty" value={edited.specialty} isEditing={isEditing} onChange={fieldChange} />
+                  <ProfileField icon={Building2}   label={t('profileDialog.hospital')}  fieldKey="hospital"  value={edited.hospital}  isEditing={isEditing} onChange={fieldChange} />
 
                   {/* Static info chip */}
                   {!isEditing && (
@@ -359,8 +362,8 @@ export function UserProfileDialog({ open, onOpenChange }: UserProfileDialogProps
                     >
                       <ShieldCheck className="w-5 h-5 text-primary flex-shrink-0" />
                       <div>
-                        <p className="text-xs font-semibold text-primary">Compte vérifié</p>
-                        <p className="text-[11px] text-muted-foreground">Données protégées · RGPD conforme</p>
+                        <p className="text-xs font-semibold text-primary">{t('profileDialog.verified')}</p>
+                        <p className="text-[11px] text-muted-foreground">{t('profileDialog.verifiedHint')}</p>
                       </div>
                       <ChevronRight className="w-4 h-4 text-muted-foreground ml-auto" />
                     </motion.div>
@@ -388,7 +391,7 @@ export function UserProfileDialog({ open, onOpenChange }: UserProfileDialogProps
                     className="flex-1 rounded-xl"
                   >
                     <X className="h-4 w-4 mr-1.5" />
-                    Annuler
+                    {t('profileDialog.cancel')}
                   </Button>
                   <Button
                     size="sm"
@@ -400,7 +403,7 @@ export function UserProfileDialog({ open, onOpenChange }: UserProfileDialogProps
                       ? <Loader2 className="h-4 w-4 mr-1.5 animate-spin" />
                       : <Save className="h-4 w-4 mr-1.5" />
                     }
-                    Sauvegarder
+                    {t('profileDialog.save')}
                   </Button>
                 </motion.div>
               ) : (
@@ -418,7 +421,7 @@ export function UserProfileDialog({ open, onOpenChange }: UserProfileDialogProps
                     className="flex-1 rounded-xl border-border/50 hover:border-primary/40"
                   >
                     <Edit2 className="h-4 w-4 mr-1.5" />
-                    Modifier
+                    {t('profileDialog.edit')}
                   </Button>
                   <Button
                     size="sm"

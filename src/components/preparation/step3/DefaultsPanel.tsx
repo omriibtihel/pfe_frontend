@@ -1,3 +1,4 @@
+import { useTranslation } from 'react-i18next';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -8,7 +9,7 @@ import {
   type TrainingPreprocessingDefaults,
 } from '@/types';
 import { SlidersHorizontal } from 'lucide-react';
-import { labelForMethod } from './helpers';
+import { makeLabelForMethod } from './helpers';
 import type { Step3Options } from './types';
 
 interface DefaultsPanelProps {
@@ -19,6 +20,8 @@ interface DefaultsPanelProps {
 }
 
 export function DefaultsPanel({ preprocessing, options, onSetDefault, onSetAdvancedParams }: DefaultsPanelProps) {
+  const { t } = useTranslation();
+  const labelForMethod = makeLabelForMethod(t);
   const adv = preprocessing.advancedParams ?? DEFAULT_ADVANCED_PARAMS;
   const setAdv = (patch: Partial<TrainingPreprocessingAdvancedParams>) =>
     onSetAdvancedParams({ ...adv, ...patch });
@@ -33,7 +36,7 @@ export function DefaultsPanel({ preprocessing, options, onSetDefault, onSetAdvan
           <div className="p-2 rounded-xl bg-primary/10">
             <SlidersHorizontal className="h-4 w-4 text-primary" />
           </div>
-          Paramètres par défaut
+          {t('preparation.columns.defaultsTitle')}
         </CardTitle>
       </CardHeader>
       <CardContent className="space-y-4">
@@ -41,12 +44,12 @@ export function DefaultsPanel({ preprocessing, options, onSetDefault, onSetAdvan
 
           {/* ── Variables numériques ─────────────────────────────────────── */}
           <div className="rounded-xl border border-border/60 bg-background/60 p-3 space-y-3">
-            <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Variables numériques</p>
+            <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">{t('preparation.columns.numericVars')}</p>
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
 
               {/* Imputation numérique */}
               <div className="space-y-1.5">
-                <p className="text-xs text-muted-foreground">Imputation</p>
+                <p className="text-xs text-muted-foreground">{t('preparation.columns.imputation')}</p>
                 <Select
                   value={numImp}
                   onValueChange={(v) => onSetDefault('numericImputation', v as TrainingPreprocessingDefaults['numericImputation'])}
@@ -60,7 +63,7 @@ export function DefaultsPanel({ preprocessing, options, onSetDefault, onSetAdvan
                 </Select>
                 {numImp === 'knn' && (
                   <div className="flex items-center gap-1.5">
-                    <span className="text-[10px] text-muted-foreground shrink-0">Voisins k =</span>
+                    <span className="text-[10px] text-muted-foreground shrink-0">{t('preparation.columns.knnLabel')}</span>
                     <Input
                       type="number" min={1} max={50}
                       className="h-7 text-xs"
@@ -74,7 +77,7 @@ export function DefaultsPanel({ preprocessing, options, onSetDefault, onSetAdvan
                 )}
                 {numImp === 'constant' && (
                   <div className="flex items-center gap-1.5">
-                    <span className="text-[10px] text-muted-foreground shrink-0">Valeur =</span>
+                    <span className="text-[10px] text-muted-foreground shrink-0">{t('preparation.columns.constantLabel')}</span>
                     <Input
                       type="number" step="any"
                       className="h-7 text-xs"
@@ -90,7 +93,7 @@ export function DefaultsPanel({ preprocessing, options, onSetDefault, onSetAdvan
 
               {/* Transformation */}
               <div className="space-y-1.5">
-                <p className="text-xs text-muted-foreground">Transformation</p>
+                <p className="text-xs text-muted-foreground">{t('preparation.columns.transformation')}</p>
                 <Select
                   value={preprocessing.defaults.numericPowerTransform}
                   onValueChange={(v) => onSetDefault('numericPowerTransform', v as TrainingPreprocessingDefaults['numericPowerTransform'])}
@@ -106,7 +109,7 @@ export function DefaultsPanel({ preprocessing, options, onSetDefault, onSetAdvan
 
               {/* Normalisation */}
               <div className="space-y-1.5">
-                <p className="text-xs text-muted-foreground">Normalisation (linéaire)</p>
+                <p className="text-xs text-muted-foreground">{t('preparation.columns.scalingLinear')}</p>
                 <Select
                   value={preprocessing.defaults.numericScaling}
                   onValueChange={(v) => onSetDefault('numericScaling', v as TrainingPreprocessingDefaults['numericScaling'])}
@@ -125,12 +128,12 @@ export function DefaultsPanel({ preprocessing, options, onSetDefault, onSetAdvan
 
           {/* ── Variables catégorielles ──────────────────────────────────── */}
           <div className="rounded-xl border border-border/60 bg-background/60 p-3 space-y-3">
-            <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Variables catégorielles</p>
+            <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">{t('preparation.columns.categoricalVars')}</p>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
 
               {/* Imputation catégorielle */}
               <div className="space-y-1.5">
-                <p className="text-xs text-muted-foreground">Imputation</p>
+                <p className="text-xs text-muted-foreground">{t('preparation.columns.imputation')}</p>
                 <Select
                   value={catImp}
                   onValueChange={(v) => onSetDefault('categoricalImputation', v as TrainingPreprocessingDefaults['categoricalImputation'])}
@@ -144,7 +147,7 @@ export function DefaultsPanel({ preprocessing, options, onSetDefault, onSetAdvan
                 </Select>
                 {catImp === 'constant' && (
                   <div className="flex items-center gap-1.5">
-                    <span className="text-[10px] text-muted-foreground shrink-0">Valeur =</span>
+                    <span className="text-[10px] text-muted-foreground shrink-0">{t('preparation.columns.constantLabel')}</span>
                     <Input
                       className="h-7 text-xs"
                       placeholder="__missing__"
@@ -157,7 +160,7 @@ export function DefaultsPanel({ preprocessing, options, onSetDefault, onSetAdvan
 
               {/* Encodage */}
               <div className="space-y-1.5">
-                <p className="text-xs text-muted-foreground">Encodage</p>
+                <p className="text-xs text-muted-foreground">{t('preparation.columns.encoding')}</p>
                 <Select
                   value={preprocessing.defaults.categoricalEncoding}
                   onValueChange={(v) => onSetDefault('categoricalEncoding', v as TrainingPreprocessingDefaults['categoricalEncoding'])}
@@ -177,7 +180,7 @@ export function DefaultsPanel({ preprocessing, options, onSetDefault, onSetAdvan
 
         {/* ── Seuil de variance ───────────────────────────────────────────── */}
         <div className="flex items-center gap-2 pt-1">
-          <p className="text-xs text-muted-foreground shrink-0">Seuil de variance :</p>
+          <p className="text-xs text-muted-foreground shrink-0">{t('preparation.columns.varianceThreshold')}</p>
           <Input
             type="number" min={0} max={1} step={0.001}
             className="h-7 text-xs w-24 font-mono"
@@ -188,9 +191,9 @@ export function DefaultsPanel({ preprocessing, options, onSetDefault, onSetAdvan
             }}
           />
           {adv.varianceThreshold === 0 ? (
-            <span className="text-[10px] text-amber-600">désactivé — aucune feature supprimée</span>
+            <span className="text-[10px] text-amber-600">{t('preparation.columns.varianceDisabled')}</span>
           ) : (
-            <span className="text-[10px] text-muted-foreground">— features avec variance &lt; seuil supprimées automatiquement</span>
+            <span className="text-[10px] text-muted-foreground">{t('preparation.columns.varianceEnabled')}</span>
           )}
         </div>
       </CardContent>

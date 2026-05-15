@@ -14,6 +14,7 @@ import {
   Target,
 } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useParams } from 'react-router-dom';
 
 import { ReportExportModal } from '@/components/report/ReportExportModal';
@@ -64,7 +65,7 @@ import { ColumnDetailPanel } from './dataExploration/ColumnDetailPanel';
 import { KindIcon } from './dataExploration/KindIcon';
 import { QualityBadge } from './dataExploration/QualityBadge';
 import type { ColKind, ColProfile } from './dataExploration/types';
-import { fmt, KIND_COLORS, kindLabel, pctLabel } from './dataExploration/types';
+import { fmt, KIND_COLORS, makeKindLabel, pctLabel } from './dataExploration/types';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Main page
@@ -74,6 +75,8 @@ export default function DataExplorationPage() {
   const { id } = useParams<{ id: string }>();
   const projectId = id!;
   const { toast } = useToast();
+  const { t } = useTranslation();
+  const kindLabel = useMemo(() => makeKindLabel(t), [t]);
 
   const {
     datasets,
@@ -125,12 +128,12 @@ export default function DataExplorationPage() {
         setVersionOverview(o);
         setVersionProfile(p);
       } catch (err) {
-        toast({ title: 'Erreur', description: (err as Error).message, variant: 'destructive' });
+        toast({ title: t('dataExploration.page.toastErrTitle'), description: (err as Error).message, variant: 'destructive' });
       } finally {
         setVersionLoading(false);
       }
     },
-    [projectId, toast],
+    [projectId, toast, t],
   );
 
   // Load analytics when switching to a version
@@ -257,7 +260,7 @@ export default function DataExplorationPage() {
         count,
         fill: KIND_COLORS[kind as ColKind] ?? KIND_COLORS.unknown,
       })),
-    [colProfiles],
+    [colProfiles, kindLabel],
   );
 
   const outlierCols = useMemo(() => {
@@ -312,11 +315,13 @@ export default function DataExplorationPage() {
       setTargetColumn(res.target_column ?? null);
       setShowTargetModal(false);
       toast({
-        title: 'Variable cible mise à jour',
-        description: res.target_column ? `Cible : ${res.target_column}` : 'Cible supprimée',
+        title: t('dataExploration.page.targetModal.updatedTitle'),
+        description: res.target_column
+          ? t('dataExploration.page.targetModal.updatedWithDesc', { name: res.target_column })
+          : t('dataExploration.page.targetModal.updatedRemovedDesc'),
       });
     } catch (err) {
-      toast({ title: 'Erreur', description: (err as Error).message, variant: 'destructive' });
+      toast({ title: t('dataExploration.page.toastErrTitle'), description: (err as Error).message, variant: 'destructive' });
     }
   };
 
@@ -348,9 +353,9 @@ export default function DataExplorationPage() {
             <Database className="h-8 w-8 text-muted-foreground" />
           </div>
           <div>
-            <h2 className="text-xl font-semibold">Aucun dataset disponible</h2>
+            <h2 className="text-xl font-semibold">{t('dataExploration.page.noDatasetsTitle')}</h2>
             <p className="text-muted-foreground mt-1 text-sm">
-              Importez un fichier CSV ou Excel pour commencer l'exploration.
+              {t('dataExploration.page.noDatasetsHint')}
             </p>
           </div>
         </div>
@@ -371,10 +376,10 @@ export default function DataExplorationPage() {
               <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-primary to-primary/60">
                 <TableProperties className="h-5 w-5 text-white" />
               </div>
-              Exploration des données
+              {t('dataExploration.page.title')}
             </h1>
             <p className="text-muted-foreground mt-1 text-sm">
-              Analysez, comprenez et préparez votre dataset.
+              {t('dataExploration.page.subtitle')}
             </p>
           </div>
 
@@ -386,12 +391,12 @@ export default function DataExplorationPage() {
             >
               <SelectTrigger className="w-64">
                 <Layers className="h-4 w-4 mr-2 text-muted-foreground flex-shrink-0" />
-                <SelectValue placeholder="Choisir une source" />
+                <SelectValue placeholder={t('dataExploration.page.sourcePlaceholder')} />
               </SelectTrigger>
               <SelectContent>
                 {datasets.length > 0 && (
                   <SelectGroup>
-                    <SelectLabel>Datasets</SelectLabel>
+                    <SelectLabel>{t('dataExploration.page.groupDatasets')}</SelectLabel>
                     {datasets.map((d) => (
                       <SelectItem key={`dataset-${d.id}`} value={`dataset-${d.id}`}>
                         {d.original_name}
@@ -401,7 +406,7 @@ export default function DataExplorationPage() {
                 )}
                 {versions.length > 0 && (
                   <SelectGroup>
-                    <SelectLabel>Versions</SelectLabel>
+                    <SelectLabel>{t('dataExploration.page.groupVersions')}</SelectLabel>
                     {versions.map((v) => (
                       <SelectItem key={`version-${v.id}`} value={`version-${v.id}`}>
                         {v.name}
@@ -419,7 +424,7 @@ export default function DataExplorationPage() {
               disabled={isRefreshing || versionLoading}
             >
               <RefreshCcw className={`h-4 w-4 mr-1.5 ${(isRefreshing || versionLoading) ? 'animate-spin' : ''}`} />
-              Rafraîchir
+              {t('dataExploration.page.refresh')}
             </Button>
 
             <Button
@@ -429,7 +434,7 @@ export default function DataExplorationPage() {
               disabled={!activeOverview || !activeProfile}
             >
               <FileText className="h-4 w-4 mr-1.5" />
-              Rapport PDF
+              {t('dataExploration.page.pdfReport')}
             </Button>
           </div>
         </div>
@@ -438,14 +443,14 @@ export default function DataExplorationPage() {
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
           <Card className="border-primary/20 bg-gradient-to-br from-primary/10 to-primary/5">
             <CardContent className="pt-5 pb-4">
-              <p className="text-xs text-muted-foreground uppercase tracking-wide">Lignes</p>
+              <p className="text-xs text-muted-foreground uppercase tracking-wide">{t('dataExploration.page.cards.rows')}</p>
               <p className="text-3xl font-bold text-primary mt-1">{totalRows.toLocaleString()}</p>
             </CardContent>
           </Card>
 
           <Card className="border-purple-500/20 bg-gradient-to-br from-purple-500/10 to-purple-500/5">
             <CardContent className="pt-5 pb-4">
-              <p className="text-xs text-muted-foreground uppercase tracking-wide">Colonnes Numériques</p>
+              <p className="text-xs text-muted-foreground uppercase tracking-wide">{t('dataExploration.page.cards.numericCols')}</p>
               <p className="text-3xl font-bold text-purple-600 dark:text-purple-400 mt-1">
                 {numericCount}
               </p>
@@ -454,7 +459,7 @@ export default function DataExplorationPage() {
 
           <Card className="border-purple-500/20 bg-gradient-to-br from-purple-500/10 to-purple-500/5">
             <CardContent className="pt-5 pb-4">
-              <p className="text-xs text-muted-foreground uppercase tracking-wide">Colonnes Catégorielles</p>
+              <p className="text-xs text-muted-foreground uppercase tracking-wide">{t('dataExploration.page.cards.categoricalCols')}</p>
               <p className="text-3xl font-bold text-purple-600 dark:text-purple-400 mt-1">
                 {categoricalCount}
               </p>
@@ -463,7 +468,7 @@ export default function DataExplorationPage() {
 
           <Card className="border-emerald-500/20 bg-gradient-to-br from-emerald-500/10 to-emerald-500/5">
             <CardContent className="pt-5 pb-4">
-              <p className="text-xs text-muted-foreground uppercase tracking-wide">Complétude</p>
+              <p className="text-xs text-muted-foreground uppercase tracking-wide">{t('dataExploration.page.cards.completeness')}</p>
               <p className="text-3xl font-bold text-emerald-600 dark:text-emerald-400 mt-1">
                 {completeness}%
               </p>
@@ -473,12 +478,12 @@ export default function DataExplorationPage() {
 
           <Card className="border-amber-500/20 bg-gradient-to-br from-amber-500/10 to-amber-500/5">
             <CardContent className="pt-5 pb-4">
-              <p className="text-xs text-muted-foreground uppercase tracking-wide">Valeurs nulles</p>
+              <p className="text-xs text-muted-foreground uppercase tracking-wide">{t('dataExploration.page.cards.nulls')}</p>
               <p className="text-3xl font-bold text-amber-600 dark:text-amber-400 mt-1">
                 {totalNulls.toLocaleString()}
               </p>
               <p className="text-xs text-muted-foreground mt-1">
-                {pctLabel(totalNulls, totalRows * totalCols)} des cellules
+                {t('dataExploration.page.cards.nullsHint', { pct: pctLabel(totalNulls, totalRows * totalCols) })}
               </p>
             </CardContent>
           </Card>
@@ -493,13 +498,18 @@ export default function DataExplorationPage() {
           >
             <CardContent className="pt-5 pb-4">
               <p className={`text-xs uppercase tracking-wide ${parasiteCols.length > 0 ? 'text-red-600 dark:text-red-400 font-semibold' : 'text-muted-foreground'}`}>
-                Valeurs suspectes
+                {t('dataExploration.page.cards.suspicious')}
               </p>
               <p className={`text-3xl font-bold mt-1 ${parasiteCols.length > 0 ? 'text-red-600 dark:text-red-400' : 'text-muted-foreground'}`}>
                 {parasiteCols.length}
               </p>
               <p className={`text-xs mt-1 ${parasiteCols.length > 0 ? 'text-red-500/80 dark:text-red-400/70' : 'text-muted-foreground'}`}>
-                {parasiteCols.length > 0 ? `colonne${parasiteCols.length > 1 ? 's' : ''} affectée${parasiteCols.length > 1 ? 's' : ''}` : 'aucun problème'}
+                {parasiteCols.length > 0
+                  ? t(
+                      parasiteCols.length > 1 ? 'dataExploration.page.cards.suspiciousCountOther' : 'dataExploration.page.cards.suspiciousCountOne',
+                      { n: parasiteCols.length }
+                    )
+                  : t('dataExploration.page.cards.suspiciousNoneHint')}
               </p>
             </CardContent>
           </Card>
@@ -511,8 +521,8 @@ export default function DataExplorationPage() {
             <div className="flex items-center gap-3">
               <Target className="h-5 w-5 text-primary flex-shrink-0" />
               <div>
-                <p className="font-medium text-sm">Variable cible</p>
-                <p className="text-xs text-muted-foreground">Colonne à prédire par les modèles</p>
+                <p className="font-medium text-sm">{t('dataExploration.page.targetBanner.title')}</p>
+                <p className="text-xs text-muted-foreground">{t('dataExploration.page.targetBanner.hint')}</p>
               </div>
             </div>
             <div className="flex items-center gap-3">
@@ -520,7 +530,7 @@ export default function DataExplorationPage() {
                 {targetColumn ?? '—'}
               </Badge>
               <Button variant="outline" size="sm" onClick={() => handleOpenTargetModal()}>
-                Changer
+                {t('dataExploration.page.targetBanner.change')}
               </Button>
             </div>
           </CardContent>
@@ -531,15 +541,15 @@ export default function DataExplorationPage() {
           <TabsList className="grid grid-cols-3 w-full max-w-md">
             <TabsTrigger value="apercu" className="flex items-center gap-1.5">
               <Database className="h-4 w-4" />
-              Aperçu
+              {t('dataExploration.page.tabs.overview')}
             </TabsTrigger>
             <TabsTrigger value="colonnes" className="flex items-center gap-1.5">
               <Layers className="h-4 w-4" />
-              Colonnes
+              {t('dataExploration.page.tabs.columns')}
             </TabsTrigger>
             <TabsTrigger value="analyse" className="flex items-center gap-1.5">
               <BarChart3 className="h-4 w-4" />
-              Analyse
+              {t('dataExploration.page.tabs.analysis')}
             </TabsTrigger>
           </TabsList>
 
@@ -552,7 +562,7 @@ export default function DataExplorationPage() {
                 <div className="flex items-center justify-between flex-wrap gap-3">
                   <CardTitle className="text-base flex items-center gap-2">
                     <Database className="h-4 w-4 text-primary" />
-                    Aperçu tabulaire
+                    {t('dataExploration.page.overview.cardTitle')}
                     {activeDataset && (
                       <span className="text-sm font-normal text-muted-foreground ml-1">
                         — {activeDataset.original_name}
@@ -561,7 +571,7 @@ export default function DataExplorationPage() {
                   </CardTitle>
                   <div className="flex items-center gap-2">
                     <div className="flex items-center gap-1.5 text-sm text-muted-foreground">
-                      <span>Lignes :</span>
+                      <span>{t('dataExploration.page.overview.rowsLabel')}</span>
                       <Input
                         type="number"
                         min={1}
@@ -586,7 +596,7 @@ export default function DataExplorationPage() {
                       }}
                       disabled={isRefreshing || versionLoading}
                     >
-                      Appliquer
+                      {t('dataExploration.page.overview.apply')}
                     </Button>
                   </div>
                 </div>
@@ -594,7 +604,7 @@ export default function DataExplorationPage() {
               <CardContent>
                 {!activeOverview?.preview?.length ? (
                   <p className="text-sm text-muted-foreground py-4 text-center">
-                    Aucune donnée à afficher.
+                    {t('dataExploration.page.overview.empty')}
                   </p>
                 ) : (
                   <DataTable
@@ -607,7 +617,7 @@ export default function DataExplorationPage() {
                           {key}
                           {targetColumn === key && (
                             <Badge className="bg-primary text-primary-foreground text-[10px] px-1.5 py-0">
-                              Target
+                              {t('dataExploration.page.overview.targetBadge')}
                             </Badge>
                           )}
                         </span>
@@ -631,19 +641,19 @@ export default function DataExplorationPage() {
               <Card>
                 <CardHeader className="pb-2">
                   <CardTitle className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">
-                    Métadonnées
+                    {t('dataExploration.page.overview.metadataTitle')}
                   </CardTitle>
                 </CardHeader>
                 <CardContent>
                   <dl className="grid grid-cols-2 sm:grid-cols-3 gap-x-6 gap-y-2 text-sm">
                     <div>
-                      <dt className="text-muted-foreground">Fichier</dt>
+                      <dt className="text-muted-foreground">{t('dataExploration.page.overview.mdFile')}</dt>
                       <dd className="font-medium truncate" title={activeDataset.original_name}>
                         {activeDataset.original_name}
                       </dd>
                     </div>
                     <div>
-                      <dt className="text-muted-foreground">Taille</dt>
+                      <dt className="text-muted-foreground">{t('dataExploration.page.overview.mdSize')}</dt>
                       <dd className="font-medium">
                         {activeDataset.size_bytes
                           ? `${(activeDataset.size_bytes / 1024).toFixed(1)} Ko`
@@ -651,23 +661,23 @@ export default function DataExplorationPage() {
                       </dd>
                     </div>
                     <div>
-                      <dt className="text-muted-foreground">Type</dt>
+                      <dt className="text-muted-foreground">{t('dataExploration.page.overview.mdType')}</dt>
                       <dd className="font-medium">{activeDataset.content_type ?? '—'}</dd>
                     </div>
                     <div>
-                      <dt className="text-muted-foreground">Importé le</dt>
+                      <dt className="text-muted-foreground">{t('dataExploration.page.overview.mdImportedAt')}</dt>
                       <dd className="font-medium">
-                        {new Date(activeDataset.created_at).toLocaleDateString('fr-FR')}
+                        {new Date(activeDataset.created_at).toLocaleDateString()}
                       </dd>
                     </div>
                     <div>
-                      <dt className="text-muted-foreground">Dimensions</dt>
+                      <dt className="text-muted-foreground">{t('dataExploration.page.overview.mdDimensions')}</dt>
                       <dd className="font-medium">
                         {totalRows} × {totalCols}
                       </dd>
                     </div>
                     <div>
-                      <dt className="text-muted-foreground">Colonne cible</dt>
+                      <dt className="text-muted-foreground">{t('dataExploration.page.overview.mdTarget')}</dt>
                       <dd className="font-medium">{targetColumn ?? '—'}</dd>
                     </div>
                   </dl>
@@ -687,12 +697,12 @@ export default function DataExplorationPage() {
                     <div className="flex items-center justify-between gap-2 flex-wrap">
                       <CardTitle className="text-base flex items-center gap-2">
                         <Layers className="h-4 w-4 text-primary" />
-                        {filteredCols.length} / {totalCols} colonnes
+                        {t('dataExploration.page.columnList.countLabel', { filtered: filteredCols.length, total: totalCols })}
                       </CardTitle>
                       <div className="relative w-56">
                         <Search className="absolute left-2.5 top-2.5 h-3.5 w-3.5 text-muted-foreground" />
                         <Input
-                          placeholder="Rechercher…"
+                          placeholder={t('dataExploration.page.columnList.searchPlaceholder')}
                           value={colSearch}
                           onChange={(e) => setColSearch(e.target.value)}
                           className="pl-8 h-8 text-sm"
@@ -708,36 +718,35 @@ export default function DataExplorationPage() {
                         className="flex items-center gap-1 text-left"
                         onClick={() => toggleSort('name')}
                       >
-                        Colonne
+                        {t('dataExploration.page.columnList.headerColumn')}
                         <ArrowUpDown className="h-3 w-3" />
                       </button>
                       <button
                         className="flex items-center gap-1"
                         onClick={() => toggleSort('type')}
                       >
-                        Type
+                        {t('dataExploration.page.columnList.headerType')}
                         <ArrowUpDown className="h-3 w-3" />
                       </button>
                       <button
                         className="flex items-center gap-1"
                         onClick={() => toggleSort('nulls')}
                       >
-                        Nulls
+                        {t('dataExploration.page.columnList.headerNulls')}
                         <ArrowUpDown className="h-3 w-3" />
                       </button>
-                      <span>Qualité</span>
+                      <span>{t('dataExploration.page.columnList.headerQuality')}</span>
                     </div>
 
                     {/* Rows */}
                     <div className="max-h-[520px] overflow-y-auto">
                       {filteredCols.length === 0 ? (
                         <p className="py-8 text-center text-sm text-muted-foreground">
-                          Aucune colonne trouvée.
+                          {t('dataExploration.page.columnList.empty')}
                         </p>
                       ) : (
                         filteredCols.map((col) => {
                           const isSelected = selectedCol?.name === col.name;
-                          const isTarget = targetColumn === col.name;
                           const missingPct = totalRows
                             ? ((col.missing / totalRows) * 100).toFixed(1)
                             : '0';
@@ -762,13 +771,16 @@ export default function DataExplorationPage() {
                                   {col.name}
                                 </span>
                                 {outlierCols.has(col.name) && (
-                                  <span title="Outliers possibles (IQR×3)" className="flex-shrink-0">
+                                  <span title={t('dataExploration.page.columnList.outlierTooltip')} className="flex-shrink-0">
                                     <AlertTriangle className="h-3 w-3 text-amber-500" />
                                   </span>
                                 )}
                                 {col.parasites && col.parasites.count > 0 && (
                                   <span
-                                    title={`${col.parasites.count} valeur(s) suspecte(s) : ${col.parasites.distinct.slice(0, 3).map(v => `"${v}"`).join(', ')} — probablement des valeurs manquantes`}
+                                    title={t('dataExploration.page.columnList.parasiteTooltip', {
+                                      count: col.parasites.count,
+                                      samples: col.parasites.distinct.slice(0, 3).map(v => `"${v}"`).join(', '),
+                                    })}
                                     className="flex-shrink-0 animate-pulse"
                                   >
                                     <AlertCircle className="h-4 w-4 text-red-500 drop-shadow-[0_0_4px_rgba(239,68,68,0.8)]" />
@@ -828,9 +840,9 @@ export default function DataExplorationPage() {
                 <CardHeader className="pb-2">
                   <CardTitle className="text-base flex items-center gap-2">
                     <ShieldCheck className="h-4 w-4 text-primary" />
-                    Distribution des types
+                    {t('dataExploration.page.analysis.typeDistTitle')}
                   </CardTitle>
-                  <CardDescription>Répartition des colonnes par type</CardDescription>
+                  <CardDescription>{t('dataExploration.page.analysis.typeDistDesc')}</CardDescription>
                 </CardHeader>
                 <CardContent>
                   <ResponsiveContainer width="100%" height={200}>
@@ -839,7 +851,10 @@ export default function DataExplorationPage() {
                       <XAxis dataKey="name" tick={{ fontSize: 12 }} />
                       <YAxis allowDecimals={false} tick={{ fontSize: 12 }} />
                       <Tooltip
-                        formatter={(v: number) => [`${v} colonne${v > 1 ? 's' : ''}`, 'Nombre']}
+                        formatter={(v: number) => [
+                          t(v > 1 ? 'dataExploration.page.analysis.typeDistTooltipOther' : 'dataExploration.page.analysis.typeDistTooltipOne', { n: v }),
+                          t('dataExploration.page.analysis.typeDistTooltipLabel'),
+                        ]}
                       />
                       <Bar dataKey="count" radius={[4, 4, 0, 0]}>
                         {typeDistData.map((entry, i) => (
@@ -856,11 +871,13 @@ export default function DataExplorationPage() {
                 <CardHeader className="pb-2">
                   <CardTitle className="text-base flex items-center gap-2">
                     <AlertTriangle className="h-4 w-4 text-amber-500" />
-                    Valeurs manquantes
+                    {t('dataExploration.page.analysis.missingTitle')}
                   </CardTitle>
                   <CardDescription>
-                    {missingCols.length} colonne{missingCols.length !== 1 ? 's' : ''} avec des
-                    valeurs nulles (sur {totalCols})
+                    {t(
+                      missingCols.length !== 1 ? 'dataExploration.page.analysis.missingDescOther' : 'dataExploration.page.analysis.missingDescOne',
+                      { n: missingCols.length, total: totalCols }
+                    )}
                   </CardDescription>
                 </CardHeader>
                 <CardContent>
@@ -868,7 +885,7 @@ export default function DataExplorationPage() {
                     <div className="flex flex-col items-center justify-center h-32 gap-2 text-center">
                       <CheckCircle className="h-8 w-8 text-emerald-500" />
                       <p className="text-sm font-medium text-emerald-600 dark:text-emerald-400">
-                        Aucune valeur manquante !
+                        {t('dataExploration.page.analysis.missingNone')}
                       </p>
                     </div>
                   ) : (
@@ -914,10 +931,10 @@ export default function DataExplorationPage() {
                 <CardHeader className="pb-2">
                   <CardTitle className="text-base flex items-center gap-2">
                     <AlertCircle className="h-4 w-4 text-orange-500" />
-                    Valeurs suspectes détectées
+                    {t('dataExploration.page.analysis.parasiteTitle')}
                   </CardTitle>
                   <CardDescription>
-                    Colonnes numériques contenant des valeurs non-convertibles (ex. "?", "N/A", "_") — à remplacer par NaN avant l'entraînement
+                    {t('dataExploration.page.analysis.parasiteDesc')}
                   </CardDescription>
                 </CardHeader>
                 <CardContent>
@@ -935,13 +952,19 @@ export default function DataExplorationPage() {
                               {col.name}
                             </button>
                             <span className="text-muted-foreground ml-2">
-                              {col.parasites!.count} occurrence{col.parasites!.count > 1 ? 's' : ''} —{' '}
-                              {col.parasites!.distinct.slice(0, 3).map(v => `"${v}"`).join(', ')}
-                              {col.parasites!.distinct.length > 3 ? '…' : ''}
+                              {t(
+                                col.parasites!.count > 1 ? 'dataExploration.page.analysis.parasiteOccurrenceOther' : 'dataExploration.page.analysis.parasiteOccurrenceOne',
+                                {
+                                  n: col.parasites!.count,
+                                  samples:
+                                    col.parasites!.distinct.slice(0, 3).map(v => `"${v}"`).join(', ')
+                                    + (col.parasites!.distinct.length > 3 ? '…' : ''),
+                                }
+                              )}
                             </span>
                           </div>
                           <span className="text-xs text-muted-foreground flex-shrink-0">
-                            {(col.parasites!.convertible_ratio * 100).toFixed(0)}% numérique
+                            {t('dataExploration.page.analysis.parasiteRatio', { pct: (col.parasites!.convertible_ratio * 100).toFixed(0) })}
                           </span>
                         </div>
                       ))}
@@ -956,10 +979,10 @@ export default function DataExplorationPage() {
                 <CardHeader className="pb-2">
                   <CardTitle className="text-base flex items-center gap-2">
                     <BarChart3 className="h-4 w-4 text-blue-500" />
-                    Statistiques numériques globales
+                    {t('dataExploration.page.analysis.statsTitle')}
                   </CardTitle>
                   <CardDescription>
-                    Min / moyenne / max pour chaque colonne numérique
+                    {t('dataExploration.page.analysis.statsDesc')}
                   </CardDescription>
                 </CardHeader>
                 <CardContent>
@@ -967,13 +990,13 @@ export default function DataExplorationPage() {
                     <table className="w-full text-sm min-w-[600px]">
                       <thead>
                         <tr className="border-b border-border/60">
-                          {['Colonne', 'Min', 'P25', 'Médiane', 'Moyenne', 'P75', 'Max', 'Std'].map(
+                          {(['column', 'min', 'p25', 'median', 'mean', 'p75', 'max', 'std'] as const).map(
                             (h) => (
                               <th
                                 key={h}
                                 className="px-3 py-2 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wide"
                               >
-                                {h}
+                                {t(`dataExploration.page.analysis.statsCols.${h}`)}
                               </th>
                             ),
                           )}
@@ -1024,16 +1047,16 @@ export default function DataExplorationPage() {
       <Modal
         isOpen={showTargetModal}
         onClose={() => setShowTargetModal(false)}
-        title="Variable cible"
+        title={t('dataExploration.page.targetModal.title')}
         size="lg"
       >
         <div className="space-y-4">
           <p className="text-sm text-muted-foreground">
-            Sélectionnez la colonne que les modèles devront prédire.
+            {t('dataExploration.page.targetModal.desc')}
           </p>
           <Select value={tempTarget} onValueChange={setTempTarget}>
             <SelectTrigger>
-              <SelectValue placeholder="Sélectionner une colonne…" />
+              <SelectValue placeholder={t('dataExploration.page.targetModal.selectPlaceholder')} />
             </SelectTrigger>
             <SelectContent>
               {(activeOverview?.columns ?? []).map((col) => (
@@ -1044,13 +1067,13 @@ export default function DataExplorationPage() {
             </SelectContent>
           </Select>
           <p className="text-xs text-muted-foreground">
-            Laissez vide pour supprimer la cible actuelle.
+            {t('dataExploration.page.targetModal.emptyHint')}
           </p>
           <div className="flex justify-end gap-2 pt-2">
             <Button variant="outline" onClick={() => setShowTargetModal(false)}>
-              Annuler
+              {t('dataExploration.page.targetModal.cancel')}
             </Button>
-            <Button onClick={() => void handleConfirmTarget()}>Confirmer</Button>
+            <Button onClick={() => void handleConfirmTarget()}>{t('dataExploration.page.targetModal.confirm')}</Button>
           </div>
         </div>
       </Modal>

@@ -12,7 +12,7 @@
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 
-import type { ReportFactor, ReportLang, ReportPrediction } from './predictionReportService';
+import type { ReportChange, ReportFactor, ReportLang, ReportPrediction } from './predictionReportService';
 
 // ── Public types ──────────────────────────────────────────────────────────────
 
@@ -43,6 +43,8 @@ export interface PredictionReportPdfInput {
   scorePct?: number | null;
   thresholdPct?: number;
   chartFactors?: PdfChartFactor[];
+  // LLM-generated actionable sections (optional — skipped when empty)
+  whatToChange?: ReportChange[];
 }
 
 // ── Localized strings for the PDF chrome ──────────────────────────────────────
@@ -78,6 +80,11 @@ const STRINGS = {
     concerning: 'Préoccupant',
     intro: "Ce rapport vous guide étape par étape pour comprendre l'analyse réalisée.",
     endOfReport: 'Fin du rapport',
+    whatToChange: 'Que faudrait-il changer ?',
+    whatToChangeIntro: "Pistes hypothétiques pour rapprocher le profil de la zone rassurante. Ce ne sont pas des promesses.",
+    cfFactor: 'Facteur',
+    cfCurrent: 'Actuel',
+    cfTarget: 'Cible',
   },
   en: {
     title: 'Predictive analysis report',
@@ -109,6 +116,11 @@ const STRINGS = {
     concerning: 'Concerning',
     intro: 'This report walks you through the analysis step by step.',
     endOfReport: 'End of report',
+    whatToChange: 'What would need to change?',
+    whatToChangeIntro: 'Hypothetical paths to move the profile closer to the reassuring zone. These are not promises.',
+    cfFactor: 'Factor',
+    cfCurrent: 'Current',
+    cfTarget: 'Target',
   },
 } as const;
 
@@ -549,6 +561,53 @@ function drawFactorsChartPdf(
   return cursor;
 }
 
+/**
+ * Render the DiCE-derived "what would need to change" suggestions as a table
+ * (factor / current → target / why) with an italic intro line above.
+ */
+function drawWhatToChange(
+  doc: jsPDF,
+  changes: ReportChange[],
+  cursor: number,
+  t: Strings,
+  step?: number,
+): number {
+  if (!changes.length) return cursor;
+
+  cursor = ensureRoom(doc, cursor, 22);
+  cursor = drawSectionHeading(doc, t.whatToChange, cursor, step);
+
+  doc.setFont('helvetica', 'italic');
+  doc.setFontSize(8.5);
+  doc.setTextColor(...COLOR_MUTED);
+  const introLines = doc.splitTextToSize(t.whatToChangeIntro, CONTENT_W);
+  doc.text(introLines, MARGIN, cursor);
+  cursor += introLines.length * 4 + 2;
+
+  autoTable(doc, {
+    startY: cursor,
+    margin: { left: MARGIN, right: MARGIN },
+    head: [[t.cfFactor, t.cfCurrent, t.cfTarget, t.factorExplanation]],
+    body: changes.map((c) => [
+      c.factor,
+      c.current + (c.normal_range ? `\n(${c.normal_range})` : ''),
+      `${c.target}\n${c.magnitude_text}`,
+      [c.change_text, c.why_it_matters].filter(Boolean).join('\n\n'),
+    ]),
+    headStyles: { fillColor: [217, 119, 6], fontStyle: 'bold', fontSize: 9 },
+    bodyStyles: { fontSize: 9, textColor: COLOR_TEXT, valign: 'top' },
+    columnStyles: {
+      0: { cellWidth: 38, fontStyle: 'bold' },
+      1: { cellWidth: 30 },
+      2: { cellWidth: 28, textColor: [217, 119, 6] },
+      3: { cellWidth: 'auto' },
+    },
+    styles: { cellPadding: 2.5 },
+  });
+  const finalY = (doc as unknown as { lastAutoTable?: { finalY: number } }).lastAutoTable?.finalY;
+  return (finalY ?? cursor) + 6;
+}
+
 // ── Public entry point ────────────────────────────────────────────────────────
 
 export function downloadPredictionReportPdf(input: PredictionReportPdfInput): void {
@@ -583,6 +642,9 @@ export function downloadPredictionReportPdf(input: PredictionReportPdfInput): vo
   }
   if (input.nextSteps) {
     cursor = drawSection(doc, t.nextSteps, input.nextSteps, cursor, step++);
+  }
+  if (input.whatToChange && input.whatToChange.length > 0) {
+    cursor = drawWhatToChange(doc, input.whatToChange, cursor, t, step++);
   }
 
   // Disclaimer rendered once on a dedicated final page.

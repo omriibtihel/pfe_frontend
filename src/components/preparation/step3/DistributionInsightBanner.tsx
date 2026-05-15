@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import {
   BarChart2, CheckCircle2, ChevronDown, ChevronUp, Sparkles, X,
 } from 'lucide-react';
@@ -37,16 +38,25 @@ type FetchState = 'idle' | 'loading' | 'done' | 'error';
 
 // ── Labels ────────────────────────────────────────────────────────────────────
 
-const TRANSFORM_LABELS: Record<string, string> = {
-  none: 'Aucun', log: 'log(x)', sqrt: '√x',
-  yeo_johnson: 'Yeo-Johnson', box_cox: 'Box-Cox',
+const TRANSFORM_KEYS: Record<string, string> = {
+  none: 'preparation.distribution.transform.none',
+  log: 'preparation.distribution.transform.log',
+  sqrt: 'preparation.distribution.transform.sqrt',
+  yeo_johnson: 'preparation.distribution.transform.yeo_johnson',
+  box_cox: 'preparation.distribution.transform.box_cox',
 };
-const SCALING_LABELS: Record<string, string> = {
-  none: 'Aucun', standard: 'Standard (z-score)', robust: 'Robust (IQR)',
-  minmax: 'MinMax', maxabs: 'MaxAbs',
+const SCALING_KEYS: Record<string, string> = {
+  none: 'preparation.distribution.scaling.none',
+  standard: 'preparation.distribution.scaling.standard',
+  robust: 'preparation.distribution.scaling.robust',
+  minmax: 'preparation.distribution.scaling.minmax',
+  maxabs: 'preparation.distribution.scaling.maxabs',
 };
-const IMPUTATION_LABELS: Record<string, string> = {
-  none: 'Aucun', mean: 'Moyenne', median: 'Médiane', most_frequent: 'Fréquent',
+const IMPUTATION_KEYS: Record<string, string> = {
+  none: 'preparation.distribution.imputation.none',
+  mean: 'preparation.distribution.imputation.mean',
+  median: 'preparation.distribution.imputation.median',
+  most_frequent: 'preparation.distribution.imputation.most_frequent',
 };
 const TRANSFORM_COLORS: Record<string, string> = {
   log:         'bg-orange-500/10 text-orange-600 border-orange-300/40',
@@ -117,6 +127,7 @@ export function DistributionInsightBanner({
   onProfileLoaded,
   onApplyPerColumn,
 }: DistributionInsightBannerProps) {
+  const { t } = useTranslation();
   const [state, setState] = useState<FetchState>('idle');
   const [profile, setProfile] = useState<DatasetProfile | null>(null);
   const [dismissed, setDismissed] = useState(false);
@@ -201,17 +212,17 @@ export function DistributionInsightBanner({
           <div className="p-2 rounded-xl bg-primary/10">
             <BarChart2 className="h-4 w-4 text-primary" />
           </div>
-          Analyse de distribution
+          {t('preparation.distribution.title')}
           <div className="ml-auto flex items-center gap-1">
             {hasColDist && (
               <Button type="button" size="sm" variant="ghost" className="h-7 gap-1 px-2 text-xs text-muted-foreground"
                 onClick={() => setShowTable(v => !v)}>
                 {showTable ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
-                {showTable ? 'Masquer' : 'Détails par colonne'}
+                {showTable ? t('preparation.distribution.hide') : t('preparation.distribution.details')}
               </Button>
             )}
             <Button type="button" size="sm" variant="ghost" className="h-7 w-7 p-0 text-muted-foreground"
-              onClick={() => setDismissed(true)} title="Fermer">
+              onClick={() => setDismissed(true)} title={t('preparation.distribution.close')}>
               <X className="h-4 w-4" />
             </Button>
           </div>
@@ -222,23 +233,23 @@ export function DistributionInsightBanner({
         {/* Summary stats */}
         <div className="grid grid-cols-3 gap-3 text-center">
           <div className="rounded-lg bg-muted/40 px-3 py-2">
-            <p className="text-[10px] uppercase tracking-wide text-muted-foreground mb-0.5">Non-normales</p>
+            <p className="text-[10px] uppercase tracking-wide text-muted-foreground mb-0.5">{t('preparation.distribution.nonNormal')}</p>
             <p className="text-lg font-bold">{Math.round(profile.non_normal_ratio * 100)}%</p>
-            <p className="text-[10px] text-muted-foreground">des features</p>
+            <p className="text-[10px] text-muted-foreground">{t('preparation.distribution.nonNormalSub')}</p>
           </div>
           <div className="rounded-lg bg-muted/40 px-3 py-2">
-            <p className="text-[10px] uppercase tracking-wide text-muted-foreground mb-0.5">Skewness moy.</p>
+            <p className="text-[10px] uppercase tracking-wide text-muted-foreground mb-0.5">{t('preparation.distribution.avgSkew')}</p>
             <p className={`text-lg font-bold ${profile.avg_skewness >= 1.5 ? 'text-amber-500' : ''}`}>
               {profile.avg_skewness.toFixed(2)}
             </p>
-            <p className="text-[10px] text-muted-foreground">|skewness|</p>
+            <p className="text-[10px] text-muted-foreground">{t('preparation.distribution.avgSkewSub')}</p>
           </div>
           <div className="rounded-lg bg-muted/40 px-3 py-2">
-            <p className="text-[10px] uppercase tracking-wide text-muted-foreground mb-0.5">Très asymétriques</p>
+            <p className="text-[10px] uppercase tracking-wide text-muted-foreground mb-0.5">{t('preparation.distribution.highSkew')}</p>
             <p className={`text-lg font-bold ${profile.highly_skewed_count > 0 ? 'text-amber-500' : ''}`}>
               {profile.highly_skewed_count}
             </p>
-            <p className="text-[10px] text-muted-foreground">cols (|sk| ≥ 1.5)</p>
+            <p className="text-[10px] text-muted-foreground">{t('preparation.distribution.highSkewSub')}</p>
           </div>
         </div>
 
@@ -249,12 +260,12 @@ export function DistributionInsightBanner({
               <table className="w-full text-xs">
                 <thead>
                   <tr className="border-b border-border/60 bg-muted/40 sticky top-0">
-                    <th className="text-left px-3 py-2 font-medium text-muted-foreground">Colonne</th>
-                    <th className="text-center px-2 py-2 font-medium text-muted-foreground">Normalité</th>
-                    <th className="text-center px-2 py-2 font-medium text-muted-foreground">Skewness</th>
-                    <th className="text-center px-2 py-2 font-medium text-muted-foreground">Transformation</th>
-                    <th className="text-center px-2 py-2 font-medium text-muted-foreground">Normalisation</th>
-                    <th className="text-center px-2 py-2 font-medium text-muted-foreground">Imputation</th>
+                    <th className="text-left px-3 py-2 font-medium text-muted-foreground">{t('preparation.distribution.colColumn')}</th>
+                    <th className="text-center px-2 py-2 font-medium text-muted-foreground">{t('preparation.distribution.colNormality')}</th>
+                    <th className="text-center px-2 py-2 font-medium text-muted-foreground">{t('preparation.distribution.colSkew')}</th>
+                    <th className="text-center px-2 py-2 font-medium text-muted-foreground">{t('preparation.distribution.colTransform')}</th>
+                    <th className="text-center px-2 py-2 font-medium text-muted-foreground">{t('preparation.distribution.colScaling')}</th>
+                    <th className="text-center px-2 py-2 font-medium text-muted-foreground">{t('preparation.distribution.colImputation')}</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-border/40">
@@ -265,25 +276,25 @@ export function DistributionInsightBanner({
                         <td className="px-3 py-1.5 font-mono truncate max-w-[120px]" title={col}>{col}</td>
                         <td className="px-2 py-1.5 text-center">
                           {stat.is_normal_practical
-                            ? <span className="text-emerald-600 font-medium">Pratique</span>
-                            : <span className="text-rose-500 font-medium">Non-normale</span>}
+                            ? <span className="text-emerald-600 font-medium">{t('preparation.distribution.normalityYes')}</span>
+                            : <span className="text-rose-500 font-medium">{t('preparation.distribution.normalityNo')}</span>}
                         </td>
                         <td className={`px-2 py-1.5 text-center font-mono ${stat.abs_skewness >= 1.5 ? 'text-amber-500 font-semibold' : ''}`}>
                           {stat.skewness.toFixed(2)}
                         </td>
                         <td className="px-2 py-1.5 text-center">
                           <div className="flex flex-col items-center gap-0.5">
-                            <Chip label={TRANSFORM_LABELS[rec.powerTransform] ?? rec.powerTransform} colors={TRANSFORM_COLORS[rec.powerTransform] ?? TRANSFORM_COLORS.none} />
+                            <Chip label={TRANSFORM_KEYS[rec.powerTransform] ? t(TRANSFORM_KEYS[rec.powerTransform]) : rec.powerTransform} colors={TRANSFORM_COLORS[rec.powerTransform] ?? TRANSFORM_COLORS.none} />
                             {stat.has_non_positive && rec.powerTransform === 'box_cox' && (
-                              <span className="text-[10px] text-destructive font-semibold">X&lt;0 !</span>
+                              <span className="text-[10px] text-destructive font-semibold">{t('preparation.distribution.xNeg')}</span>
                             )}
                           </div>
                         </td>
                         <td className="px-2 py-1.5 text-center">
-                          <Chip label={SCALING_LABELS[rec.scaling] ?? rec.scaling} colors={SCALING_COLORS[rec.scaling] ?? SCALING_COLORS.none} />
+                          <Chip label={SCALING_KEYS[rec.scaling] ? t(SCALING_KEYS[rec.scaling]) : rec.scaling} colors={SCALING_COLORS[rec.scaling] ?? SCALING_COLORS.none} />
                         </td>
                         <td className="px-2 py-1.5 text-center">
-                          <Chip label={IMPUTATION_LABELS[rec.imputation] ?? rec.imputation} colors={IMPUTATION_COLORS[rec.imputation] ?? IMPUTATION_COLORS.none} />
+                          <Chip label={IMPUTATION_KEYS[rec.imputation] ? t(IMPUTATION_KEYS[rec.imputation]) : rec.imputation} colors={IMPUTATION_COLORS[rec.imputation] ?? IMPUTATION_COLORS.none} />
                         </td>
                       </tr>
                     );
@@ -299,7 +310,7 @@ export function DistributionInsightBanner({
           {applied && (
             <span className="flex items-center gap-1 text-xs text-emerald-600">
               <CheckCircle2 className="h-3.5 w-3.5" />
-              Appliqué par colonne
+              {t('preparation.distribution.applied')}
             </span>
           )}
           {hasColDist && (
@@ -307,7 +318,7 @@ export function DistributionInsightBanner({
               disabled={applied}
               onClick={handleApplyPerColumn}>
               <Sparkles className="h-3.5 w-3.5 mr-1.5" />
-              Appliquer par colonne
+              {t('preparation.distribution.apply')}
             </Button>
           )}
         </div>

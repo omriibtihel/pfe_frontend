@@ -5,11 +5,12 @@
  * Each alert type has one dedicated renderer component.
  */
 import React, { useMemo } from 'react';
-import { AlertTriangle, CheckCircle2, Info, Wrench, XCircle } from 'lucide-react';
+import { AlertTriangle, CheckCircle2, Info, LayoutList, Wrench, XCircle } from 'lucide-react';
 
 import { Modal }   from '@/components/ui/modal';
 import { Button }  from '@/components/ui/button';
 import { Badge }   from '@/components/ui/badge';
+import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 
 import type { ColumnKind, CleaningAction } from '@/services/dataService';
 import type { ColumnMeta }                 from '@/services/dataService';
@@ -172,8 +173,8 @@ function alertContent(alert: AlertItem): { title: string; description: string } 
       };
     case 'verify_cat':
       return {
-        title: 'Vérification du type',
-        description: `"${alert.column}" est détectée catégorielle. Confirme le type ou convertis en numérique.`,
+        title: 'Type ambigu',
+        description: `"${alert.column}" est typée catégorielle mais ses valeurs ressemblent à des nombres (ou la détection est peu sûre). Confirme le type ou convertis en numérique.`,
       };
     case 'high_cardinality':
       return {
@@ -299,43 +300,83 @@ export function AlertsModal({
     [metaMap, verifiedCategorical, kindOverrides, dismissedAlertKeys, thresholds],
   );
 
-  const errorCount   = visibleAlerts.filter((a) => a.severity === 'error').length;
-  const warningCount = visibleAlerts.filter((a) => a.severity === 'warning').length;
+  const grouped = useMemo(() => ({
+    error:   visibleAlerts.filter((a) => a.severity === 'error'),
+    warning: visibleAlerts.filter((a) => a.severity === 'warning'),
+    info:    visibleAlerts.filter((a) => a.severity === 'info'),
+  }), [visibleAlerts]);
+
+  const renderAlert = (alert: AlertItem) => {
+    const key = alertKey(alert);
+    return (
+      <AlertCard
+        key={key}
+        alert={alert}
+        disableActions={disableActions}
+        kindOverrides={kindOverrides}
+        onDismiss={() => onDismissAlert(key, true)}
+        onVerifyCategorical={onVerifyCategorical}
+        onSetOverride={onSetOverride}
+        onClearOverride={onClearOverride}
+        onRunCleaning={onRunCleaning}
+      />
+    );
+  };
+
+  const renderList = (items: AlertItem[], emptyLabel: string) =>
+    items.length === 0 ? (
+      <div className="flex items-center gap-2 rounded-md border border-border bg-muted/30 p-4 text-sm text-muted-foreground">
+        <CheckCircle2 className="h-4 w-4" />
+        {emptyLabel}
+      </div>
+    ) : (
+      <div className="space-y-2">{items.map(renderAlert)}</div>
+    );
 
   return (
     <Modal isOpen={open} onClose={onClose} title="Alertes & recommandations" size="xl">
       <div className="space-y-3">
-        {visibleAlerts.length > 0 && (
-          <div className="flex items-center gap-2 text-xs text-muted-foreground pb-1">
-            {errorCount > 0   && <Badge variant="outline" className={SEVERITY_BADGE_CLASS.error}>   {errorCount} erreur{errorCount   > 1 ? 's' : ''}</Badge>}
-            {warningCount > 0 && <Badge variant="outline" className={SEVERITY_BADGE_CLASS.warning}>{warningCount} avertissement{warningCount > 1 ? 's' : ''}</Badge>}
-          </div>
-        )}
-
         {visibleAlerts.length === 0 ? (
           <div className="flex items-center gap-2 rounded-md border border-border bg-muted/30 p-4 text-sm text-muted-foreground">
             <CheckCircle2 className="h-4 w-4" />
             Aucune alerte pour l'instant.
           </div>
         ) : (
-          <div className="space-y-2">
-            {visibleAlerts.map((alert) => {
-              const key = alertKey(alert);
-              return (
-                <AlertCard
-                  key={key}
-                  alert={alert}
-                  disableActions={disableActions}
-                  kindOverrides={kindOverrides}
-                  onDismiss={() => onDismissAlert(key, true)}
-                  onVerifyCategorical={onVerifyCategorical}
-                  onSetOverride={onSetOverride}
-                  onClearOverride={onClearOverride}
-                  onRunCleaning={onRunCleaning}
-                />
-              );
-            })}
-          </div>
+          <Tabs defaultValue="all" className="w-full">
+            <TabsList className="grid w-full grid-cols-4 h-auto gap-1 p-1">
+              <TabsTrigger value="all" className="gap-1.5 px-2 py-1.5 min-w-0">
+                <LayoutList className="h-3.5 w-3.5 shrink-0" />
+                <span className="hidden sm:inline truncate">Toutes</span>
+                <Badge variant="outline" className="text-[10px] shrink-0">{visibleAlerts.length}</Badge>
+              </TabsTrigger>
+              <TabsTrigger value="error" className="gap-1.5 px-2 py-1.5 min-w-0" disabled={grouped.error.length === 0}>
+                <XCircle className="h-3.5 w-3.5 text-red-500 shrink-0" />
+                <span className="hidden sm:inline truncate">Erreurs</span>
+                {grouped.error.length > 0 && (
+                  <Badge variant="outline" className={`text-[10px] shrink-0 ${SEVERITY_BADGE_CLASS.error}`}>{grouped.error.length}</Badge>
+                )}
+              </TabsTrigger>
+              <TabsTrigger value="warning" className="gap-1.5 px-2 py-1.5 min-w-0" disabled={grouped.warning.length === 0}>
+                <AlertTriangle className="h-3.5 w-3.5 text-amber-600 shrink-0" />
+                <span className="hidden sm:inline truncate">Avertissements</span>
+                {grouped.warning.length > 0 && (
+                  <Badge variant="outline" className={`text-[10px] shrink-0 ${SEVERITY_BADGE_CLASS.warning}`}>{grouped.warning.length}</Badge>
+                )}
+              </TabsTrigger>
+              <TabsTrigger value="info" className="gap-1.5 px-2 py-1.5 min-w-0" disabled={grouped.info.length === 0}>
+                <Info className="h-3.5 w-3.5 text-blue-500 shrink-0" />
+                <span className="hidden sm:inline truncate">Infos</span>
+                {grouped.info.length > 0 && (
+                  <Badge variant="outline" className={`text-[10px] shrink-0 ${SEVERITY_BADGE_CLASS.info}`}>{grouped.info.length}</Badge>
+                )}
+              </TabsTrigger>
+            </TabsList>
+
+            <TabsContent value="all">{renderList(visibleAlerts, "Aucune alerte.")}</TabsContent>
+            <TabsContent value="error">{renderList(grouped.error, "Aucune erreur.")}</TabsContent>
+            <TabsContent value="warning">{renderList(grouped.warning, "Aucun avertissement.")}</TabsContent>
+            <TabsContent value="info">{renderList(grouped.info, "Aucune information.")}</TabsContent>
+          </Tabs>
         )}
 
         <div className="flex justify-end pt-2">

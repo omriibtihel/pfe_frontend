@@ -5,7 +5,7 @@ import type {
   TrainingPreprocessingColumnConfig,
   TrainingPreprocessingConfig,
 } from "@/types";
-import { DEFAULT_TRAINING_PREPROCESSING, DEFAULT_TRAINING_PREPROCESSING_DEFAULTS } from "@/types";
+import { DEFAULT_ADVANCED_PARAMS, DEFAULT_TRAINING_PREPROCESSING, DEFAULT_TRAINING_PREPROCESSING_DEFAULTS } from "@/types";
 import type { Step3ColumnValidationState } from "@/utils/step3Validation";
 import type { Step3ColumnRowData } from "./types";
 
@@ -29,6 +29,29 @@ export function toValidationRows(rows: BaseRow[]): Step3ColumnValidationState[] 
   }));
 }
 
+const METHOD_KEYS: Record<string, string> = {
+  none: "preparation.columns.method.none",
+  most_frequent: "preparation.columns.method.most_frequent",
+  standard: "preparation.columns.method.standard",
+  minmax: "preparation.columns.method.minmax",
+  maxabs: "preparation.columns.method.maxabs",
+  onehot: "preparation.columns.method.onehot",
+  knn: "preparation.columns.method.knn",
+  log: "preparation.columns.method.log",
+  sqrt: "preparation.columns.method.sqrt",
+  yeo_johnson: "preparation.columns.method.yeo_johnson",
+  box_cox: "preparation.columns.method.box_cox",
+};
+
+export function makeLabelForMethod(t: (key: string) => string): (value: string) => string {
+  return (value: string): string => {
+    const key = METHOD_KEYS[value];
+    if (key) return t(key);
+    return value.charAt(0).toUpperCase() + value.slice(1);
+  };
+}
+
+/** @deprecated kept for backward compat — prefer makeLabelForMethod(t) inside components */
 export function labelForMethod(value: string): string {
   if (value === "none") return "Aucun";
   const map: Record<string, string> = {
@@ -66,6 +89,7 @@ export function normalizePreprocessing(
     return {
       defaults: { ...DEFAULT_TRAINING_PREPROCESSING_DEFAULTS },
       columns: {},
+      advancedParams: { ...DEFAULT_ADVANCED_PARAMS },
     };
   }
 
@@ -75,6 +99,10 @@ export function normalizePreprocessing(
       ...(preprocessing.defaults ?? {}),
     },
     columns: { ...(preprocessing.columns ?? {}) },
+    advancedParams: {
+      ...DEFAULT_ADVANCED_PARAMS,
+      ...(preprocessing.advancedParams ?? {}),
+    },
   };
 }
 
@@ -86,6 +114,7 @@ export function clonePreprocessingConfig(
     columns: Object.fromEntries(
       Object.entries(preprocessing.columns).map(([columnName, cfg]) => [columnName, { ...(cfg ?? {}) }])
     ),
+    advancedParams: preprocessing.advancedParams ? { ...preprocessing.advancedParams } : undefined,
   };
 }
 

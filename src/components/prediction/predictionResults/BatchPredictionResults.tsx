@@ -29,17 +29,7 @@ import {
 import { AppLayout } from '@/layouts/AppLayout';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { useToast } from '@/hooks/use-toast';
-import { predictionService } from '@/services/predictionService';
-import type {
-  CounterfactualResult,
-  ExplanationMethod,
-  FeatureRangesMap,
-  LimeLocalItem,
-  PredictionResponse,
-  PredictionRow,
-  ShapLocalItem,
-} from '@/types';
+import type { ExplanationMethod, PredictionResponse, PredictionRow } from '@/types';
 
 import { CounterfactualModal } from './CounterfactualModal';
 import { ExplanationModal } from './ExplanationModal';
@@ -48,28 +38,10 @@ import { METHOD_LABELS } from './ExplanationPanel';
 import { PredictionBadge } from './PredictionBadge';
 import { RowDetailsModal } from './RowDetailsModal';
 import { ScoreBar } from './ScoreBar';
-import { _buildZoneCounts, _confLevel, _fmt, _triggerDownload } from './helpers';
+import { _buildZoneCounts, _confLevel, _fmt } from './helpers';
+import { usePredictionExplanations } from './usePredictionExplanations';
 
 const PAGE_SIZE = 20;
-
-type ExplanationCacheEntry = {
-  shap?: ShapLocalItem[];
-  lime?: LimeLocalItem[];
-  counterfactual?: CounterfactualResult;
-};
-
-/** Which methods does the cache+row need before we can render `method`? */
-function _missingMethods(entry: ExplanationCacheEntry, method: ExplanationMethod): ExplanationMethod | null {
-  if (method === 'shap') return entry.shap ? null : 'shap';
-  if (method === 'lime') return entry.lime ? null : 'lime';
-  // both
-  const missingShap = !entry.shap;
-  const missingLime = !entry.lime;
-  if (missingShap && missingLime) return 'both';
-  if (missingShap) return 'shap';
-  if (missingLime) return 'lime';
-  return null;
-}
 
 export function BatchPredictionResults({
   result,
@@ -79,22 +51,27 @@ export function BatchPredictionResults({
   projectId: string;
 }) {
   const navigate = useNavigate();
-  const { toast } = useToast();
 
-  const [isExporting, setIsExporting] = useState(false);
+  const {
+    getRowExplanations,
+    fetchExplanations,
+    runCounterfactual,
+    cfLiveRunner,
+    featureRanges,
+    ensureFeatureRanges,
+    loadingRows,
+    isRowLoading,
+    isCfLoading,
+    cache,
+    exportCsv,
+    isExporting,
+  } = usePredictionExplanations(projectId, result);
+
   const [page, setPage] = useState(0);
-
-  // Unified explanation + counterfactual cache per row index.
-  const [explanationCache, setExplanationCache] = useState<Record<number, ExplanationCacheEntry>>({});
-  const [loadingRows, setLoadingRows] = useState<Set<number>>(new Set());
   const [explainMethod, setExplainMethod] = useState<ExplanationMethod>('shap');
   const [openModalRow, setOpenModalRow] = useState<PredictionRow | null>(null);
-
-  // Counterfactual modal state.
   const [openCfModalRow, setOpenCfModalRow] = useState<PredictionRow | null>(null);
-  const [loadingCfRows, setLoadingCfRows] = useState<Set<number>>(new Set());
   const [openDetailsRow, setOpenDetailsRow] = useState<PredictionRow | null>(null);
-  const [featureRanges, setFeatureRanges] = useState<FeatureRangesMap>({});
 
   const isClassification = result.taskType === 'classification';
   const totalRows = result.nRows ?? 0;
@@ -103,19 +80,7 @@ export function BatchPredictionResults({
   /** True when at least one explanation (SHAP or LIME, server-provided or cached) exists. */
   const hasAnyExplanation =
     rows.some((r) => (r.shap && r.shap.length > 0) || (r.lime && r.lime.length > 0)) ||
-    Object.keys(explanationCache).length > 0;
-
-  /** Returns the cached explanation entry for a row, merged with server-provided fields. */
-  const getRowExplanations = useCallback(
-    (row: PredictionRow): ExplanationCacheEntry => {
-      const cached = explanationCache[row.rowIndex] ?? {};
-      return {
-        shap: cached.shap ?? row.shap ?? undefined,
-        lime: cached.lime ?? row.lime ?? undefined,
-      };
-    },
-    [explanationCache],
-  );
+    Object.keys(cache).length > 0;
 
   const uncertainRows = useMemo(
     () => rows.filter((r) => _confLevel(r.score, result.thresholdUsed) === 'uncertain'),
@@ -133,56 +98,6 @@ export function BatchPredictionResults({
   const topFeatures = result.topFeatures ?? [];
   const totalPages = Math.ceil(rows.length / PAGE_SIZE);
   const pageRows = rows.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE);
-
-  /**
-   * Fetch the explanations for `row` using `method`, merging into the cache.
-   * No-op when the cache already has every method requested.
-   */
-  const fetchExplanations = useCallback(
-    async (row: PredictionRow, method: ExplanationMethod): Promise<void> => {
-      const entry = getRowExplanations(row);
-      const needed = _missingMethods(entry, method);
-      if (needed === null) return;
-
-      setLoadingRows((prev) => new Set(prev).add(row.rowIndex));
-      try {
-        const explained = await predictionService.predictManualWithSavedModelExplain(
-          projectId,
-          result.modelId,
-          [row.inputData],
-          needed,
-        );
-        const respRow = explained.rows[0];
-        if (!respRow) return;
-
-        const update: ExplanationCacheEntry = {};
-        if (respRow.shap && respRow.shap.length > 0) update.shap = respRow.shap;
-        if (respRow.lime && respRow.lime.length > 0) update.lime = respRow.lime;
-
-        if (!update.shap && !update.lime) {
-          const label = needed === 'shap' ? 'SHAP' : needed === 'lime' ? 'LIME' : 'SHAP/LIME';
-          toast({ title: `${label} indisponible pour ce modèle`, variant: 'destructive' });
-          return;
-        }
-
-        setExplanationCache((prev) => ({
-          ...prev,
-          [row.rowIndex]: { ...(prev[row.rowIndex] ?? {}), ...update },
-        }));
-      } catch (err) {
-        const msg = err instanceof Error ? err.message : 'Impossible de calculer les explications.';
-        console.error('[Expliquer] error:', err);
-        toast({ title: 'Erreur explication', description: msg, variant: 'destructive' });
-      } finally {
-        setLoadingRows((prev) => {
-          const s = new Set(prev);
-          s.delete(row.rowIndex);
-          return s;
-        });
-      }
-    },
-    [projectId, result.modelId, getRowExplanations, toast],
-  );
 
   const handleExplainRow = useCallback(
     async (row: PredictionRow) => {
@@ -203,91 +118,10 @@ export function BatchPredictionResults({
     [openModalRow, fetchExplanations],
   );
 
-  /**
-   * Compute DiCE counterfactuals for a row and store in the unified cache.
-   * Always re-fetches: the user may have changed lock state since the last
-   * call, so a fresh suggestion is needed each time Auto-suggérer is clicked.
-   */
-  const handleCounterfactualRow = useCallback(
-    async (row: PredictionRow, featuresToVary: string[]): Promise<void> => {
-      setLoadingCfRows((prev) => new Set(prev).add(row.rowIndex));
-      try {
-        const cfResult = await predictionService.computeCounterfactual(
-          projectId,
-          result.modelId,
-          row.inputData,
-          featuresToVary,
-        );
-        setExplanationCache((prev) => ({
-          ...prev,
-          [row.rowIndex]: { ...(prev[row.rowIndex] ?? {}), counterfactual: cfResult },
-        }));
-      } catch (err) {
-        const msg = err instanceof Error ? err.message : 'Impossible de calculer le contrefactuel.';
-        console.error('[Contrefactuel] error:', err);
-        toast({ title: 'Erreur contrefactuel', description: msg, variant: 'destructive' });
-      } finally {
-        setLoadingCfRows((prev) => {
-          const s = new Set(prev);
-          s.delete(row.rowIndex);
-          return s;
-        });
-      }
-    },
-    [projectId, result.modelId, toast],
-  );
-
-  /**
-   * Live-prediction runner used by the interactive slider panel.
-   */
-  const cfLiveRunner = useCallback(
-    async (overrides: Record<string, unknown>): Promise<{ prediction: unknown; score: number | null }> => {
-      const resp = await predictionService.predictManualWithSavedModel(projectId, result.modelId, [overrides]);
-      const r = resp.rows[0];
-      return { prediction: r?.prediction ?? null, score: r?.score ?? null };
-    },
-    [projectId, result.modelId],
-  );
-
-  // Fetch feature ranges once per model when the CF modal opens.
+  // Lazy-load feature ranges once when the CF modal opens.
   useEffect(() => {
-    if (!openCfModalRow) return;
-    if (Object.keys(featureRanges).length > 0) return;
-    let cancelled = false;
-    (async () => {
-      try {
-        const ranges = await predictionService.getFeatureRanges(projectId, result.modelId);
-        if (!cancelled) setFeatureRanges(ranges);
-      } catch (err) {
-        console.warn('[CF] failed to load feature ranges:', err);
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [projectId, result.modelId, openCfModalRow, featureRanges]);
-
-  const handleExportCsv = useCallback(async () => {
-    setIsExporting(true);
-    try {
-      const { blob, filename } = await predictionService.exportResultsCsv(
-        projectId,
-        result.modelId,
-        result.modelType,
-        result.rows,
-      );
-      _triggerDownload(blob, filename ?? `predictions_${result.modelType}.csv`);
-      toast({ title: 'Export CSV réussi' });
-    } catch (err) {
-      toast({
-        title: 'Erreur export',
-        description: err instanceof Error ? err.message : "Impossible d'exporter.",
-        variant: 'destructive',
-      });
-    } finally {
-      setIsExporting(false);
-    }
-  }, [projectId, result, toast]);
+    if (openCfModalRow) ensureFeatureRanges();
+  }, [openCfModalRow, ensureFeatureRanges]);
 
   return (
     <AppLayout>
@@ -326,7 +160,7 @@ export function BatchPredictionResults({
                 )}
               </div>
             </div>
-            <Button variant="outline" size="sm" onClick={handleExportCsv} disabled={isExporting} className="shrink-0">
+            <Button variant="outline" size="sm" onClick={exportCsv} disabled={isExporting} className="shrink-0">
               {isExporting ? (
                 <Loader2 className="h-4 w-4 mr-2 animate-spin" />
               ) : (
@@ -626,9 +460,9 @@ export function BatchPredictionResults({
                       isClassification && _confLevel(row.score, result.thresholdUsed) === 'uncertain';
                     const entry = getRowExplanations(row);
                     const hasAny = Boolean(entry.shap?.length || entry.lime?.length);
-                    const isLoadingRow = loadingRows.has(row.rowIndex);
-                    const hasCf = Boolean(explanationCache[row.rowIndex]?.counterfactual);
-                    const isLoadingCf = loadingCfRows.has(row.rowIndex);
+                    const isLoadingRow = isRowLoading(row);
+                    const hasCf = Boolean(entry.counterfactual);
+                    const isLoadingCfRow = isCfLoading(row);
                     return (
                       <tr
                         key={row.rowIndex}
@@ -712,7 +546,7 @@ export function BatchPredictionResults({
                         <td className="px-3 py-2.5 text-right">
                           <button
                             type="button"
-                            disabled={isLoadingCf}
+                            disabled={isLoadingCfRow}
                             onClick={() => setOpenCfModalRow(row)}
                             className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[10px] font-medium leading-none transition-colors disabled:opacity-50 ${
                               hasCf
@@ -721,7 +555,7 @@ export function BatchPredictionResults({
                             }`}
                             title={hasCf ? 'Voir le contrefactuel' : 'Calculer le contrefactuel (DiCE)'}
                           >
-                            {isLoadingCf ? (
+                            {isLoadingCfRow ? (
                               <Loader2 className="h-3 w-3 animate-spin" />
                             ) : (
                               <Shuffle className="h-3 w-3" />
@@ -797,7 +631,7 @@ export function BatchPredictionResults({
               limeItems={entry.lime}
               method={explainMethod}
               onMethodChange={(m) => void handleMethodChange(m)}
-              isLoading={loadingRows.has(openModalRow.rowIndex)}
+              isLoading={isRowLoading(openModalRow)}
               isClassification={isClassification}
               onClose={() => setOpenModalRow(null)}
               projectId={projectId}
@@ -822,16 +656,15 @@ export function BatchPredictionResults({
       {/* Counterfactual Modal */}
       {openCfModalRow != null &&
         (() => {
-          const cfEntry = explanationCache[openCfModalRow.rowIndex]?.counterfactual;
-          const isLoadingCf = loadingCfRows.has(openCfModalRow.rowIndex);
+          const cfEntry = getRowExplanations(openCfModalRow).counterfactual;
           return (
             <CounterfactualModal
               row={openCfModalRow}
               result={result}
               featureRanges={featureRanges}
               cachedResult={cfEntry}
-              isLoadingAutoSuggest={isLoadingCf}
-              onAutoSuggest={(featuresToVary) => handleCounterfactualRow(openCfModalRow, featuresToVary)}
+              isLoadingAutoSuggest={isCfLoading(openCfModalRow)}
+              onAutoSuggest={(featuresToVary) => runCounterfactual(openCfModalRow, featuresToVary)}
               liveRunner={cfLiveRunner}
               onClose={() => setOpenCfModalRow(null)}
             />

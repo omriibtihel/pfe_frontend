@@ -4,6 +4,7 @@ import {
   CartesianGrid,
   Cell,
   LabelList,
+  Legend,
   Line,
   LineChart,
   ReferenceLine,
@@ -13,7 +14,13 @@ import {
   YAxis,
 } from 'recharts';
 
-import type { ArtifactWarning, CurvesData, ExplainabilityData, LearningCurveData } from '@/types';
+import type {
+  ArtifactWarning,
+  CurvesData,
+  ExplainabilityData,
+  LearningCurveData,
+  MulticlassCurveBlock,
+} from '@/types';
 import { buildFeatureImportanceChartData } from './trainingResultsHelpers';
 
 const FI_PALETTE = [
@@ -241,7 +248,7 @@ export function ModelCardVariablesTab({ explainability }: ModelCardVariablesTabP
         return w ? <ArtifactUnavailable label="SHAP — Importance globale" reason={`${w.error} : ${w.detail}`} /> : null;
       })()}
 
-      {sg && sg.summary.length > 0 && (() => {
+      {sg && sg.summary && sg.summary.length > 0 && (() => {
         const maxAbs = Math.max(...sg.summary.map((d) => d.mean_abs_shap), 1e-9);
         const explainerLabel: Record<string, string> = {
           tree: 'TreeSHAP',
@@ -368,6 +375,31 @@ export function ModelCardCourbesTab({ curves }: ModelCardCourbesTabProps) {
 
   return (
     <div className="space-y-4">
+      {(curves.multiclassRoc || curves.multiclassPr) && (
+        <section aria-label="Courbes One-vs-Rest">
+          <p
+            className="mb-1.5 text-xs font-medium cursor-help underline decoration-dotted decoration-muted-foreground/50 underline-offset-2"
+            title="Courbes One-vs-Rest (OvR) : pour chaque classe, on trace une courbe ROC/PR en traitant la classe comme « positif » et toutes les autres comme « négatif ». L'AUC macro est la moyenne non-pondérée des AUC par classe."
+          >
+            Courbes One-vs-Rest (multiclasse)
+          </p>
+          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+            {curves.multiclassRoc && (
+              <MulticlassCurvePanel
+                block={curves.multiclassRoc}
+                kind="roc"
+              />
+            )}
+            {curves.multiclassPr && (
+              <MulticlassCurvePanel
+                block={curves.multiclassPr}
+                kind="pr"
+              />
+            )}
+          </div>
+        </section>
+      )}
+
       {(curves.roc || curves.pr || curves.calibration) && (
         <section aria-label="Courbes de diagnostic">
           <p
@@ -597,6 +629,87 @@ export function ModelCardCourbesTab({ curves }: ModelCardCourbesTabProps) {
           </section>
         );
       })()}
+    </div>
+  );
+}
+
+const OVR_PALETTE = [
+  '#8b5cf6', '#06b6d4', '#f59e0b', '#10b981',
+  '#ef4444', '#3b82f6', '#ec4899', '#84cc16',
+];
+
+interface MulticlassCurvePanelProps {
+  block: MulticlassCurveBlock;
+  kind: 'roc' | 'pr';
+}
+
+function MulticlassCurvePanel({ block, kind }: MulticlassCurvePanelProps) {
+  const isRoc = kind === 'roc';
+  const xLabel = isRoc ? 'FPR' : 'Recall';
+  const yLabel = isRoc ? 'TPR' : 'Precision';
+  const title = isRoc ? 'ROC OvR' : 'Precision-Recall OvR';
+  const macroLabel = isRoc ? 'macro AUC' : 'macro AP';
+
+  return (
+    <div>
+      <div className="mb-1 flex items-center justify-center gap-1.5">
+        <p className="text-[10px] text-muted-foreground">{title}</p>
+        {block.macroAuc != null && (
+          <span className="rounded-full border border-violet-400/50 bg-violet-50 px-1.5 py-0.5 text-[10px] text-violet-700 dark:bg-violet-950/30 dark:text-violet-300">
+            {macroLabel} {block.macroAuc.toFixed(3)}
+          </span>
+        )}
+      </div>
+      <div className="rounded-lg border border-border/50 bg-muted/20 p-1.5" style={{ height: 200 }}>
+        <ResponsiveContainer width="100%" height="100%">
+          <LineChart margin={{ top: 4, right: 8, bottom: 16, left: 8 }}>
+            <CartesianGrid strokeDasharray="3 3" stroke="rgba(128,128,128,0.15)" />
+            <XAxis
+              type="number"
+              dataKey="x"
+              domain={[0, 1]}
+              tickCount={5}
+              tick={{ fontSize: 10 }}
+              label={{ value: xLabel, position: 'insideBottom', offset: -4, fontSize: 10 }}
+            />
+            <YAxis
+              type="number"
+              domain={[0, 1]}
+              tickCount={5}
+              tick={{ fontSize: 10 }}
+              label={{ value: yLabel, angle: -90, position: 'insideLeft', offset: 8, fontSize: 10 }}
+            />
+            <Tooltip
+              formatter={(v: number) => v.toFixed(3)}
+              labelFormatter={(v: number) => `${xLabel}: ${Number(v).toFixed(3)}`}
+            />
+            {isRoc && (
+              <ReferenceLine
+                stroke="#6b7280"
+                strokeDasharray="4 4"
+                segment={[{ x: 0, y: 0 }, { x: 1, y: 1 }]}
+              />
+            )}
+            <Legend wrapperStyle={{ fontSize: 10 }} />
+            {block.perClass.map((series, idx) => (
+              <Line
+                key={series.label}
+                data={series.points.map(([x, y]) => ({ x, y }))}
+                type="monotone"
+                dataKey="y"
+                stroke={OVR_PALETTE[idx % OVR_PALETTE.length]}
+                strokeWidth={2}
+                dot={false}
+                name={
+                  series.auc != null
+                    ? `${series.label} (${series.auc.toFixed(2)})`
+                    : series.label
+                }
+              />
+            ))}
+          </LineChart>
+        </ResponsiveContainer>
+      </div>
     </div>
   );
 }

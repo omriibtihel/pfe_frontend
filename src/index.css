@@ -478,6 +478,221 @@
     animation: float-slow 7s ease-in-out infinite;
   }
 
+  /* ── Animated aurora blobs (background) ───────────────── */
+  @keyframes aurora-drift {
+    0%, 100% { transform: translate3d(0, 0, 0) scale(1); }
+    33%      { transform: translate3d(40px, -30px, 0) scale(1.1); }
+    66%      { transform: translate3d(-20px, 20px, 0) scale(0.95); }
+  }
+
+  @keyframes aurora-drift-alt {
+    0%, 100% { transform: translate3d(0, 0, 0) scale(1); }
+    50%      { transform: translate3d(-40px, 30px, 0) scale(1.12); }
+  }
+
+  @keyframes aurora-pulse {
+    0%, 100% { opacity: 0.5; }
+    50%      { opacity: 0.85; }
+  }
+
+  .bg-aurora-blob {
+    will-change: transform;
+    animation: aurora-drift 22s ease-in-out infinite, aurora-pulse 9s ease-in-out infinite;
+  }
+  .bg-aurora-blob-alt {
+    will-change: transform;
+    animation: aurora-drift-alt 28s ease-in-out infinite, aurora-pulse 12s ease-in-out infinite;
+  }
+  .bg-aurora-blob-slow {
+    will-change: transform;
+    animation: aurora-drift 36s ease-in-out infinite reverse, aurora-pulse 14s ease-in-out infinite;
+  }
+
+  /* Grid that fades radially from the top — more depth than a flat grid */
+  .bg-grid-fade {
+    background-image:
+      linear-gradient(hsl(var(--foreground) / 0.045) 1px, transparent 1px),
+      linear-gradient(90deg, hsl(var(--foreground) / 0.045) 1px, transparent 1px);
+    background-size: 48px 48px;
+    -webkit-mask-image: radial-gradient(ellipse 70% 55% at 50% 0%, black 0%, transparent 75%);
+            mask-image: radial-gradient(ellipse 70% 55% at 50% 0%, black 0%, transparent 75%);
+  }
+
+  /* Aurora band — conic gradient sweep at the top of the page */
+  .bg-aurora-band {
+    background:
+      conic-gradient(
+        from 140deg at 50% -20%,
+        transparent 0deg,
+        hsl(var(--primary) / 0.18) 40deg,
+        hsl(var(--secondary) / 0.15) 90deg,
+        hsl(var(--accent) / 0.18) 140deg,
+        transparent 220deg
+      );
+    filter: blur(60px);
+    -webkit-mask-image: linear-gradient(to bottom, black 0%, transparent 70%);
+            mask-image: linear-gradient(to bottom, black 0%, transparent 70%);
+  }
+
+  /* Subtle dot pattern for additional depth (optional accent) */
+  .bg-dot-mesh {
+    background-image: radial-gradient(hsl(var(--primary) / 0.15) 1px, transparent 1px);
+    background-size: 28px 28px;
+    -webkit-mask-image: radial-gradient(ellipse 60% 50% at 50% 50%, black 0%, transparent 80%);
+            mask-image: radial-gradient(ellipse 60% 50% at 50% 50%, black 0%, transparent 80%);
+  }
+
+  /* Rich multi-radial color mesh — page-scoped background wash */
+  .bg-mesh-rich {
+    background:
+      radial-gradient(ellipse 55% 45% at 12% 8%,  hsl(var(--primary)   / 0.22) 0%, transparent 70%),
+      radial-gradient(ellipse 48% 38% at 88% 14%, hsl(var(--secondary) / 0.20) 0%, transparent 70%),
+      radial-gradient(ellipse 60% 50% at 50% 45%, hsl(var(--accent)    / 0.10) 0%, transparent 70%),
+      radial-gradient(ellipse 45% 40% at 5%  72%, hsl(var(--primary)   / 0.14) 0%, transparent 70%),
+      radial-gradient(ellipse 50% 45% at 95% 80%, hsl(var(--secondary) / 0.16) 0%, transparent 70%),
+      radial-gradient(ellipse 40% 35% at 60% 96%, hsl(var(--accent)    / 0.10) 0%, transparent 70%);
+  }
+
+  /* Vibrant variant with a violet accent — for hero / dashboard headers */
+  .bg-mesh-vibrant {
+    background:
+      radial-gradient(ellipse 55% 45% at 8% 4%,   hsl(var(--primary)   / 0.30) 0%, transparent 65%),
+      radial-gradient(ellipse 50% 40% at 92% 8%,  hsl(var(--secondary) / 0.28) 0%, transparent 65%),
+      radial-gradient(ellipse 45% 40% at 50% 0%,  hsl(265 85% 65% / 0.18)      0%, transparent 70%),
+      radial-gradient(ellipse 60% 50% at 50% 50%, hsl(var(--accent)    / 0.14) 0%, transparent 75%),
+      radial-gradient(ellipse 45% 40% at 5%  85%, hsl(265 85% 65% / 0.12)      0%, transparent 70%),
+      radial-gradient(ellipse 50% 45% at 95% 78%, hsl(var(--secondary) / 0.20) 0%, transparent 70%),
+      radial-gradient(ellipse 40% 35% at 60% 96%, hsl(var(--accent)    / 0.12) 0%, transparent 70%);
+  }
+
+  /* Floating decorative orbs — soft drift + breathing */
+  @keyframes breathing {
+    0%, 100% { transform: translate3d(0, 0, 0) scale(1);   opacity: 0.55; }
+    50%      { transform: translate3d(0, -12px, 0) scale(1.08); opacity: 0.85; }
+  }
+  @keyframes drift-orbit {
+    0%   { transform: translate3d(0, 0, 0); }
+    25%  { transform: translate3d(18px, -14px, 0); }
+    50%  { transform: translate3d(8px, 16px, 0); }
+    75%  { transform: translate3d(-14px, 6px, 0); }
+    100% { transform: translate3d(0, 0, 0); }
+  }
+  .animate-breathing { animation: breathing 8s ease-in-out infinite; will-change: transform, opacity; }
+  .animate-drift-orbit { animation: drift-orbit 18s ease-in-out infinite; will-change: transform; }
+
+  /* Animated gradient text — slow hue sweep */
+  @keyframes gradient-sweep {
+    0%, 100% { background-position: 0% 50%; }
+    50%      { background-position: 100% 50%; }
+  }
+  .text-gradient-animated {
+    background: linear-gradient(90deg,
+      hsl(var(--primary)) 0%,
+      hsl(265 85% 62%) 33%,
+      hsl(var(--secondary)) 66%,
+      hsl(var(--accent)) 100%);
+    background-size: 200% 200%;
+    -webkit-background-clip: text;
+            background-clip: text;
+    color: transparent;
+    animation: gradient-sweep 9s ease-in-out infinite;
+  }
+
+  /* Sparkline bar grow-in */
+  @keyframes spark-rise {
+    from { transform: scaleY(0); opacity: 0; }
+    to   { transform: scaleY(1); opacity: 1; }
+  }
+  .animate-spark-rise { transform-origin: bottom; animation: spark-rise 0.7s cubic-bezier(0.22, 1, 0.36, 1) both; }
+
+  /* Sweep — horizontal translate for shine overlays on progress bars / CTAs */
+  @keyframes sweep {
+    0%   { transform: translateX(-100%); }
+    60%  { transform: translateX(100%); }
+    100% { transform: translateX(100%); }
+  }
+  .animate-sweep { animation: sweep 2.6s ease-in-out infinite; }
+
+  /* Premium card shadow with primary glow */
+  .shadow-card-glow {
+    box-shadow:
+      0 1px 2px 0 hsl(var(--foreground) / 0.04),
+      0 8px 24px -8px hsl(var(--foreground) / 0.08),
+      0 30px 60px -25px hsl(var(--primary) / 0.18),
+      0 0 0 1px hsl(var(--primary) / 0.05);
+  }
+  .shadow-card-glow-hover {
+    box-shadow:
+      0 1px 2px 0 hsl(var(--foreground) / 0.05),
+      0 14px 36px -10px hsl(var(--foreground) / 0.12),
+      0 40px 80px -25px hsl(var(--primary) / 0.30),
+      0 0 0 1px hsl(var(--primary) / 0.15);
+  }
+
+  /* Gradient ring that appears on hover */
+  .ring-gradient-hover {
+    position: relative;
+  }
+  .ring-gradient-hover::before {
+    content: '';
+    position: absolute;
+    inset: -1px;
+    border-radius: inherit;
+    padding: 1px;
+    background: linear-gradient(135deg,
+      hsl(var(--primary) / 0.7),
+      hsl(265 85% 65% / 0.5),
+      hsl(var(--secondary) / 0.6),
+      hsl(var(--accent) / 0.7));
+    -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+            mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+    -webkit-mask-composite: xor;
+            mask-composite: exclude;
+    opacity: 0;
+    transition: opacity 0.35s ease;
+    pointer-events: none;
+  }
+  .group:hover .ring-gradient-hover::before,
+  .ring-gradient-hover:hover::before { opacity: 1; }
+
+  /* Twinkling decorative dots — gentle pulse */
+  @keyframes twinkle {
+    0%, 100% { opacity: 0.4; }
+    50%      { opacity: 0.85; }
+  }
+  .animate-twinkle      { animation: twinkle 6s ease-in-out infinite; }
+  .animate-twinkle-slow { animation: twinkle 9s ease-in-out infinite; }
+  .animate-twinkle-fast { animation: twinkle 5s ease-in-out infinite; }
+
+  /* SVG line decoration — subtle connecting paths */
+  .bg-connection-lines {
+    background-image: url("data:image/svg+xml;utf8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 800 600' fill='none' stroke='hsl(220 70%25 60%25)' stroke-width='0.6' stroke-opacity='0.15'%3E%3Cpath d='M50 100 Q 200 50 350 120 T 700 100' /%3E%3Cpath d='M100 500 Q 300 400 500 480 T 750 460' /%3E%3Cpath d='M0 300 Q 200 250 400 320 T 800 280' stroke-dasharray='4 6' /%3E%3C/svg%3E");
+    background-size: 100% 100%;
+    background-repeat: no-repeat;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .animate-twinkle,
+    .animate-twinkle-slow,
+    .animate-twinkle-fast {
+      animation: none !important;
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .bg-aurora-blob,
+    .bg-aurora-blob-alt,
+    .bg-aurora-blob-slow,
+    .animate-float-slow,
+    .animate-breathing,
+    .animate-drift-orbit,
+    .text-gradient-animated,
+    .animate-spark-rise,
+    .animate-sweep {
+      animation: none !important;
+    }
+  }
+
     /* ── Scrollbar global (toute la page) ── */
   * {
     scrollbar-width: thin;

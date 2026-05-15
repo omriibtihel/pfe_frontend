@@ -67,6 +67,21 @@ export interface ReportPrediction {
   score_pct: string | null;
 }
 
+export interface ReportChange {
+  factor: string;
+  current: string;
+  target: string;
+  /** "increase" | "decrease" — server-derived, not LLM-trusted. */
+  direction: string;
+  /** Pre-formatted human magnitude (e.g. "−24 mg/dL"). */
+  magnitude_text: string;
+  normal_range: string | null;
+  /** LLM prose: "lower fasting glucose by …". */
+  change_text: string;
+  /** LLM prose: 1 sentence linking the change to the result. */
+  why_it_matters: string;
+}
+
 export type ReportChunk =
   | { section: 'summary'; content: string }
   | { section: 'prediction'; content: ReportPrediction }
@@ -76,6 +91,7 @@ export type ReportChunk =
   | { section: 'context'; content: string }
   | { section: 'limitations'; content: string }
   | { section: 'next_steps'; content: string }
+  | { section: 'what_to_change'; content: ReportChange[] }
   | { section: 'disclaimer'; content: string };
 
 export interface ReportDoneMeta {

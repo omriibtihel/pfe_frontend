@@ -1,4 +1,5 @@
 import { Fragment } from "react";
+import { useTranslation } from "react-i18next";
 import { AlertTriangle, CheckCircle2, ChevronDown, ChevronUp, XCircle } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
@@ -36,7 +37,7 @@ interface ColumnRowProps {
   onConstantFillCategoricalChange: (v: string | undefined) => void;
 }
 
-function getStatusMeta(row: Step3ColumnRowData): {
+function getStatusMeta(row: Step3ColumnRowData, t: (k: string, opts?: Record<string, unknown>) => string): {
   label: string;
   icon: React.ReactNode;
   className: string;
@@ -44,7 +45,7 @@ function getStatusMeta(row: Step3ColumnRowData): {
 } {
   if (row.errorCount > 0) {
     return {
-      label: `${row.errorCount} error(s)`,
+      label: t("preparation.columns.rowError", { n: row.errorCount }),
       icon: <XCircle className="h-4 w-4 text-destructive" />,
       className: "text-destructive",
       rowClassName: "bg-destructive/5",
@@ -53,7 +54,7 @@ function getStatusMeta(row: Step3ColumnRowData): {
 
   if (row.warningCount > 0) {
     return {
-      label: `${row.warningCount} warning(s)`,
+      label: t("preparation.columns.rowWarn", { n: row.warningCount }),
       icon: <AlertTriangle className="h-4 w-4 text-amber-600" />,
       className: "text-amber-600",
       rowClassName: "bg-amber-50/40",
@@ -61,7 +62,7 @@ function getStatusMeta(row: Step3ColumnRowData): {
   }
 
   return {
-    label: "OK",
+    label: t("preparation.columns.rowOk"),
     icon: <CheckCircle2 className="h-4 w-4 text-emerald-600" />,
     className: "text-emerald-600",
   };
@@ -88,7 +89,8 @@ export function ColumnRow({
   onConstantFillNumericChange,
   onConstantFillCategoricalChange,
 }: ColumnRowProps) {
-  const statusMeta = getStatusMeta(row);
+  const { t } = useTranslation();
+  const statusMeta = getStatusMeta(row, t);
   const hasIssues = row.issues.length > 0;
   const { globalAdvancedParams } = row;
 
@@ -160,11 +162,13 @@ export function ColumnRow({
             <div className="flex flex-wrap items-center gap-2">
               <span className="font-medium">{row.columnName}</span>
               <Badge variant="outline" className="text-[10px] px-1.5 py-0">
-                {row.selectedType === "auto" ? `auto: ${row.inferredType}` : `override: ${row.selectedType}`}
+                {row.selectedType === "auto"
+                  ? t("preparation.columns.typeAutoInferred", { type: row.inferredType })
+                  : t("preparation.columns.typeOverride", { type: row.selectedType })}
               </Badge>
             </div>
             <p className="text-[11px] text-muted-foreground">
-              source: {row.column.type} | null: {row.column.nullCount} | unique: {row.column.uniqueCount}
+              {t("preparation.columns.rowSource", { type: row.column.type, nulls: row.column.nullCount, uniques: row.column.uniqueCount })}
             </p>
           </div>
         </TableCell>
@@ -176,7 +180,7 @@ export function ColumnRow({
               onCheckedChange={(checked) => onToggleUse(Boolean(checked))}
               aria-label={`use-${row.columnName}`}
             />
-            {!row.use && <p className="text-[10px] text-muted-foreground">Dropped</p>}
+            {!row.use && <p className="text-[10px] text-muted-foreground">{t("preparation.columns.dropped")}</p>}
           </div>
         </TableCell>
 
@@ -189,10 +193,10 @@ export function ColumnRow({
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value={autoTypeValue}>Auto</SelectItem>
-              <SelectItem value="numeric">Numeric</SelectItem>
-              <SelectItem value="categorical">Categorical</SelectItem>
-              <SelectItem value="ordinal">Ordinal</SelectItem>
+              <SelectItem value={autoTypeValue}>{t("preparation.columns.typeAuto")}</SelectItem>
+              <SelectItem value="numeric">{t("preparation.columns.typeNumeric")}</SelectItem>
+              <SelectItem value="categorical">{t("preparation.columns.typeCategorical")}</SelectItem>
+              <SelectItem value="ordinal">{t("preparation.columns.typeOrdinal")}</SelectItem>
             </SelectContent>
           </Select>
         </TableCell>
@@ -222,7 +226,7 @@ export function ColumnRow({
               {/* knn: show k input */}
               {row.numericImputation === "knn" && (
                 <div className="flex items-center gap-1">
-                  <span className="text-[10px] text-muted-foreground shrink-0">k =</span>
+                  <span className="text-[10px] text-muted-foreground shrink-0">{t("preparation.columns.kLabel")}</span>
                   <Input
                     type="number"
                     min={1}
@@ -241,7 +245,7 @@ export function ColumnRow({
               {/* constant: show fill_value input */}
               {row.numericImputation === "constant" && (
                 <div className="flex items-center gap-1">
-                  <span className="text-[10px] text-muted-foreground shrink-0">fill =</span>
+                  <span className="text-[10px] text-muted-foreground shrink-0">{t("preparation.columns.fillLabel")}</span>
                   <Input
                     type="number"
                     step="any"
@@ -279,7 +283,7 @@ export function ColumnRow({
               {/* constant: show fill_value input */}
               {row.categoricalImputation === "constant" && (
                 <div className="flex items-center gap-1">
-                  <span className="text-[10px] text-muted-foreground shrink-0">fill =</span>
+                  <span className="text-[10px] text-muted-foreground shrink-0">{t("preparation.columns.fillLabel")}</span>
                   <Input
                     className="h-7 text-xs"
                     placeholder={globalAdvancedParams.constantFillCategorical}
@@ -318,12 +322,12 @@ export function ColumnRow({
               </Select>
               {(row.numericPowerTransform === "yeo_johnson" || row.numericPowerTransform === "box_cox") && row.numericScaling === "none" && (
                 <p className="text-[10px] text-amber-600">
-                  z-score implicite (standardize=True)
+                  {t("preparation.columns.zscoreImplicit")}
                 </p>
               )}
             </div>
           ) : (
-            <span className="text-xs text-muted-foreground">N/A</span>
+            <span className="text-xs text-muted-foreground">{t("preparation.columns.naCell")}</span>
           )}
         </TableCell>
 
@@ -379,7 +383,7 @@ export function ColumnRow({
                   key={issue.id}
                   className={cn("text-xs", issue.severity === "error" ? "text-destructive" : "text-amber-700")}
                 >
-                  [{issue.severity === "error" ? "ERR" : "WARN"}] [{issue.source}] {issue.message}
+                  [{issue.severity === "error" ? t("preparation.columns.severityErr") : t("preparation.columns.severityWarn")}] [{issue.source}] {issue.message}
                 </p>
               ))}
             </div>

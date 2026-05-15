@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { Link, useParams } from "react-router-dom";
 import { ChevronRight, Download, RefreshCw } from "lucide-react";
 
@@ -29,7 +30,7 @@ import { NormalityTestPanel } from "@/components/ui/NormalityTestPanel";
 
 // ── Sub-modules (types, constants, UI, panels) ──────────────────────────────
 import type { UiColumn, ChartKind } from "./_charts/types";
-import { COLORS, CHART_GROUPS, CHART_HINT } from "./_charts/constants";
+import { COLORS, CHART_GROUPS, CHART_HINT_KEYS } from "./_charts/constants";
 import { shortLabel } from "./_charts/utils";
 import { ColSelect } from "./_charts/ColSelect";
 import { MultiColSelect } from "./_charts/MultiColSelect";
@@ -49,6 +50,7 @@ export function ChartsPage() {
   const { id } = useParams();
   const projectId = id!;
   const { toast } = useToast();
+  const { t } = useTranslation();
 
   // ── Loading ──────────────────────────────────────────────────────────────
   const [isLoading,    setIsLoading]    = useState(true);
@@ -533,7 +535,7 @@ export function ChartsPage() {
   // ── Early exits ───────────────────────────────────────────────────────────
   if (isLoading) return <AppLayout><PageSkeleton /></AppLayout>;
   if (!activeDatasetId && !activeVersionId) {
-    return <AppLayout><div className="p-6">Aucun dataset ou version disponible</div></AppLayout>;
+    return <AppLayout><div className="p-6">{t("charts.page.noDataset")}</div></AppLayout>;
   }
 
   // ── Render ────────────────────────────────────────────────────────────────
@@ -544,10 +546,10 @@ export function ChartsPage() {
         {/* Breadcrumb */}
         <div className="flex items-center gap-2 text-sm text-muted-foreground">
           <Link to={`/projects/${projectId}/database`} className="hover:text-foreground transition-colors">
-            Base de données
+            {t("charts.page.breadcrumbDatabase")}
           </Link>
           <ChevronRight className="h-4 w-4" />
-          <span className="text-foreground font-medium">Visualisation</span>
+          <span className="text-foreground font-medium">{t("charts.page.breadcrumbCurrent")}</span>
         </div>
 
         {/* Hero */}
@@ -556,21 +558,27 @@ export function ChartsPage() {
           <div className="relative p-5 md:p-7 flex flex-col sm:flex-row sm:items-center gap-4">
             <div className="flex-1 min-w-0">
               <h1 className="text-2xl md:text-3xl font-bold tracking-tight text-slate-900 dark:text-slate-50">
-                Visualisation des données
+                {t("charts.page.title")}
               </h1>
               <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
-                Projet&nbsp;<b>#{projectId}</b> &middot;{" "}
-                {activeSource ? `${activeSource.kind === "version" ? "Version" : "Dataset"} #${activeSource.id}` : "—"}
+                {activeSource
+                  ? t("charts.page.subtitle", {
+                      id: projectId,
+                      source: activeSource.kind === "version"
+                        ? t("charts.page.sourceVersion", { id: activeSource.id })
+                        : t("charts.page.sourceDataset", { id: activeSource.id }),
+                    })
+                  : t("charts.page.subtitle", { id: projectId, source: "—" })}
               </p>
             </div>
             <div className="flex flex-wrap gap-2 shrink-0">
               <Button variant="outline" size="sm" onClick={onRefresh} disabled={isRefreshing}>
                 <RefreshCw className={`h-4 w-4 mr-2 ${isRefreshing ? "animate-spin" : ""}`} />
-                Rafraîchir
+                {t("charts.page.refresh")}
               </Button>
               <Button variant="outline" size="sm" onClick={handleExport}>
                 <Download className="h-4 w-4 mr-2" />
-                Exporter PNG
+                {t("charts.page.exportPng")}
               </Button>
             </div>
           </div>
@@ -580,10 +588,10 @@ export function ChartsPage() {
         {overview && columns.length > 0 && (
           <div className="flex flex-wrap gap-2">
             {[
-              { label: "Lignes",        value: overview.shape.rows.toLocaleString("fr-FR"), cls: "" },
-              { label: "Colonnes",      value: String(overview.shape.cols),                 cls: "" },
-              { label: "Numériques",    value: String(numericCols.length),                  cls: "text-blue-600 dark:text-blue-400" },
-              { label: "Catégorielles", value: String(categoricalCols.length),              cls: "text-purple-600 dark:text-purple-400" },
+              { label: t("charts.page.stats.rows"),        value: overview.shape.rows.toLocaleString(), cls: "" },
+              { label: t("charts.page.stats.cols"),        value: String(overview.shape.cols),          cls: "" },
+              { label: t("charts.page.stats.numeric"),     value: String(numericCols.length),           cls: "text-blue-600 dark:text-blue-400" },
+              { label: t("charts.page.stats.categorical"), value: String(categoricalCols.length),       cls: "text-purple-600 dark:text-purple-400" },
             ].map(({ label, value, cls }) => (
               <div key={label} className="flex items-center gap-2 rounded-lg border bg-card px-3 py-1.5 text-sm">
                 <span className="text-muted-foreground text-xs">{label}</span>
@@ -597,7 +605,7 @@ export function ChartsPage() {
               const pct = (tot / cells) * 100;
               return (
                 <div className={`flex items-center gap-2 rounded-lg border bg-card px-3 py-1.5 text-sm ${pct > 10 ? "border-amber-300 dark:border-amber-700" : ""}`}>
-                  <span className="text-muted-foreground text-xs">Valeurs manquantes</span>
+                  <span className="text-muted-foreground text-xs">{t("charts.page.stats.missing")}</span>
                   <span className={`font-semibold ${pct > 10 ? "text-amber-600 dark:text-amber-400" : ""}`}>{pct.toFixed(1)}%</span>
                 </div>
               );
@@ -608,8 +616,8 @@ export function ChartsPage() {
         {/* Tabs */}
         <Tabs defaultValue="charts">
           <TabsList className="mb-4">
-            <TabsTrigger value="charts">Graphiques</TabsTrigger>
-            <TabsTrigger value="normality">Tests Statistiques</TabsTrigger>
+            <TabsTrigger value="charts">{t("charts.page.tabs.charts")}</TabsTrigger>
+            <TabsTrigger value="normality">{t("charts.page.tabs.normality")}</TabsTrigger>
           </TabsList>
 
           <TabsContent value="normality">
@@ -631,27 +639,30 @@ export function ChartsPage() {
                   {/* Chart type selector */}
                   <div className="flex flex-wrap items-end gap-4">
                     {CHART_GROUPS.map((group) => (
-                      <div key={group.label} className="flex flex-col gap-1">
+                      <div key={group.groupKey} className="flex flex-col gap-1">
                         <span className="text-[10px] font-semibold tracking-wider uppercase text-muted-foreground/60 pl-0.5">
-                          {group.label}
+                          {t(`charts.page.groups.${group.groupKey}`)}
                         </span>
                         <div className="flex items-center gap-1">
-                          {group.items.map(({ key, label, Icon }) => (
-                            <button
-                              key={key}
-                              onClick={() => setChartKind(key)}
-                              title={label}
-                              className={[
-                                "flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-xs transition",
-                                chartKind === key
-                                  ? "bg-white dark:bg-slate-900 border-primary shadow-sm text-foreground font-medium"
-                                  : "bg-transparent border-transparent hover:bg-white/60 dark:hover:bg-slate-900/60 hover:border-border text-muted-foreground",
-                              ].join(" ")}
-                            >
-                              <Icon className={`h-3.5 w-3.5 shrink-0 ${chartKind === key ? "text-primary" : ""}`} />
-                              <span className="hidden sm:inline">{label}</span>
-                            </button>
-                          ))}
+                          {group.items.map(({ key, Icon }) => {
+                            const label = t(`charts.page.kinds.${key}`);
+                            return (
+                              <button
+                                key={key}
+                                onClick={() => setChartKind(key)}
+                                title={label}
+                                className={[
+                                  "flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-xs transition",
+                                  chartKind === key
+                                    ? "bg-white dark:bg-slate-900 border-primary shadow-sm text-foreground font-medium"
+                                    : "bg-transparent border-transparent hover:bg-white/60 dark:hover:bg-slate-900/60 hover:border-border text-muted-foreground",
+                                ].join(" ")}
+                              >
+                                <Icon className={`h-3.5 w-3.5 shrink-0 ${chartKind === key ? "text-primary" : ""}`} />
+                                <span className="hidden sm:inline">{label}</span>
+                              </button>
+                            );
+                          })}
                         </div>
                       </div>
                     ))}
@@ -662,28 +673,28 @@ export function ChartsPage() {
 
                     {/* Unified source selector */}
                     <div className="space-y-1">
-                      <p className="text-xs font-medium text-muted-foreground">Source</p>
+                      <p className="text-xs font-medium text-muted-foreground">{t("charts.page.controls.source")}</p>
                       <Select
                         value={activeSource ? `${activeSource.kind}-${activeSource.id}` : ""}
                         onValueChange={handleSourceChange}
                       >
                         <SelectTrigger className="rounded-xl">
-                          <SelectValue placeholder="Choisir une source" />
+                          <SelectValue placeholder={t("charts.page.controls.sourcePlaceholder")} />
                         </SelectTrigger>
                         <SelectContent>
                           {datasets.length > 0 && (
                             <SelectGroup>
-                              <SelectLabel>Datasets</SelectLabel>
+                              <SelectLabel>{t("charts.page.controls.groupDatasets")}</SelectLabel>
                               {datasets.map((d) => (
                                 <SelectItem key={`dataset-${d.id}`} value={`dataset-${d.id}`}>
-                                  {d.original_name ?? `Dataset #${d.id}`}
+                                  {d.original_name ?? t("charts.page.controls.datasetFallback", { id: d.id })}
                                 </SelectItem>
                               ))}
                             </SelectGroup>
                           )}
                           {versions.length > 0 && (
                             <SelectGroup>
-                              <SelectLabel>Versions</SelectLabel>
+                              <SelectLabel>{t("charts.page.controls.groupVersions")}</SelectLabel>
                               {versions.map((v) => (
                                 <SelectItem key={`version-${v.id}`} value={`version-${v.id}`}>
                                   {v.name}
@@ -698,12 +709,12 @@ export function ChartsPage() {
                     {/* Top K */}
                     {needs.showTopK && (
                       <div className="space-y-1">
-                        <p className="text-xs font-medium text-muted-foreground">Top K</p>
+                        <p className="text-xs font-medium text-muted-foreground">{t("charts.page.controls.topK")}</p>
                         <Select value={String(topK)} onValueChange={(v) => setTopK(Number(v))}>
                           <SelectTrigger className="rounded-xl"><SelectValue /></SelectTrigger>
                           <SelectContent>
                             {[5, 8, 10, 15, 20, 30, 50].map((k) => (
-                              <SelectItem key={k} value={String(k)}>Top {k}</SelectItem>
+                              <SelectItem key={k} value={String(k)}>{t("charts.page.controls.topKOption", { n: k })}</SelectItem>
                             ))}
                           </SelectContent>
                         </Select>
@@ -713,23 +724,23 @@ export function ChartsPage() {
                     {/* X — any kind (groupby) */}
                     {needs.showXCat && (
                       <div className="space-y-1">
-                        <p className="text-xs font-medium text-muted-foreground">Axe X (groupé)</p>
-                        <ColSelect value={xCat} onChange={setXCat} cols={groupByCols} placeholder="Choisir X" />
+                        <p className="text-xs font-medium text-muted-foreground">{t("charts.page.controls.xCatLabel")}</p>
+                        <ColSelect value={xCat} onChange={setXCat} cols={groupByCols} placeholder={t("charts.page.controls.chooseX")} />
                       </div>
                     )}
 
                     {/* Y — numeric (only when agg ≠ count) */}
                     {needs.showYNum && (
                       <div className="space-y-1">
-                        <p className="text-xs font-medium text-muted-foreground">Axe Y (numérique)</p>
-                        <ColSelect value={yNum} onChange={setYNum} cols={numericCols} placeholder="Choisir Y" />
+                        <p className="text-xs font-medium text-muted-foreground">{t("charts.page.controls.yNumLabel")}</p>
+                        <ColSelect value={yNum} onChange={setYNum} cols={numericCols} placeholder={t("charts.page.controls.chooseY")} />
                       </div>
                     )}
 
                     {/* Aggregation function */}
                     {needs.showAgg && (
                       <div className="space-y-1">
-                        <p className="text-xs font-medium text-muted-foreground">Agrégation</p>
+                        <p className="text-xs font-medium text-muted-foreground">{t("charts.page.controls.agg")}</p>
                         <Select value={agg} onValueChange={(v) => setAgg(v as AggFn)}>
                           <SelectTrigger className="rounded-xl"><SelectValue /></SelectTrigger>
                           <SelectContent>
@@ -744,8 +755,8 @@ export function ChartsPage() {
                     {/* Pie column */}
                     {needs.showPieCol && (
                       <div className="space-y-1 lg:col-span-2">
-                        <p className="text-xs font-medium text-muted-foreground">Colonne</p>
-                        <ColSelect value={pieCol} onChange={setPieCol} cols={groupByCols} placeholder="Choisir colonne" />
+                        <p className="text-xs font-medium text-muted-foreground">{t("charts.page.controls.pieColumn")}</p>
+                        <ColSelect value={pieCol} onChange={setPieCol} cols={groupByCols} placeholder={t("charts.page.controls.chooseColumn")} />
                       </div>
                     )}
 
@@ -753,11 +764,11 @@ export function ChartsPage() {
                     {needs.showHist && (
                       <>
                         <div className="space-y-1 lg:col-span-2">
-                          <p className="text-xs font-medium text-muted-foreground">Colonne numérique</p>
-                          <ColSelect value={histCol} onChange={setHistCol} cols={numericCols} placeholder="Choisir colonne" />
+                          <p className="text-xs font-medium text-muted-foreground">{t("charts.page.controls.numericColumn")}</p>
+                          <ColSelect value={histCol} onChange={setHistCol} cols={numericCols} placeholder={t("charts.page.controls.chooseColumn")} />
                         </div>
                         <div className="space-y-1">
-                          <p className="text-xs font-medium text-muted-foreground">Bins</p>
+                          <p className="text-xs font-medium text-muted-foreground">{t("charts.page.controls.bins")}</p>
                           <Select value={String(histBins)} onValueChange={(v) => setHistBins(Number(v))}>
                             <SelectTrigger className="rounded-xl"><SelectValue /></SelectTrigger>
                             <SelectContent>
@@ -771,12 +782,12 @@ export function ChartsPage() {
                     {/* Boxplot column multi-select */}
                     {needs.showBoxplot && (
                       <div className="space-y-1 lg:col-span-3">
-                        <p className="text-xs font-medium text-muted-foreground">Colonnes à afficher</p>
+                        <p className="text-xs font-medium text-muted-foreground">{t("charts.page.controls.boxplotColumns")}</p>
                         {allBoxplotCols.length === 0 ? (
-                          <Badge variant="outline" className="text-xs text-muted-foreground">Aucune colonne numérique</Badge>
+                          <Badge variant="outline" className="text-xs text-muted-foreground">{t("charts.page.controls.noNumeric")}</Badge>
                         ) : (
                           <MultiColSelect
-                            triggerLabel="Choisir colonnes"
+                            triggerLabel={t("charts.page.controls.chooseColumns")}
                             all={allBoxplotCols}
                             selected={boxplotCols}
                             onToggle={(col) => setBoxplotCols((prev) => prev.includes(col) ? prev.filter((c) => c !== col) : [...prev, col])}
@@ -791,19 +802,19 @@ export function ChartsPage() {
                     {needs.showScatter && (
                       <>
                         <div className="space-y-1">
-                          <p className="text-xs font-medium text-muted-foreground">X (numérique)</p>
-                          <ColSelect value={sx} onChange={setSx} cols={numericCols} placeholder="Choisir X" />
+                          <p className="text-xs font-medium text-muted-foreground">{t("charts.page.controls.scatterX")}</p>
+                          <ColSelect value={sx} onChange={setSx} cols={numericCols} placeholder={t("charts.page.controls.chooseX")} />
                         </div>
                         <div className="space-y-1">
-                          <p className="text-xs font-medium text-muted-foreground">Y (numérique)</p>
-                          <ColSelect value={sy} onChange={setSy} cols={numericCols} placeholder="Choisir Y" />
+                          <p className="text-xs font-medium text-muted-foreground">{t("charts.page.controls.scatterY")}</p>
+                          <ColSelect value={sy} onChange={setSy} cols={numericCols} placeholder={t("charts.page.controls.chooseY")} />
                         </div>
                         <div className="space-y-1">
-                          <p className="text-xs font-medium text-muted-foreground">Échantillon</p>
+                          <p className="text-xs font-medium text-muted-foreground">{t("charts.page.controls.sample")}</p>
                           <Select value={String(sampleN)} onValueChange={(v) => setSampleN(Number(v))}>
                             <SelectTrigger className="rounded-xl"><SelectValue /></SelectTrigger>
                             <SelectContent>
-                              {[100, 200, 400, 800, 1500].map((n) => <SelectItem key={n} value={String(n)}>{n} points</SelectItem>)}
+                              {[100, 200, 400, 800, 1500].map((n) => <SelectItem key={n} value={String(n)}>{t("charts.page.controls.pointsOption", { n })}</SelectItem>)}
                             </SelectContent>
                           </Select>
                         </div>
@@ -814,23 +825,23 @@ export function ChartsPage() {
                     {needs.showBubble && (
                       <>
                         <div className="space-y-1">
-                          <p className="text-xs font-medium text-muted-foreground">X (num)</p>
-                          <ColSelect value={bx} onChange={setBx} cols={numericCols} placeholder="Choisir X" />
+                          <p className="text-xs font-medium text-muted-foreground">{t("charts.page.controls.bubbleX")}</p>
+                          <ColSelect value={bx} onChange={setBx} cols={numericCols} placeholder={t("charts.page.controls.chooseX")} />
                         </div>
                         <div className="space-y-1">
-                          <p className="text-xs font-medium text-muted-foreground">Y (num)</p>
-                          <ColSelect value={by} onChange={setBy} cols={numericCols} placeholder="Choisir Y" />
+                          <p className="text-xs font-medium text-muted-foreground">{t("charts.page.controls.bubbleY")}</p>
+                          <ColSelect value={by} onChange={setBy} cols={numericCols} placeholder={t("charts.page.controls.chooseY")} />
                         </div>
                         <div className="space-y-1">
-                          <p className="text-xs font-medium text-muted-foreground">Z (taille)</p>
-                          <ColSelect value={bz} onChange={setBz} cols={numericCols} placeholder="Choisir Z" />
+                          <p className="text-xs font-medium text-muted-foreground">{t("charts.page.controls.bubbleZ")}</p>
+                          <ColSelect value={bz} onChange={setBz} cols={numericCols} placeholder={t("charts.page.controls.chooseColumn")} />
                         </div>
                         <div className="space-y-1">
-                          <p className="text-xs font-medium text-muted-foreground">Échantillon</p>
+                          <p className="text-xs font-medium text-muted-foreground">{t("charts.page.controls.sample")}</p>
                           <Select value={String(sampleN)} onValueChange={(v) => setSampleN(Number(v))}>
                             <SelectTrigger className="rounded-xl"><SelectValue /></SelectTrigger>
                             <SelectContent>
-                              {[100, 200, 400, 800, 1500].map((n) => <SelectItem key={n} value={String(n)}>{n} points</SelectItem>)}
+                              {[100, 200, 400, 800, 1500].map((n) => <SelectItem key={n} value={String(n)}>{t("charts.page.controls.pointsOption", { n })}</SelectItem>)}
                             </SelectContent>
                           </Select>
                         </div>
@@ -840,13 +851,13 @@ export function ChartsPage() {
                     {/* Radar column multi-select */}
                     {needs.showRadar && (
                       <div className="space-y-1 lg:col-span-3">
-                        <p className="text-xs font-medium text-muted-foreground">Colonnes radar</p>
+                        <p className="text-xs font-medium text-muted-foreground">{t("charts.page.controls.radarColumns")}</p>
                         {allRadarCols.length === 0 ? (
-                          <Badge variant="outline" className="text-xs text-muted-foreground">Aucune colonne numérique</Badge>
+                          <Badge variant="outline" className="text-xs text-muted-foreground">{t("charts.page.controls.noNumeric")}</Badge>
                         ) : (
                           <>
                             <MultiColSelect
-                              triggerLabel="Choisir colonnes"
+                              triggerLabel={t("charts.page.controls.chooseColumns")}
                               all={allRadarCols}
                               selected={radarCols}
                               onToggle={(col) => setRadarCols((prev) => prev.includes(col) ? prev.filter((c) => c !== col) : prev.length < 8 ? [...prev, col] : prev)}
@@ -855,7 +866,7 @@ export function ChartsPage() {
                               maxItems={8}
                             />
                             {radarCols.length > 0 && radarCols.length < 3 && (
-                              <p className="text-xs text-amber-500">&#9888; min. 3 colonnes requises</p>
+                              <p className="text-xs text-amber-500">{t("charts.page.controls.radarMinHint")}</p>
                             )}
                           </>
                         )}
@@ -874,19 +885,19 @@ export function ChartsPage() {
                   <Badge variant="outline" className="rounded-full">{chartKind.toUpperCase()}</Badge>
                   {isAggChart && xCat && (
                     <span className="text-sm text-muted-foreground">
-                      {shortLabel(xCat)} → <b className="text-foreground">{seriesLabel}</b> (Top {topK})
+                      {t("charts.page.summary.aggSummary", { x: shortLabel(xCat), label: seriesLabel, k: topK })}
                     </span>
                   )}
                   {isPieChart && pieCol && (
                     <span className="text-sm text-muted-foreground">
-                      Comptage : <b className="text-foreground">{shortLabel(pieCol)}</b> (Top {topK} + Autres)
+                      {t("charts.page.summary.pieSummary", { col: shortLabel(pieCol), k: topK })}
                     </span>
                   )}
-                  {chartKind === "hist"    && histCol && <span className="text-sm text-muted-foreground">Distribution complète : <b className="text-foreground">{shortLabel(histCol)}</b> ({histBins} bins)</span>}
-                  {chartKind === "scatter" && sx && sy  && <span className="text-sm text-muted-foreground">{shortLabel(sx)} vs {shortLabel(sy)} ({sampleN})</span>}
-                  {chartKind === "bubble"  && bx && by && bz && <span className="text-sm text-muted-foreground">{shortLabel(bx)} vs {shortLabel(by)} | taille={shortLabel(bz)} ({sampleN} pts)</span>}
-                  {chartKind === "boxplot" && boxplotInfo.data.length > 0 && <span className="text-sm text-muted-foreground">{boxplotInfo.data.length} colonne{boxplotInfo.data.length > 1 ? "s" : ""} · IQR [P25–P75]</span>}
-                  {chartKind === "radar"   && radarData.length >= 3          && <span className="text-sm text-muted-foreground">{radarData.length} colonnes · moyennes normalisées</span>}
+                  {chartKind === "hist"    && histCol && <span className="text-sm text-muted-foreground">{t("charts.page.summary.histSummary", { col: shortLabel(histCol), bins: histBins })}</span>}
+                  {chartKind === "scatter" && sx && sy  && <span className="text-sm text-muted-foreground">{t("charts.page.summary.scatterSummary", { x: shortLabel(sx), y: shortLabel(sy), n: sampleN })}</span>}
+                  {chartKind === "bubble"  && bx && by && bz && <span className="text-sm text-muted-foreground">{t("charts.page.summary.bubbleSummary", { x: shortLabel(bx), y: shortLabel(by), z: shortLabel(bz), n: sampleN })}</span>}
+                  {chartKind === "boxplot" && boxplotInfo.data.length > 0 && <span className="text-sm text-muted-foreground">{t(boxplotInfo.data.length > 1 ? "charts.page.summary.boxplotSummaryOther" : "charts.page.summary.boxplotSummaryOne", { n: boxplotInfo.data.length })}</span>}
+                  {chartKind === "radar"   && radarData.length >= 3          && <span className="text-sm text-muted-foreground">{t("charts.page.summary.radarSummary", { n: radarData.length })}</span>}
                 </div>
 
                 {/* Chart panels */}
@@ -938,9 +949,9 @@ export function ChartsPage() {
                 </div>
 
                 {/* Hint text */}
-                {CHART_HINT[isAggChart ? "agg" : isPieChart ? "pie" : chartKind] && (
+                {CHART_HINT_KEYS[isAggChart ? "agg" : isPieChart ? "pie" : chartKind] && (
                   <p className="mt-3 text-xs text-muted-foreground">
-                    {CHART_HINT[isAggChart ? "agg" : isPieChart ? "pie" : chartKind]}
+                    {t(CHART_HINT_KEYS[isAggChart ? "agg" : isPieChart ? "pie" : chartKind])}
                   </p>
                 )}
 

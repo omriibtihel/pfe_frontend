@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { BarChart2, Loader2 } from 'lucide-react';
+import { BarChart2, Info, Loader2 } from 'lucide-react';
 
 import { Badge } from '@/components/ui/badge';
 import { Modal } from '@/components/ui/modal';
@@ -115,6 +115,8 @@ export function ModelDetailModal({
     (curves.roc != null ||
       curves.pr != null ||
       curves.calibration != null ||
+      curves.multiclassRoc != null ||
+      curves.multiclassPr != null ||
       curves.learningCurves != null ||
       (curves.artifactWarnings?.length ?? 0) > 0);
 
@@ -216,7 +218,17 @@ export function ModelDetailModal({
                 {!loadingCurves && curves && hasCourbes ? (
                   <ModelCardCourbesTab curves={curves} />
                 ) : (
-                  !loadingCurves && <EmptyTabState label="Aucune courbe disponible." />
+                  !loadingCurves && (
+                    <EmptyTabState
+                      label={
+                        result.evaluationSource?.type === 'loo'
+                          ? "Pas de courbes : la stratégie Leave-One-Out ne génère pas de jeu de test indépendant."
+                          : result.isCV && !result.hasHoldoutTest
+                            ? "Pas de courbes : aucun jeu de test mis de côté (testRatio = 0). Augmente le testRatio pour les générer."
+                            : "Aucune courbe disponible."
+                      }
+                    />
+                  )
                 )}
               </>
             )}
@@ -272,6 +284,8 @@ function ModelCardDetailsSection({ detail }: { detail: ModelResultDetail }) {
         </section>
       )}
 
+      {detail.automl && <AutoMLPreprocessingSection preprocessing={detail.preprocessing} />}
+
       {detail.splitInfo && (
         <section>
           <p className="mb-1 text-xs font-semibold text-foreground">Split</p>
@@ -317,5 +331,112 @@ function ModelCardDetailsSection({ detail }: { detail: ModelResultDetail }) {
         </section>
       )}
     </div>
+  );
+}
+
+type AutoMLPreprocessingStep = {
+  step?: string;
+  method?: string;
+  columns?: string[];
+};
+
+type AutoMLPreprocessingBlock = {
+  mode?: string;
+  note?: string;
+  steps?: AutoMLPreprocessingStep[];
+  imbalanceHandling?: {
+    applied?: boolean;
+    method?: string;
+    imbalanceRatio?: number | null;
+  };
+  smote?: { applied?: boolean; trigger?: string };
+  crossValidation?: { evalMethod?: string; nSplits?: number };
+};
+
+function formatImbalanceHandling(
+  imb: AutoMLPreprocessingBlock['imbalanceHandling'],
+  smote: AutoMLPreprocessingBlock['smote'],
+): string {
+  const ir = imb?.imbalanceRatio;
+  const irLabel = ir != null ? `IR ${Number(ir).toFixed(2)}` : null;
+
+  const actions: string[] = [];
+  if (smote?.applied) actions.push('SMOTE');
+  if (imb?.applied) actions.push('sample_weight=balanced');
+
+  if (actions.length > 0) {
+    return [actions.join(' + '), irLabel].filter(Boolean).join(' · ');
+  }
+  if (ir != null && ir > 1.2) {
+    return `Aucune action appliquée · ${irLabel}`;
+  }
+  return irLabel
+    ? `Aucun déséquilibre significatif (${irLabel})`
+    : 'Aucun déséquilibre significatif';
+}
+
+function AutoMLPreprocessingSection({
+  preprocessing,
+}: {
+  preprocessing: ModelResultDetail['preprocessing'];
+}) {
+  const block = preprocessing as AutoMLPreprocessingBlock | null | undefined;
+  if (!block || block.mode !== 'automl') return null;
+
+  const {
+    steps = [],
+    imbalanceHandling: imb,
+    smote,
+    crossValidation: cv,
+    note,
+  } = block;
+
+  return (
+    <section>
+      <p className="mb-2 text-xs font-semibold text-foreground">
+        Préparation automatique
+      </p>
+
+      {note && (
+        <div className="mb-3 flex items-start gap-2 rounded-lg border border-yellow-400/40 bg-yellow-50 p-2 text-xs text-yellow-900 dark:border-yellow-500/30 dark:bg-yellow-900/20 dark:text-yellow-100">
+          <Info className="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+          <p>{note}</p>
+        </div>
+      )}
+
+      {steps.length > 0 && (
+        <ul className="mb-2 space-y-1 rounded-lg border border-border/60 bg-muted/30 p-3 text-xs text-muted-foreground">
+          {steps.map((s, idx) => (
+            <li key={idx} className="flex flex-wrap items-baseline gap-x-2">
+              <span className="font-medium text-foreground">{s.step}</span>
+              <span>—</span>
+              <span>{s.method}</span>
+              {s.columns && s.columns.length > 0 && (
+                <span className="opacity-70">({s.columns.length} colonne{s.columns.length > 1 ? 's' : ''})</span>
+              )}
+            </li>
+          ))}
+        </ul>
+      )}
+
+      <div className="grid grid-cols-2 gap-x-4 gap-y-1 rounded-lg border border-border/60 bg-muted/30 p-3 text-xs text-muted-foreground">
+        {(imb || smote) && (
+          <>
+            <span>Gestion du déséquilibre</span>
+            <span className="font-medium text-foreground">
+              {formatImbalanceHandling(imb, smote)}
+            </span>
+          </>
+        )}
+        {cv && (
+          <>
+            <span>Validation croisée interne</span>
+            <span className="font-medium text-foreground">
+              {cv.evalMethod ?? '—'} · {cv.nSplits ?? '—'} folds
+            </span>
+          </>
+        )}
+      </div>
+    </section>
   );
 }

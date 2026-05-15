@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { Trans, useTranslation } from "react-i18next";
 import {
   AlertCircle,
   CheckCircle2,
@@ -8,6 +9,7 @@ import {
   Loader2,
   Plus,
   RefreshCw,
+  Search,
   Trash2,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -17,15 +19,26 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
+import {
+  Select,
+  SelectContent,
+  SelectGroup,
+  SelectItem,
+  SelectLabel,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useToast } from "@/hooks/use-toast";
 import apiClient from "@/services/apiClient";
-import type { FeatureDef, FeatureEngineeringConfig } from "@/types";
+import type { FeatureDef, FeatureDefMode, FeatureEngineeringConfig } from "@/types";
 import {
   OPERATIONS,
   OPERATIONS_BY_CATEGORY,
-  getSnippet,
+  getOperation,
   isDefaultName,
+  type Operation,
 } from "@/utils/featureOperations";
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -49,26 +62,84 @@ interface PreviewResponse {
 
 const CATEGORY_ORDER = ["Deux colonnes", "Transformation", "Avec constante"] as const;
 
+/** Feature flag — flip to true once the free-form Python editor is properly
+ *  redesigned for non-technical users. */
+const EXPRESSION_MODE_ENABLED = false;
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Helpers
 // ─────────────────────────────────────────────────────────────────────────────
 
 function makeBlankFeature(idx: number): FeatureDef {
-  return { name: `feature_${idx + 1}`, enabled: true, expression: "" };
+  return {
+    name: `feature_${idx + 1}`,
+    enabled: true,
+    expression: "",
+    mode: "builder",
+    opId: "",
+    colSelections: {},
+    constants: {},
+  };
 }
 
 /** Normalize features from any previous localStorage format. */
 function normalizeFeature(f: Partial<FeatureDef> | null | undefined): FeatureDef {
+  const expression = f?.expression ?? "";
+  const storedMode = f?.mode ?? (expression ? "advanced" : "builder");
+  // When the Expression mode is disabled, force every feature into builder mode
+  // (the advanced text input is unreachable until re-enabled).
+  const mode: FeatureDefMode = EXPRESSION_MODE_ENABLED ? storedMode : "builder";
   return {
-    name: f?.name ?? `feature`,
+    name: f?.name ?? "feature",
     enabled: f?.enabled ?? true,
-    expression: f?.expression ?? "",
+    expression,
+    mode,
+    opId: f?.opId ?? "",
+    colSelections: f?.colSelections ?? {},
+    constants: f?.constants ?? {},
   };
 }
 
 /** Wrap a column name in col('…') if it's not a plain identifier. */
 function colRef(name: string): string {
   return /^[A-Za-z_][A-Za-z0-9_]*$/.test(name) ? name : `col('${name}')`;
+}
+
+/** Build the Python expression from an operation + filled selections. Returns "" when incomplete. */
+function buildExprFromOp(
+  op: Operation,
+  colSelections: Record<string, string>,
+  constants: Record<string, number>
+): string {
+  const colInputs = op.inputs.filter((i) => i.kind === "column");
+  const constInputs = op.inputs.filter((i) => i.kind === "constant");
+  const cols = colInputs.map((i) => colSelections[i.key] ?? "");
+  if (cols.some((c) => !c)) return "";
+  const consts: Record<string, number> = {};
+  for (const ci of constInputs) {
+    consts[ci.key] =
+      constants[ci.key] !== undefined ? constants[ci.key] : ci.defaultValue ?? 0;
+  }
+  return op.buildExpr(cols, consts);
+}
+
+/** Suggest a name from an operation + filled selections. Returns "" when incomplete. */
+function suggestNameFromOp(
+  op: Operation,
+  colSelections: Record<string, string>,
+  constants: Record<string, number>
+): string {
+  if (!op.autoName) return "";
+  const colInputs = op.inputs.filter((i) => i.kind === "column");
+  const constInputs = op.inputs.filter((i) => i.kind === "constant");
+  const cols = colInputs.map((i) => colSelections[i.key] ?? "");
+  if (cols.some((c) => !c)) return "";
+  const consts: Record<string, number> = {};
+  for (const ci of constInputs) {
+    consts[ci.key] =
+      constants[ci.key] !== undefined ? constants[ci.key] : ci.defaultValue ?? 0;
+  }
+  return op.autoName(cols, consts);
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -90,49 +161,95 @@ function FeatureCard({
   onUpdate,
   onRemove,
 }: FeatureCardProps) {
-  const inputRef = useRef<HTMLInputElement>(null);
-  const [activeCat, setActiveCat] = useState<string>(CATEGORY_ORDER[0]);
-  const [showPreview, setShowPreview] = useState(false);
+  const { t } = useTranslation();
+  const mode: FeatureDefMode = feat.mode ?? "builder";
+  const opId = feat.opId ?? "";
+  const op = opId ? getOperation(opId) : undefined;
+  const colSelections = feat.colSelections ?? {};
+  const constants = feat.constants ?? {};
 
-  // ── Insert text at the current cursor position in the expression input ──
+  // ── Builder helpers ─────────────────────────────────────────────────────
+  const rebuildFromSelections = (
+    nextCols: Record<string, string>,
+    nextConsts: Record<string, number>,
+    nextOp: Operation | undefined = op
+  ) => {
+    if (!nextOp) {
+      onUpdate({ colSelections: nextCols, constants: nextConsts, expression: "" });
+      return;
+    }
+    const expression = buildExprFromOp(nextOp, nextCols, nextConsts);
+    const suggested = suggestNameFromOp(nextOp, nextCols, nextConsts);
+    const name = isDefaultName(feat.name) && suggested ? suggested : feat.name;
+    onUpdate({
+      opId: nextOp.id,
+      colSelections: nextCols,
+      constants: nextConsts,
+      expression,
+      name,
+    });
+  };
+
+  const handleOpChange = (newOpId: string) => {
+    const newOp = getOperation(newOpId);
+    if (!newOp) return;
+    const newConsts: Record<string, number> = {};
+    for (const inp of newOp.inputs) {
+      if (inp.kind === "constant") {
+        newConsts[inp.key] = inp.defaultValue ?? 0;
+      }
+    }
+    rebuildFromSelections({}, newConsts, newOp);
+  };
+
+  const handleColSelect = (key: string, colName: string) => {
+    rebuildFromSelections({ ...colSelections, [key]: colName }, constants);
+  };
+
+  const handleConstChange = (key: string, raw: string) => {
+    const parsed = parseFloat(raw);
+    if (Number.isNaN(parsed)) return;
+    rebuildFromSelections(colSelections, { ...constants, [key]: parsed });
+  };
+
+  const handleModeChange = (newMode: FeatureDefMode) => {
+    onUpdate({ mode: newMode });
+  };
+
+  // ── Advanced-mode helpers ───────────────────────────────────────────────
+  const advancedInputRef = useRef<HTMLInputElement>(null);
+  const [showPreview, setShowPreview] = useState(false);
+  const [colPickerOpen, setColPickerOpen] = useState(false);
+  const [colSearch, setColSearch] = useState("");
+
+  const filteredColumns = colSearch.trim()
+    ? availableColumns.filter((c) =>
+        c.toLowerCase().includes(colSearch.toLowerCase())
+      )
+    : availableColumns;
+
   const insertAtCursor = (text: string) => {
-    const el = inputRef.current;
+    const el = advancedInputRef.current;
     if (!el) {
-      onUpdate({ expression: feat.expression + text });
+      onUpdate({ expression: (feat.expression ?? "") + text });
       return;
     }
     const start = el.selectionStart ?? feat.expression.length;
     const end = el.selectionEnd ?? feat.expression.length;
-    const newExpr =
-      feat.expression.slice(0, start) + text + feat.expression.slice(end);
+    const newExpr = feat.expression.slice(0, start) + text + feat.expression.slice(end);
     onUpdate({ expression: newExpr });
-    // Restore cursor after React re-renders
     requestAnimationFrame(() => {
       el.setSelectionRange(start + text.length, start + text.length);
       el.focus();
     });
   };
 
-  const handleColClick = (col: string) => insertAtCursor(colRef(col));
-
-  const handleOperationClick = (opId: string) => {
-    const op = OPERATIONS.find((o) => o.id === opId);
-    if (!op) return;
-    const snippet = getSnippet(op);
-    if (!feat.expression.trim()) {
-      onUpdate({ expression: snippet });
-      requestAnimationFrame(() => inputRef.current?.focus());
-    } else {
-      insertAtCursor(snippet);
-    }
-  };
-
   return (
     <Card className={feat.enabled ? "" : "opacity-55"}>
       <CardContent className="py-4 px-5 space-y-3">
 
-        {/* ── Row 1: toggle · name · delete ── */}
-        <div className="flex items-center gap-3">
+        {/* ── Row 1: toggle · name · mode · delete ── */}
+        <div className="flex items-center gap-3 flex-wrap">
           <Switch
             checked={feat.enabled}
             onCheckedChange={(v) => onUpdate({ enabled: v })}
@@ -141,114 +258,274 @@ function FeatureCard({
           <Input
             value={feat.name}
             onChange={(e) => onUpdate({ name: e.target.value })}
-            placeholder="nom_feature"
+            placeholder={t("preparation.fe.namePlaceholder")}
             className="h-8 w-44 text-xs font-mono"
           />
           {feat.expression && isDefaultName(feat.name) && (
             <span className="text-[10px] text-amber-500 hidden sm:block">
-              Pensez à renommer cette feature
+              {t("preparation.fe.renameHint")}
             </span>
           )}
+
+          {/* Mode picker (only shown when Expression mode is enabled) */}
+          {EXPRESSION_MODE_ENABLED && (
+            <div className="ml-auto flex items-center gap-1 rounded-md border border-border/60 bg-muted/30 p-0.5">
+              <button
+                type="button"
+                onClick={() => handleModeChange("builder")}
+                className={cn(
+                  "px-2 py-0.5 rounded text-[10px] font-medium transition-colors",
+                  mode === "builder"
+                    ? "bg-background shadow-sm text-foreground"
+                    : "text-muted-foreground hover:text-foreground"
+                )}
+              >
+                {t("preparation.fe.modeBuilder")}
+              </button>
+              <button
+                type="button"
+                onClick={() => handleModeChange("advanced")}
+                className={cn(
+                  "px-2 py-0.5 rounded text-[10px] font-medium transition-colors",
+                  mode === "advanced"
+                    ? "bg-background shadow-sm text-foreground"
+                    : "text-muted-foreground hover:text-foreground"
+                )}
+              >
+                {t("preparation.fe.modeAdvanced")}
+              </button>
+            </div>
+          )}
+
           <Tooltip>
             <TooltipTrigger asChild>
               <Button
                 variant="ghost"
                 size="icon"
-                className="h-8 w-8 ml-auto shrink-0 text-muted-foreground hover:text-destructive"
+                className={cn(
+                  "h-8 w-8 shrink-0 text-muted-foreground hover:text-destructive",
+                  !EXPRESSION_MODE_ENABLED && "ml-auto"
+                )}
                 onClick={onRemove}
               >
                 <Trash2 className="h-3.5 w-3.5" />
               </Button>
             </TooltipTrigger>
-            <TooltipContent>Supprimer</TooltipContent>
+            <TooltipContent>{t("preparation.fe.remove")}</TooltipContent>
           </Tooltip>
         </div>
 
-        {/* ── Row 2: expression input ── */}
-        <div className="space-y-1">
-          <label className="text-[11px] text-muted-foreground">
-            Expression Python :
-          </label>
-          <Input
-            ref={inputRef}
-            value={feat.expression}
-            onChange={(e) => onUpdate({ expression: e.target.value })}
-            placeholder="ex : log1p(a / b)  ·  (x - y) * z  ·  sqrt(a ** 2 + b ** 2)"
-            className="h-8 text-xs font-mono"
-            spellCheck={false}
-          />
-        </div>
-
-        {/* ── Row 3: column chips ── */}
-        {availableColumns.length > 0 && (
-          <div className="space-y-1">
-            <p className="text-[11px] text-muted-foreground">
-              Colonnes disponibles{" "}
-              <span className="text-[10px] opacity-70">(cliquer pour insérer)</span> :
-            </p>
-            <div className="flex flex-wrap gap-1">
-              {availableColumns.map((col) => (
-                <button
-                  type="button"
-                  key={col}
-                  onClick={() => handleColClick(col)}
-                  className="text-[10px] font-mono px-1.5 py-0.5 rounded border border-border/60 bg-muted/40 hover:bg-primary/10 hover:border-primary/50 transition-colors"
-                >
-                  {col}
-                </button>
-              ))}
+        {/* ── Builder mode ────────────────────────────────────────────── */}
+        {mode === "builder" && (
+          <div className="space-y-3">
+            {/* Operation Select */}
+            <div className="space-y-1">
+              <label className="text-[11px] text-muted-foreground">
+                {t("preparation.fe.operation")}
+              </label>
+              <Select value={opId || undefined} onValueChange={handleOpChange}>
+                <SelectTrigger className="h-9 text-xs">
+                  <SelectValue placeholder={t("preparation.fe.operationPlaceholder")} />
+                </SelectTrigger>
+                <SelectContent className="max-h-80">
+                  {CATEGORY_ORDER.map((cat) => (
+                    <SelectGroup key={cat}>
+                      <SelectLabel className="text-[10px] uppercase tracking-wider">
+                        {cat === "Deux colonnes" ? t("preparation.fe.catTwoCols")
+                          : cat === "Transformation" ? t("preparation.fe.catTransform")
+                          : t("preparation.fe.catConstant")}
+                      </SelectLabel>
+                      {(OPERATIONS_BY_CATEGORY[cat] ?? []).map((o) => (
+                        <SelectItem key={o.id} value={o.id} className="text-xs">
+                          {o.label}
+                        </SelectItem>
+                      ))}
+                    </SelectGroup>
+                  ))}
+                </SelectContent>
+              </Select>
+              {op && (
+                <p className="text-[10px] text-muted-foreground italic">
+                  {op.description}
+                </p>
+              )}
             </div>
+
+            {/* Inputs */}
+            {op && availableColumns.length > 0 && (
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                {op.inputs.map((inp) =>
+                  inp.kind === "column" ? (
+                    <div key={inp.key} className="space-y-1">
+                      <label className="text-[11px] text-muted-foreground">
+                        {inp.label}
+                      </label>
+                      <Select
+                        value={colSelections[inp.key] || undefined}
+                        onValueChange={(v) => handleColSelect(inp.key, v)}
+                      >
+                        <SelectTrigger className="h-8 text-xs">
+                          <SelectValue placeholder={t("preparation.fe.colSelectPlaceholder")} />
+                        </SelectTrigger>
+                        <SelectContent className="max-h-72">
+                          {availableColumns.map((col) => (
+                            <SelectItem
+                              key={col}
+                              value={col}
+                              className="text-xs font-mono"
+                            >
+                              {col}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  ) : (
+                    <div key={inp.key} className="space-y-1">
+                      <label className="text-[11px] text-muted-foreground">
+                        {inp.label}
+                      </label>
+                      <Input
+                        type="number"
+                        value={
+                          constants[inp.key] !== undefined
+                            ? String(constants[inp.key])
+                            : ""
+                        }
+                        placeholder={inp.placeholder ?? String(inp.defaultValue ?? 0)}
+                        onChange={(e) => handleConstChange(inp.key, e.target.value)}
+                        className="h-8 text-xs font-mono"
+                      />
+                    </div>
+                  )
+                )}
+              </div>
+            )}
+
+            {op && availableColumns.length === 0 && (
+              <p className="text-[11px] text-muted-foreground italic">
+                {t("preparation.fe.colPickerNumericNone")}
+              </p>
+            )}
+
+            {/* Generated expression (read-only) */}
+            {op && (
+              <div className="space-y-1">
+                <label className="text-[11px] text-muted-foreground">
+                  {t("preparation.fe.generatedExpression")}
+                </label>
+                <div
+                  className={cn(
+                    "rounded-md border px-3 py-1.5 text-xs font-mono",
+                    feat.expression
+                      ? "bg-muted/40 border-border/60"
+                      : "bg-muted/20 border-dashed border-border/40 text-muted-foreground italic"
+                  )}
+                >
+                  {feat.expression || t("preparation.fe.generatedExpressionPlaceholder")}
+                </div>
+              </div>
+            )}
           </div>
         )}
 
-        {/* ── Row 4: operation snippets ── */}
-        <div className="space-y-1.5">
-          <p className="text-[11px] text-muted-foreground">
-            Opérations rapides{" "}
-            <span className="text-[10px] opacity-70">(insère un modèle dans l'expression)</span> :
-          </p>
-          {/* Category tabs */}
-          <div className="flex gap-1 flex-wrap">
-            {CATEGORY_ORDER.map((cat) => (
-              <button
-                type="button"
-                key={cat}
-                onClick={() => setActiveCat(cat)}
-                className={cn(
-                  "px-2.5 py-1 rounded-md text-[11px] font-medium transition-colors",
-                  activeCat === cat
-                    ? "bg-primary text-primary-foreground"
-                    : "bg-muted/50 text-muted-foreground hover:bg-muted"
-                )}
-              >
-                {cat}
-              </button>
-            ))}
-          </div>
-          {/* Operation buttons */}
-          <div className="flex flex-wrap gap-1.5">
-            {(OPERATIONS_BY_CATEGORY[activeCat] ?? []).map((op) => (
-              <Tooltip key={op.id}>
-                <TooltipTrigger asChild>
-                  <button
-                    type="button"
-                    onClick={() => handleOperationClick(op.id)}
-                    className="px-2.5 py-1 rounded-md text-[11px] border border-border/60 bg-background hover:border-primary/50 hover:bg-muted transition-colors font-mono"
-                  >
-                    {getSnippet(op)}
-                  </button>
-                </TooltipTrigger>
-                <TooltipContent side="bottom" className="text-xs max-w-52">
-                  <span className="font-semibold">{op.label}</span>
-                  <br />
-                  {op.description}
-                </TooltipContent>
-              </Tooltip>
-            ))}
-          </div>
-        </div>
+        {/* ── Advanced mode ───────────────────────────────────────────── */}
+        {mode === "advanced" && (
+          <div className="space-y-2">
+            <div className="space-y-1">
+              <label className="text-[11px] text-muted-foreground">
+                {t("preparation.fe.pythonExpression")}
+              </label>
+              <Input
+                ref={advancedInputRef}
+                value={feat.expression}
+                onChange={(e) => onUpdate({ expression: e.target.value })}
+                placeholder={t("preparation.fe.expressionPlaceholder")}
+                className="h-8 text-xs font-mono"
+                spellCheck={false}
+              />
+              <p className="text-[10px] text-muted-foreground italic">
+                {t("preparation.fe.pythonHelp")}
+              </p>
+            </div>
 
-        {/* ── Row 5: preview result ── */}
+            {availableColumns.length > 0 && (
+              <div className="space-y-1">
+                <p className="text-[11px] text-muted-foreground">
+                  {t("preparation.fe.columnsLabel")}
+                </p>
+                <Popover
+                  open={colPickerOpen}
+                  onOpenChange={(o) => {
+                    setColPickerOpen(o);
+                    if (!o) setColSearch("");
+                  }}
+                >
+                  <PopoverTrigger asChild>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="h-8 gap-2 text-xs justify-between w-full sm:w-72"
+                    >
+                      <span className="inline-flex items-center gap-1.5 text-muted-foreground">
+                        <Plus className="h-3.5 w-3.5" />
+                        {t("preparation.fe.insertColumn")}
+                      </span>
+                      <ChevronDown className="h-3.5 w-3.5 opacity-60" />
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent
+                    align="start"
+                    className="w-72 p-0 overflow-hidden"
+                  >
+                    <div className="flex items-center gap-2 border-b border-border/60 px-2.5 py-1.5">
+                      <Search className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                      <input
+                        autoFocus
+                        type="text"
+                        value={colSearch}
+                        onChange={(e) => setColSearch(e.target.value)}
+                        placeholder={t("preparation.fe.searchColumnPlaceholder")}
+                        className="flex-1 h-7 bg-transparent outline-none text-xs placeholder:text-muted-foreground"
+                      />
+                    </div>
+                    <div className="max-h-64 overflow-y-auto py-1">
+                      {filteredColumns.length === 0 ? (
+                        <div className="px-3 py-2 text-[11px] text-muted-foreground italic">
+                          {t("preparation.fe.noColumnMatch")}
+                        </div>
+                      ) : (
+                        filteredColumns.map((col) => (
+                          <button
+                            type="button"
+                            key={col}
+                            onClick={() => {
+                              insertAtCursor(colRef(col));
+                              setColPickerOpen(false);
+                              setColSearch("");
+                            }}
+                            className="w-full text-left px-3 py-1.5 text-xs font-mono hover:bg-muted/60 transition-colors"
+                          >
+                            {col}
+                          </button>
+                        ))
+                      )}
+                    </div>
+                    <div className="border-t border-border/60 px-2.5 py-1 text-[10px] text-muted-foreground bg-muted/30">
+                      {t(availableColumns.length > 1
+                        ? "preparation.fe.columnsCounterOther"
+                        : "preparation.fe.columnsCounterOne",
+                        { filtered: filteredColumns.length, total: availableColumns.length })}
+                    </div>
+                  </PopoverContent>
+                </Popover>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* ── Preview result ─────────────────────────────────────────── */}
         {previewResult && (
           <div>
             {previewResult.error ? (
@@ -264,7 +541,7 @@ function FeatureCard({
                   className="flex items-center gap-1 text-xs text-emerald-600 dark:text-emerald-400 hover:underline"
                 >
                   <CheckCircle2 className="h-3.5 w-3.5" />
-                  Preview OK
+                  {t("preparation.fe.previewOk")}
                   {showPreview ? (
                     <ChevronDown className="h-3 w-3" />
                   ) : (
@@ -308,6 +585,7 @@ export function FeatureEngineeringPanel({
   value,
   onChange,
 }: FeatureEngineeringPanelProps) {
+  const { t } = useTranslation();
   const { toast } = useToast();
   const features = value.features.map(normalizeFeature);
 
@@ -333,7 +611,7 @@ export function FeatureEngineeringPanel({
       )
       .then((data) => { setColumns(data.columns); setNRows(data.n_rows); })
       .catch((err: Error) => {
-        setColsError(err.message ?? "Impossible de charger les colonnes.");
+        setColsError(err.message ?? t("preparation.fe.colsErrorFallback"));
         setColumns([]);
       })
       .finally(() => setIsLoadingCols(false));
@@ -366,8 +644,8 @@ export function FeatureEngineeringPanel({
     );
     if (active.length === 0) {
       toast({
-        title: "Aucune feature prête",
-        description: "Saisissez une expression dans au moins une feature active.",
+        title: t("preparation.fe.noFeatureReadyTitle"),
+        description: t("preparation.fe.noFeatureReadyDescBuilder"),
         variant: "destructive",
       });
       return;
@@ -379,7 +657,11 @@ export function FeatureEngineeringPanel({
         {
           version_id: Number(versionId),
           target_column: targetColumn,
-          features: active,
+          features: active.map((f) => ({
+            name: f.name,
+            expression: f.expression,
+            enabled: f.enabled,
+          })),
           n_rows: 8,
         }
       );
@@ -387,8 +669,8 @@ export function FeatureEngineeringPanel({
       for (const r of data.results) map[r.name] = r;
       setPreviewMap(map);
     } catch (err: unknown) {
-      const msg = (err as Error)?.message ?? "Erreur lors du calcul du preview.";
-      toast({ title: "Erreur", description: String(msg), variant: "destructive" });
+      const msg = (err as Error)?.message ?? t("preparation.fe.previewErrorDesc");
+      toast({ title: t("preparation.fe.previewErrorTitle"), description: String(msg), variant: "destructive" });
     } finally {
       setIsPreviewing(false);
     }
@@ -411,10 +693,10 @@ export function FeatureEngineeringPanel({
           </div>
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2 flex-wrap">
-              <h3 className="font-semibold text-sm">Feature Engineering</h3>
+              <h3 className="font-semibold text-sm">{t("preparation.fe.title")}</h3>
               {activeCount > 0 && (
                 <Badge variant="secondary" className="text-[10px]">
-                  {activeCount} feature{activeCount > 1 ? "s" : ""} actives
+                  {t(activeCount > 1 ? "preparation.fe.activeCountOther" : "preparation.fe.activeCountOne", { n: activeCount })}
                 </Badge>
               )}
               {isLoadingCols && (
@@ -422,14 +704,15 @@ export function FeatureEngineeringPanel({
               )}
               {nRows > 0 && !isLoadingCols && (
                 <span className="text-[10px] text-muted-foreground">
-                  · {nRows.toLocaleString()} lignes · {columns.length} colonnes
+                  {t("preparation.fe.datasetInfo", { rows: nRows.toLocaleString(), cols: columns.length })}
                 </span>
               )}
             </div>
             <p className="mt-0.5 text-xs text-muted-foreground">
-              Créez de nouvelles colonnes via des expressions Python composées. Les opérations
-              peuvent être combinées librement : <code className="text-[10px] bg-muted px-1 rounded">log1p(a / b)</code>,{" "}
-              <code className="text-[10px] bg-muted px-1 rounded">(x - y) * z</code>, etc.
+              <Trans i18nKey="preparation.fe.headerDescBuilder" components={{ strong: <strong /> }} />
+              {EXPRESSION_MODE_ENABLED && (
+                <Trans i18nKey="preparation.fe.headerDescAdvanced" components={{ strong: <strong /> }} />
+              )}
             </p>
           </div>
         </CardContent>
@@ -441,7 +724,7 @@ export function FeatureEngineeringPanel({
           <AlertCircle className="h-4 w-4 text-destructive mt-0.5 shrink-0" />
           <div className="flex-1 min-w-0">
             <p className="text-xs font-medium text-destructive">
-              Impossible de charger les colonnes du dataset
+              {t("preparation.fe.loadError")}
             </p>
             <p className="text-[11px] text-muted-foreground mt-0.5 break-all">
               {colsError}
@@ -454,7 +737,7 @@ export function FeatureEngineeringPanel({
             onClick={loadColumns}
           >
             <RefreshCw className="h-3.5 w-3.5" />
-            Réessayer
+            {t("preparation.fe.retry")}
           </Button>
         </div>
       )}
@@ -462,13 +745,13 @@ export function FeatureEngineeringPanel({
       {/* ── Feature cards ── */}
       {features.length === 0 ? (
         <div className="rounded-xl border border-dashed border-border/60 py-10 text-center text-sm text-muted-foreground">
-          Aucune feature.{" "}
+          {t("preparation.fe.empty")}{" "}
           <button
             type="button"
             onClick={addFeature}
             className="underline hover:text-primary"
           >
-            Ajouter une feature
+            {t("preparation.fe.emptyLink")}
           </button>
           .
         </div>
@@ -496,7 +779,7 @@ export function FeatureEngineeringPanel({
           className="gap-2"
         >
           <Plus className="h-4 w-4" />
-          Ajouter une feature
+          {t("preparation.fe.addFeature")}
         </Button>
 
         {features.length > 0 && (
@@ -512,18 +795,18 @@ export function FeatureEngineeringPanel({
             ) : (
               <FlaskConical className="h-4 w-4" />
             )}
-            Tester les expressions
+            {t("preparation.fe.testExpressions")}
           </Button>
         )}
 
         {(previewOk > 0 || previewErr > 0) && (
           <span className="ml-auto text-xs text-muted-foreground">
             {previewOk > 0 && (
-              <span className="text-emerald-600">{previewOk} OK</span>
+              <span className="text-emerald-600">{t("preparation.fe.okCount", { n: previewOk })}</span>
             )}
             {previewErr > 0 && (
               <span className="text-destructive">
-                {" "}· {previewErr} erreur{previewErr > 1 ? "s" : ""}
+                {t(previewErr > 1 ? "preparation.fe.errorCountOther" : "preparation.fe.errorCountOne", { n: previewErr })}
               </span>
             )}
           </span>

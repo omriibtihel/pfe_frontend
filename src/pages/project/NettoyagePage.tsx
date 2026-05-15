@@ -1,14 +1,16 @@
 // src/pages/project/NettoyagePage.tsx
 import React, { useEffect, useMemo, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { motion } from "framer-motion";
 import { useParams } from "react-router-dom";
-import { AlertTriangle, Info, GitBranch, X, RefreshCw, Download } from "lucide-react";
+import { AlertTriangle, Info, GitBranch, X, RefreshCw, Download, Search } from "lucide-react";
 
 import { AppLayout } from "@/layouts/AppLayout";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Input } from "@/components/ui/input";
 import { DataTable } from "@/components/ui/data-table";
 
 import { useNettoyageState, PAGE_SIZE_OPTIONS } from "./nettoyage/useNettoyageState";
@@ -22,6 +24,7 @@ import { OperationsTimeline } from "./nettoyage/OperationsTimeline";
 export function NettoyagePage() {
   const { id } = useParams();
   const projectId = id!;
+  const { t } = useTranslation();
 
   const state = useNettoyageState();
   const data = useNettoyageData(state, projectId);
@@ -79,9 +82,17 @@ export function NettoyagePage() {
 
   const disabled = state.isLoading || state.isSwitchingDataset || !data.effectiveDatasetId;
 
+  // ── Preview column search ───────────────────────────────────────────────────
+  const [columnSearch, setColumnSearch] = useState("");
+  const visibleColumns = useMemo(() => {
+    const q = columnSearch.trim().toLowerCase();
+    if (!q) return state.columns;
+    return state.columns.filter((c) => c.toLowerCase().includes(q));
+  }, [state.columns, columnSearch]);
+
   const tableColumns = useMemo(
     () =>
-      state.columns.map((c) => {
+      visibleColumns.map((c) => {
         const kind = normalizeKind(state.columnMetaMap?.[c]?.kind ?? inferKindFallback(c, state.dtypes?.[c]));
         const dtype = state.dtypes?.[c] ?? "unknown";
         return {
@@ -97,7 +108,7 @@ export function NettoyagePage() {
           headerClassName: "whitespace-nowrap",
         };
       }),
-    [state.columns, state.columnMetaMap, state.dtypes],
+    [visibleColumns, state.columnMetaMap, state.dtypes],
   );
 
   return (
@@ -121,7 +132,7 @@ export function NettoyagePage() {
               data-testid="columns-error-retry"
             >
               <RefreshCw className="h-3 w-3" />
-              Réessayer
+              {t("nettoyage.page.retry")}
             </Button>
           </div>
         )}
@@ -141,13 +152,13 @@ export function NettoyagePage() {
           <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 p-6 rounded-2xl glass-premium">
             <div>
               <h1 className="text-3xl font-bold tracking-tight">
-                <span className="text-gradient">Préparer</span>
-                <span className="text-foreground"> — Nettoyage</span>
+                <span className="text-gradient">{t("nettoyage.page.titlePrefix")}</span>
+                <span className="text-foreground">{t("nettoyage.page.titleSuffix")}</span>
               </h1>
               <p className="text-muted-foreground mt-2 text-sm max-w-lg">
                 {data.isEditingVersion
-                  ? "Nettoyage d'une version (workspace isolé)"
-                  : "Nettoyez vos données sans leakage. Le preprocessing ML se fait au training, après split."}
+                  ? t("nettoyage.page.subtitleVersion")
+                  : t("nettoyage.page.subtitleDataset")}
               </p>
             </div>
 
@@ -161,7 +172,7 @@ export function NettoyagePage() {
                     disabled={state.isLoading || state.datasets.length === 0}
                   >
                     <SelectTrigger className="w-[240px] bg-background/60 backdrop-blur-sm">
-                      <SelectValue placeholder="Choisir un dataset..." />
+                      <SelectValue placeholder={t("nettoyage.page.pickDataset")} />
                     </SelectTrigger>
                     <SelectContent>
                       {state.datasets.map((ds) => (
@@ -179,7 +190,7 @@ export function NettoyagePage() {
                     >
                       <SelectTrigger className="w-[240px] bg-background/60 backdrop-blur-sm">
                         <GitBranch className="h-3.5 w-3.5 mr-2 text-muted-foreground" />
-                        <SelectValue placeholder="Modifier une version..." />
+                        <SelectValue placeholder={t("nettoyage.page.editVersion")} />
                       </SelectTrigger>
                       <SelectContent>
                         {state.versions.map((v) => (
@@ -203,7 +214,7 @@ export function NettoyagePage() {
                   >
                     <SelectTrigger className="w-[260px] bg-background/60 backdrop-blur-sm">
                       <GitBranch className="h-3.5 w-3.5 mr-2 text-muted-foreground" />
-                      <SelectValue placeholder="Sélectionner une version..." />
+                      <SelectValue placeholder={t("nettoyage.page.selectVersion")} />
                     </SelectTrigger>
                     <SelectContent>
                       {state.versions.map((v) => (
@@ -219,14 +230,14 @@ export function NettoyagePage() {
                     size="sm"
                     onClick={actions.exitVersionMode}
                     className="gap-1.5"
-                    title="Revenir au mode dataset"
+                    title={t("nettoyage.page.exitVersionTooltip")}
                   >
                     <X className="h-3.5 w-3.5" />
-                    Quitter
+                    {t("nettoyage.page.exit")}
                   </Button>
 
                   <Badge className="bg-gradient-to-r from-secondary to-accent text-secondary-foreground border-0 text-[11px]">
-                    Workspace #{state.workspaceDatasetId ?? "…"}
+                    {t("nettoyage.page.workspaceBadge", { id: state.workspaceDatasetId ?? "…" })}
                   </Badge>
                 </>
               )}
@@ -239,7 +250,7 @@ export function NettoyagePage() {
                 className="relative"
               >
                 <AlertTriangle className="h-4 w-4 mr-2" />
-                Alertes
+                {t("nettoyage.page.alerts")}
                 {actions.alertCount > 0 && (
                   <span className="absolute -top-2 -right-2 h-5 min-w-5 px-1 rounded-full bg-destructive text-destructive-foreground text-[11px] flex items-center justify-center">
                     {actions.alertCount}
@@ -248,12 +259,12 @@ export function NettoyagePage() {
               </Button>
 
               <Badge variant="outline" className="bg-primary/5 border-primary/20 text-primary font-medium">
-                {state.columns.length} colonnes
+                {t("nettoyage.page.colsBadge", { n: state.columns.length })}
               </Badge>
 
               <Button variant="outline" size="sm" onClick={actions.handleDownload} disabled={state.isLoading || state.isDownloading} className="gap-2">
                 <Download className="h-4 w-4" />
-                {state.isDownloading ? "Téléchargement..." : "Exporter"}
+                {state.isDownloading ? t("nettoyage.page.downloading") : t("nettoyage.page.export")}
               </Button>
             </div>
           </div>
@@ -273,17 +284,62 @@ export function NettoyagePage() {
           <div className="lg:col-span-2">
             <Card className="border-0 shadow-card overflow-hidden">
               <CardHeader className="bg-gradient-to-r from-muted/30 to-transparent">
-                <div className="flex items-start justify-between gap-4">
-                  <div>
-                    <CardTitle className="text-lg">Aperçu des données</CardTitle>
-                    <CardDescription className="mt-1">
-                      {state.totalRows ? `${state.totalRows.toLocaleString("fr-FR")} lignes` : "—"} • Page {state.page}/{data.totalPages} •{" "}
-                      <span className="inline-flex items-center gap-1">
-                        <Info className="h-3.5 w-3.5" /> Clique sur une entête pour voir le profil
-                      </span>
+                <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+                  {/* Title + meta */}
+                  <div className="min-w-0">
+                    <CardTitle className="text-lg">{t("nettoyage.page.previewTitle")}</CardTitle>
+                    <CardDescription className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1">
+                      <span>{state.totalRows ? t("nettoyage.page.rowsLabel", { n: state.totalRows.toLocaleString() }) : "—"}</span>
+                      <span className="text-muted-foreground/50">•</span>
+                      <span>{t("nettoyage.page.pageOf", { page: state.page, total: data.totalPages })}</span>
+                      {columnSearch ? (
+                        <>
+                          <span className="text-muted-foreground/50">•</span>
+                          <span className="inline-flex items-center gap-1 rounded-full bg-primary/10 text-primary px-2 py-0.5 text-[10px] font-medium">
+                            {t("nettoyage.page.colsFilter", { filtered: visibleColumns.length, total: state.columns.length })}
+                            <button
+                              type="button"
+                              onClick={() => setColumnSearch("")}
+                              className="hover:text-primary/70 transition-colors"
+                              aria-label={t("nettoyage.page.clearFilterAria")}
+                            >
+                              <X className="h-2.5 w-2.5" />
+                            </button>
+                          </span>
+                        </>
+                      ) : (
+                        <>
+                          <span className="text-muted-foreground/50">•</span>
+                          <span className="inline-flex items-center gap-1 text-muted-foreground/80">
+                            <Info className="h-3 w-3" /> {t("nettoyage.page.headerHint")}
+                          </span>
+                        </>
+                      )}
                     </CardDescription>
                   </div>
-                  <div className="flex items-center gap-2">
+
+                  {/* Toolbar */}
+                  <div className="flex flex-wrap items-center gap-2">
+                    <div className="relative w-full sm:w-60 group">
+                      <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground/70 transition-colors group-focus-within:text-primary pointer-events-none" />
+                      <Input
+                        value={columnSearch}
+                        onChange={(e) => setColumnSearch(e.target.value)}
+                        placeholder={t("nettoyage.page.searchColPlaceholder")}
+                        className="h-8 pl-8 pr-7 text-sm bg-background/60 transition-all focus-visible:bg-background"
+                        disabled={disabled || state.columns.length === 0}
+                      />
+                      {columnSearch && (
+                        <button
+                          type="button"
+                          onClick={() => setColumnSearch("")}
+                          className="absolute right-1.5 top-1/2 -translate-y-1/2 rounded p-0.5 text-muted-foreground/70 hover:text-foreground hover:bg-muted transition-colors"
+                          aria-label={t("nettoyage.page.clearSearchAria")}
+                        >
+                          <X className="h-3 w-3" />
+                        </button>
+                      )}
+                    </div>
                     <Select
                       value={String(state.pageSize)}
                       onValueChange={(v) => {
@@ -301,7 +357,7 @@ export function NettoyagePage() {
                       <SelectContent>
                         {PAGE_SIZE_OPTIONS.map((n) => (
                           <SelectItem key={n} value={String(n)} className="text-xs">
-                            {n} lignes
+                            {t("nettoyage.page.pageSizeOption", { n })}
                           </SelectItem>
                         ))}
                       </SelectContent>
@@ -311,26 +367,31 @@ export function NettoyagePage() {
                       disabled={disabled || state.page <= 1}
                       onClick={() => { const next = Math.max(1, state.page - 1); if (!data.effectiveDatasetId) return; void data.refreshProcessing(data.effectiveDatasetId, next); }}
                     >
-                      Précédent
+                      {t("nettoyage.page.previous")}
                     </Button>
                     <Button
                       variant="outline" size="sm"
                       disabled={disabled || state.page >= data.totalPages}
                       onClick={() => { const next = Math.min(data.totalPages, state.page + 1); if (!data.effectiveDatasetId) return; void data.refreshProcessing(data.effectiveDatasetId, next); }}
                     >
-                      Suivant
+                      {t("nettoyage.page.next")}
                     </Button>
                   </div>
                 </div>
               </CardHeader>
+
               <CardContent className="pt-4">
-                <div className="w-full overflow-x-auto rounded-xl border border-border/50">
-                  <div className="min-w-[900px]">
-                    <DataTable data={state.previewRows} columns={tableColumns} pageSize={state.pageSize} />
+                {visibleColumns.length === 0 ? (
+                  <div className="flex items-center gap-2 rounded-xl border border-border/50 bg-muted/20 p-4 text-sm text-muted-foreground">
+                    <Info className="h-4 w-4" />
+                    {t("nettoyage.page.noMatchingColumn", { q: columnSearch })}
                   </div>
-                </div>
-                {state.columns.length > 10 && (
-                  <p className="text-[11px] text-muted-foreground/70 mt-3">Astuce : scrolle horizontalement pour voir toutes les colonnes.</p>
+                ) : (
+                  <div className="w-full overflow-x-auto rounded-xl border border-border/50">
+                    <div className="min-w-[900px]">
+                      <DataTable data={state.previewRows} columns={tableColumns} pageSize={state.pageSize} />
+                    </div>
+                  </div>
                 )}
               </CardContent>
             </Card>
@@ -357,10 +418,10 @@ export function NettoyagePage() {
         open={versionBlocker.isBlocked}
         onStay={versionBlocker.cancel}
         onLeave={() => { void data.cleanupWorkspace(); versionBlocker.proceed(); }}
-        title="Opérations non enregistrées sur cette version"
-        description="Vous avez des opérations non sauvegardées sur cette version. Quitter sans enregistrer ?"
-        stayLabel="Rester"
-        leaveLabel="Quitter sans sauvegarder"
+        title={t("nettoyage.page.versionUnsavedTitle")}
+        description={t("nettoyage.page.versionUnsavedDesc")}
+        stayLabel={t("nettoyage.page.stay")}
+        leaveLabel={t("nettoyage.page.leaveWithoutSaving")}
       />
     </AppLayout>
   );

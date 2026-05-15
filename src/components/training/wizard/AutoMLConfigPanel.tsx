@@ -6,7 +6,8 @@
  *   - Test set ratio (slider)
  */
 import { useState } from "react";
-import { Loader2, Rocket, Info } from "lucide-react";
+import { Trans, useTranslation } from "react-i18next";
+import { Loader2, Rocket, Info, Construction } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -63,6 +64,7 @@ export function AutoMLConfigPanel({
   positiveLabel,
   onSessionStarted,
 }: AutoMLConfigPanelProps) {
+  const { t } = useTranslation();
   // Load prepConfig to pre-fill testRatio and detect potential confusion
   const prepConfig = datasetVersionId
     ? loadPrepConfig(projectId, String(datasetVersionId))
@@ -104,7 +106,7 @@ export function AutoMLConfigPanel({
       const session = await trainingService.startAutoMLTraining(projectId, cfg);
       onSessionStarted(session);
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : "Erreur lors du lancement.");
+      setError(err instanceof Error ? err.message : t("training.automl.errLaunch"));
     } finally {
       setLoading(false);
     }
@@ -113,40 +115,56 @@ export function AutoMLConfigPanel({
   return (
     <div className="space-y-6">
       <div className="text-center space-y-1">
-        <h2 className="text-2xl font-bold tracking-tight">Mode AutoML</h2>
+        <h2 className="text-2xl font-bold tracking-tight">{t("training.automl.title")}</h2>
         <p className="text-muted-foreground text-sm">
-          FLAML explore automatiquement les modèles, le preprocessing et les hyperparamètres
-          dans le budget temps imparti.
+          {t("training.automl.subtitle")}
         </p>
       </div>
 
-      <Alert variant="default">
-        <Info className="h-4 w-4" />
-        <AlertDescription>
-          AutoML gère le pipeline complet (imputation, encodage, sélection de modèle, HPO).
-          Aucune configuration manuelle requise.
+      <Alert variant="default" className="border-red-500 bg-red-100 dark:bg-red-950/40">
+        <Construction className="h-4 w-4 text-red-600" />
+        <AlertDescription className="text-red-700 dark:text-red-300 text-sm font-medium">
+          {t("training.automl.wipNotice")}
         </AlertDescription>
       </Alert>
 
-      {prepHasCustomSettings && (
-        <Alert variant="default" className="border-amber-300/60 bg-amber-50/60 dark:bg-amber-950/20">
-          <Info className="h-4 w-4 text-amber-600" />
-          <AlertDescription className="text-amber-800 dark:text-amber-300 text-xs">
-            Votre configuration <strong>Préparation ML</strong> (balancing, preprocessing par colonne)
-            ne s'applique <strong>pas</strong> en mode AutoML — AutoML gère son propre pipeline automatiquement.
-            {prepConfig && (
-              <span> Le ratio de test ({Math.round(prepConfig.testRatio ?? 20)}%) a été pré-rempli depuis votre configuration.</span>
-            )}
-          </AlertDescription>
-        </Alert>
-      )}
+      <Alert
+        variant="default"
+        className={
+          prepHasCustomSettings
+            ? "border-amber-300/60 bg-amber-50/60 dark:bg-amber-950/20"
+            : undefined
+        }
+      >
+        <Info
+          className={`h-4 w-4 ${prepHasCustomSettings ? "text-amber-600" : ""}`}
+        />
+        <AlertDescription
+          className={
+            prepHasCustomSettings
+              ? "text-amber-800 dark:text-amber-300 text-xs"
+              : undefined
+          }
+        >
+          {t("training.automl.alertInfo")}
+          {prepHasCustomSettings && (
+            <>
+              {" "}
+              <Trans i18nKey="training.automl.warnPrep" components={{ strong: <strong /> }} />
+              {prepConfig && (
+                <span>{t("training.automl.warnTestPrefilled", { ratio: Math.round(prepConfig.testRatio ?? 20) })}</span>
+              )}
+            </>
+          )}
+        </AlertDescription>
+      </Alert>
 
       <Card>
         <CardContent className="space-y-6 pt-5">
           {/* Time budget */}
           <div className="space-y-3">
             <div className="flex items-center justify-between">
-              <Label>Budget temps</Label>
+              <Label>{t("training.automl.timeBudget")}</Label>
               <span className="text-sm font-semibold text-primary">
                 {formatSeconds(timeBudget)}
               </span>
@@ -167,17 +185,17 @@ export function AutoMLConfigPanel({
 
           {/* Metric */}
           <div className="space-y-2">
-            <Label>Métrique à optimiser</Label>
+            <Label>{t("training.automl.metric")}</Label>
             <Select
               value={metric}
               onValueChange={(v) => setMetric(v as MetricType | "auto")}
             >
               <SelectTrigger>
-                <SelectValue placeholder="Auto (recommandé)" />
+                <SelectValue placeholder={t("training.automl.metricAutoPlaceholder")} />
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="auto">
-                  Auto — {taskType === "regression" ? "RMSE" : "ROC AUC"}
+                  {t("training.automl.metricAutoOption", { label: taskType === "regression" ? "RMSE" : "ROC AUC" })}
                 </SelectItem>
                 {metricOptions.map((opt) => (
                   <SelectItem key={opt.value} value={opt.value}>
@@ -191,7 +209,7 @@ export function AutoMLConfigPanel({
           {/* Test ratio */}
           <div className="space-y-3">
             <div className="flex items-center justify-between">
-              <Label>Ratio du test set final</Label>
+              <Label>{t("training.automl.testRatio")}</Label>
               <span className="text-sm font-semibold text-primary">{testRatio}%</span>
             </div>
             <Slider
@@ -203,8 +221,8 @@ export function AutoMLConfigPanel({
             />
             <p className="text-xs text-muted-foreground">
               {testRatio === 0
-                ? "Pas de test set — AutoML utilise 100% des données."
-                : `${testRatio}% des données réservées pour l'évaluation finale (non vues pendant la recherche).`}
+                ? t("training.automl.testRatioHint0")
+                : t("training.automl.testRatioHint", { ratio: testRatio })}
             </p>
           </div>
         </CardContent>
@@ -225,12 +243,12 @@ export function AutoMLConfigPanel({
         {loading ? (
           <>
             <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-            Lancement…
+            {t("training.automl.launching")}
           </>
         ) : (
           <>
             <Rocket className="mr-2 h-4 w-4" />
-            Lancer AutoML ({formatSeconds(timeBudget)})
+            {t("training.automl.launchBtn", { time: formatSeconds(timeBudget) })}
           </>
         )}
       </Button>

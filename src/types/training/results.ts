@@ -300,10 +300,23 @@ export interface ExplainabilityData {
 
 // ── Curves — returned by /curves endpoint ────────────────────────────────────
 
+export interface MulticlassCurveSeries {
+  label: string;
+  points: [number, number][];
+  auc?: number | null;
+}
+
+export interface MulticlassCurveBlock {
+  perClass: MulticlassCurveSeries[];
+  macroAuc?: number | null;
+}
+
 export interface CurvesData {
   roc?: [number, number][] | null;
   pr?: [number, number][] | null;
   calibration?: CalibrationCurveData | null;
+  multiclassRoc?: MulticlassCurveBlock | null;
+  multiclassPr?: MulticlassCurveBlock | null;
   learningCurves?: LearningCurveData | null;
   artifactWarnings?: ArtifactWarning[];
 }

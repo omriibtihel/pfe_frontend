@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { motion } from 'framer-motion';
 import { AlertTriangle, Loader2 } from 'lucide-react';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
@@ -23,11 +24,15 @@ import type { ModelResult, TrainingSession } from '@/types';
 import { generateTrainingReportPdf } from '@/utils/trainingReportPdf';
 import { selectBestModel } from '@/utils/metricUtils';
 
-function getDownloadErrorMessage(format: ReportDownloadFormat, error: unknown): string {
+function getDownloadErrorMessage(
+  format: ReportDownloadFormat,
+  error: unknown,
+  t: (key: string) => string,
+): string {
   const fallback =
     format === 'pdf'
-      ? 'Impossible de générer le rapport PDF.'
-      : 'Impossible de télécharger le rapport JSON.';
+      ? t('trainingResults.page.pdfErrDefault')
+      : t('trainingResults.page.jsonErrDefault');
   const message = error instanceof Error ? error.message : String(error ?? '');
   return message.trim() || fallback;
 }
@@ -44,6 +49,7 @@ export function TrainingResultsPage() {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const { toast } = useToast();
+  const { t } = useTranslation();
 
   const [session, setSession] = useState<TrainingSession | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -62,7 +68,7 @@ export function TrainingResultsPage() {
     async (silent = false) => {
       if (!projectId || !sessionId) {
         setSession(null);
-        setError('Paramètres invalides : projectId ou session manquant.');
+        setError(t('trainingResults.page.errInvalidParams'));
         setIsLoading(false);
         return;
       }

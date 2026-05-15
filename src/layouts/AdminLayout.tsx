@@ -1,4 +1,5 @@
 import { ReactNode } from "react";
+import { useTranslation } from "react-i18next";
 import { Activity, LogOut, ShieldCheck } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -6,6 +7,7 @@ import { useAuth } from "@/contexts/AuthContext";
 
 export default function AdminLayout({ children }: { children: ReactNode }) {
   const { logout, user } = useAuth();
+  const { t } = useTranslation();
 
   return (
     <div className="relative min-h-screen overflow-x-hidden bg-background">
@@ -23,26 +25,26 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
             </div>
             <div>
               <div className="text-base font-semibold leading-none tracking-tight">MedIQ</div>
-              <div className="mt-1 text-xs text-muted-foreground">Admin Console</div>
+              <div className="mt-1 text-xs text-muted-foreground">{t("adminLayout.subtitle")}</div>
             </div>
             <Badge
               variant="secondary"
               className="hidden rounded-full border border-primary/20 bg-primary/10 px-3 py-1 text-xs text-primary sm:inline-flex"
             >
               <ShieldCheck className="mr-1.5 h-3.5 w-3.5" />
-              Secure Session
+              {t("adminLayout.secureSession")}
             </Badge>
           </div>
 
           <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-3">
             <div className="rounded-xl border border-border/60 bg-card/65 px-3 py-2 text-xs text-muted-foreground backdrop-blur-xl sm:text-sm">
-              <p className="font-medium text-foreground">{user?.fullName ?? "Admin"}</p>
+              <p className="font-medium text-foreground">{user?.fullName ?? t("adminLayout.adminFallback")}</p>
               <p className="truncate">{user?.email ?? "-"}</p>
             </div>
 
             <Button variant="outline" className="rounded-xl" onClick={logout}>
               <LogOut className="mr-2 h-4 w-4" />
-              Deconnexion
+              {t("adminLayout.logout")}
             </Button>
           </div>
         </div>
