@@ -8,7 +8,6 @@ import {
   Database,
   RotateCcw,
   Info,
-  Trash2,
   Eye,
 } from "lucide-react";
 
@@ -22,7 +21,6 @@ import {
   CardDescription,
 } from "@/components/ui/card";
 import { FileUpload } from "@/components/ui/file-upload";
-import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
 import { staggerContainer, staggerItem } from "@/components/ui/page-transition";
 import { ConfirmModal } from "@/components/ui/modal";
@@ -46,6 +44,7 @@ export function ImportPage() {
   const [selectedDatasetId, setSelectedDatasetId] = useState<number | null>(
     null
   );
+  const [uploadedDatasetId, setUploadedDatasetId] = useState<number | null>(null);
 
   const [isUploading, setIsUploading] = useState(false);
   const [isLoadingList, setIsLoadingList] = useState(true);
@@ -57,7 +56,7 @@ export function ImportPage() {
 
   const [deleteTarget, setDeleteTarget] = useState<DatasetOut | null>(null);
 
-  const [rowsToPreview, setRowsToPreview] = useState<number>(2);
+  const [rowsToPreview, setRowsToPreview] = useState<number>(5);
 
   const previewRows = useMemo(() => preview?.rows ?? [], [preview]);
   const previewColumns = useMemo(
@@ -74,12 +73,12 @@ export function ImportPage() {
       const list = await datasetService.list(projectId);
       setDatasets(list);
 
-      if (list.length > 0 && !selectedDatasetId) {
-        setSelectedDatasetId(list[0].id);
-      }
-
-      if (list.length === 0) {
+      if (list.length > 0) {
+        if (!selectedDatasetId) setSelectedDatasetId(list[0].id);
+        setUploadedDatasetId((prev) => prev ?? list[0].id);
+      } else {
         setSelectedDatasetId(null);
+        setUploadedDatasetId(null);
         setPreview(null);
       }
     } catch (e) {
@@ -135,6 +134,7 @@ export function ImportPage() {
 
       await loadDatasets();
       setSelectedDatasetId(created.id);
+      setUploadedDatasetId(created.id);
 
       await loadPreview(created.id, rowsToPreview);
 
@@ -155,6 +155,21 @@ export function ImportPage() {
     setUploadComplete(false);
     setPreview(null);
     setRowsToPreview(5);
+  };
+
+  const uploadedDataset = useMemo(
+    () => datasets.find((d) => d.id === uploadedDatasetId) ?? null,
+    [datasets, uploadedDatasetId]
+  );
+
+  useEffect(() => {
+    if (uploadedDatasetId !== null && !uploadedDataset) {
+      setUploadedDatasetId(null);
+    }
+  }, [uploadedDatasetId, uploadedDataset]);
+
+  const handleRemoveUploaded = () => {
+    if (uploadedDataset) setDeleteTarget(uploadedDataset);
   };
 
   const confirmDelete = async () => {
@@ -201,14 +216,6 @@ export function ImportPage() {
     await loadPreview(selectedDatasetId, rows);
   };
 
-  const getDatasetLabel = (name?: string) => {
-    const ext = (name || "").toLowerCase().split(".").pop();
-    if (ext === "xlsx" || ext === "xls") return "XLSX";
-    if (ext === "csv") return "CSV";
-    return "FILE";
-  };
-
-
   return (
     <AppLayout>
       <motion.div
@@ -237,76 +244,19 @@ export function ImportPage() {
               <CardDescription>{t("import.uploadDesc")}</CardDescription>
             </CardHeader>
             <CardContent>
-              <FileUpload onUpload={handleUpload} />
+              <FileUpload
+                onUpload={handleUpload}
+                currentFile={
+                  uploadedDataset
+                    ? { name: uploadedDataset.original_name, size: uploadedDataset.size_bytes }
+                    : null
+                }
+                onRemove={handleRemoveUploaded}
+              />
               {isUploading && (
                 <p className="text-sm text-muted-foreground mt-3">
                   {t("import.uploading")}
                 </p>
-              )}
-            </CardContent>
-          </Card>
-        </motion.div>
-
-        {/* List datasets */}
-        <motion.div variants={staggerItem}>
-          <Card>
-            <CardHeader className="flex-row items-center justify-between">
-              <CardTitle>{t("import.listTitle")}</CardTitle>
-              <Button
-                variant="outline"
-                onClick={loadDatasets}
-                disabled={isLoadingList}
-              >
-                {t("import.refresh")}
-              </Button>
-            </CardHeader>
-            <CardContent>
-              {isLoadingList ? (
-                <div className="text-sm text-muted-foreground">{t("import.loading")}</div>
-              ) : datasets.length === 0 ? (
-                <div className="text-sm text-muted-foreground">
-                  {t("import.noDatasets")}
-                </div>
-              ) : (
-                <div className="space-y-2">
-                  {datasets.map((d) => (
-                    <div
-                      key={d.id}
-                      className={[
-                        "w-full p-3 rounded-lg border transition flex items-center justify-between gap-3",
-                        selectedDatasetId === d.id
-                          ? "border-primary bg-primary/5"
-                          : "border-border hover:bg-muted/40",
-                      ].join(" ")}
-                    >
-                      <button
-                        className="min-w-0 flex-1 text-left"
-                        onClick={() => setSelectedDatasetId(d.id)}
-                        type="button"
-                      >
-                        <p className="font-medium truncate">{d.original_name}</p>
-                        <p className="text-xs text-muted-foreground">
-                          {(d.size_bytes / 1024).toFixed(1)} KB •{" "}
-                          {new Date(d.created_at).toLocaleString()}
-                        </p>
-                      </button>
-
-                      <div className="flex items-center gap-2">
-                        <Badge variant="secondary">{getDatasetLabel(d.original_name)}</Badge>
-
-
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          onClick={() => setDeleteTarget(d)}
-                          aria-label={t("import.deleteAria")}
-                        >
-                          <Trash2 className="h-4 w-4 text-destructive" />
-                        </Button>
-                      </div>
-                    </div>
-                  ))}
-                </div>
               )}
             </CardContent>
           </Card>

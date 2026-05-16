@@ -1,4 +1,5 @@
 import React, { useMemo, useState } from "react";
+import { useTranslation } from "react-i18next";
 import {
   ChevronDown,
   Search,
@@ -18,21 +19,21 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/component
 import type { ColumnMeta } from "@/services/dataService";
 import { normalizeKind, inferKindFallback, kindLabel, kindBadgeClass } from "@/pages/project/nettoyage/useNettoyageData";
 
-const TYPE_FILTERS: { key: string; label: string }[] = [
-  { key: "numeric", label: "Num" },
-  { key: "categorical", label: "Cat" },
-  { key: "datetime", label: "Date" },
-  { key: "binary", label: "Bin" },
-  { key: "text", label: "Text" },
-  { key: "id", label: "ID" },
-  { key: "other", label: "Other" },
+const TYPE_FILTERS: { key: string; labelKey: string }[] = [
+  { key: "numeric", labelKey: "nettoyage.selector.typeNum" as const },
+  { key: "categorical", labelKey: "nettoyage.selector.typeCat" as const },
+  { key: "datetime", labelKey: "nettoyage.selector.typeDate" as const },
+  { key: "binary", labelKey: "nettoyage.selector.typeBin" as const },
+  { key: "text", labelKey: "nettoyage.selector.typeText" as const },
+  { key: "id", labelKey: "nettoyage.selector.typeId" as const },
+  { key: "other", labelKey: "nettoyage.selector.typeOther" as const },
 ];
 
 export function ColumnSelector({
   columns,
   selectedColumns,
   onToggle,
-  label = "Colonnes",
+  label,
   metaMap,
 }: {
   columns: string[];
@@ -41,6 +42,8 @@ export function ColumnSelector({
   label?: string;
   metaMap?: Record<string, ColumnMeta>;
 }) {
+  const { t } = useTranslation();
+  const effectiveLabel = label ?? t("nettoyage.selector.label");
   const [isOpen, setIsOpen] = useState(false);
   const [q, setQ] = useState("");
   const [typeFilter, setTypeFilter] = useState<Set<string>>(new Set());
@@ -95,7 +98,7 @@ export function ColumnSelector({
         >
           <span className="flex items-center gap-2">
             <Layers className="h-3.5 w-3.5" />
-            {label} {selectedColumns.length > 0 && `(${selectedColumns.length})`}
+            {effectiveLabel} {selectedColumns.length > 0 && `(${selectedColumns.length})`}
           </span>
           <ChevronDown className={`h-4 w-4 transition-transform ${isOpen ? "rotate-180" : ""}`} />
         </Button>
@@ -106,30 +109,30 @@ export function ColumnSelector({
           <div className="flex items-center gap-2">
             <div className="relative flex-1">
               <Search className="h-4 w-4 absolute left-2 top-2.5 text-muted-foreground" />
-              <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Rechercher..." className="pl-8 h-9" />
+              <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder={t("nettoyage.selector.search")} className="pl-8 h-9" />
             </div>
 
             <Select value={sortBy} onValueChange={(v) => setSortBy(v === "missing" || v === "unique" ? v : "name")}>
               <SelectTrigger className="w-[150px] h-9">
-                <SelectValue placeholder="Tri" />
+                <SelectValue placeholder={t("nettoyage.selector.sortPlaceholder")} />
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="name">
                   <div className="flex items-center gap-2">
                     <ArrowDownAZ className="h-4 w-4" />
-                    Nom
+                    {t("nettoyage.selector.sortName")}
                   </div>
                 </SelectItem>
                 <SelectItem value="missing">
                   <div className="flex items-center gap-2">
                     <ArrowDownWideNarrow className="h-4 w-4" />
-                    Manquants
+                    {t("nettoyage.selector.sortMissing")}
                   </div>
                 </SelectItem>
                 <SelectItem value="unique">
                   <div className="flex items-center gap-2">
                     <SlidersHorizontal className="h-4 w-4" />
-                    Unique
+                    {t("nettoyage.selector.sortUnique")}
                   </div>
                 </SelectItem>
               </SelectContent>
@@ -137,21 +140,21 @@ export function ColumnSelector({
           </div>
 
           <div className="flex flex-wrap gap-2">
-            {TYPE_FILTERS.map((t) => {
-              const active = typeFilter.has(t.key);
+            {TYPE_FILTERS.map((tf) => {
+              const active = typeFilter.has(tf.key);
               return (
                 <button
-                  key={t.key}
+                  key={tf.key}
                   type="button"
-                  onClick={() => toggleType(t.key)}
+                  onClick={() => toggleType(tf.key)}
                   className={`inline-flex items-center gap-2 rounded-full border px-2.5 py-1 text-xs transition ${
-                    active ? kindBadgeClass(t.key) : "border-border bg-background hover:bg-accent/50"
+                    active ? kindBadgeClass(tf.key) : "border-border bg-background hover:bg-accent/50"
                   }`}
                 >
-                  <span className={`inline-flex items-center justify-center rounded-full px-1.5 py-0.5 border ${kindBadgeClass(t.key)}`}>
-                    {t.label}
+                  <span className={`inline-flex items-center justify-center rounded-full px-1.5 py-0.5 border ${kindBadgeClass(tf.key)}`}>
+                    {t(tf.labelKey)}
                   </span>
-                  {t.key}
+                  {tf.key}
                 </button>
               );
             })}
@@ -160,12 +163,12 @@ export function ColumnSelector({
           <div className="flex items-center justify-between gap-3">
             <label className="flex items-center gap-2 text-xs text-muted-foreground">
               <Checkbox checked={missingOnly} onCheckedChange={(v) => setMissingOnly(Boolean(v))} className="h-3.5 w-3.5" />
-              Manquants seul.
+              {t("nettoyage.selector.missingOnly")}
             </label>
 
             <label className="flex items-center gap-2 text-xs text-muted-foreground">
               <Checkbox checked={selectedOnly} onCheckedChange={(v) => setSelectedOnly(Boolean(v))} className="h-3.5 w-3.5" />
-              Sélectionnés seul.
+              {t("nettoyage.selector.selectedOnly")}
             </label>
 
             <span className="text-xs text-muted-foreground ml-auto">
@@ -176,9 +179,9 @@ export function ColumnSelector({
 
         <div className="max-h-56 overflow-y-auto space-y-1 rounded-md border border-border p-2 bg-muted/30">
           {columns.length === 0 ? (
-            <p className="text-xs text-muted-foreground text-center py-2">Aucune colonne</p>
+            <p className="text-xs text-muted-foreground text-center py-2">{t("nettoyage.selector.noColumns")}</p>
           ) : filtered.length === 0 ? (
-            <p className="text-xs text-muted-foreground text-center py-4">Aucun résultat</p>
+            <p className="text-xs text-muted-foreground text-center py-4">{t("nettoyage.selector.noResult")}</p>
           ) : (
             filtered.map((col) => {
               const m = metaMap?.[col];

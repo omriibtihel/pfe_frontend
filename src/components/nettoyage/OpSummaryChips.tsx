@@ -5,6 +5,7 @@
  * type d'action, et les affiche sous forme de petits badges dans la liste d'historique.
  */
 import type { ProcessingOperation } from '@/types';
+import type { TFunction } from 'i18next';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -36,10 +37,6 @@ const CHIP_STYLES: Record<ChipVariant, string> = {
 const CHIP_BASE = 'inline-flex items-center rounded border px-1.5 py-0.5 text-[10px]';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
-
-function plural(n: number, singular: string, pluralSuffix = 's'): string {
-  return n > 1 ? `${singular}${pluralSuffix}` : singular;
-}
 
 function totalChangedFromPerCol(perCol: PerColumnStats): number {
   return Object.values(perCol).reduce((sum, col) => sum + (col?.changed_count ?? 0), 0);
@@ -75,93 +72,93 @@ function chip(key: string, content: React.ReactNode, variant: ChipVariant = 'def
 
 // ── Per-action builders ───────────────────────────────────────────────────────
 
-function buildDropColumnsChips(op: ProcessingOperation, r: OpResult | null): Chip[] {
+function buildDropColumnsChips(op: ProcessingOperation, r: OpResult | null, t: TFunction): Chip[] {
   const chips: Chip[] = [];
   const dropped = (op.columns ?? []).filter(Boolean);
 
   if (dropped.length > 0) {
-    chips.push(chip('count', `−${dropped.length} ${plural(dropped.length, 'colonne')}`, 'destructive'));
+    chips.push(chip('count', t('nettoyage.chips.minusCols', { n: dropped.length, count: dropped.length }), 'destructive'));
     dropped.slice(0, 3).forEach((c, i) =>
       chips.push(chip(`col-${i}`, <span className="font-mono">{c}</span>))
     );
     if (dropped.length > 3)
-      chips.push(chip('more', `+${dropped.length - 3} autres`));
+      chips.push(chip('more', t('nettoyage.chips.moreOthers', { n: dropped.length - 3 })));
   }
 
   const bc = r?.before_shape?.cols;
   const ac = r?.after_shape?.cols;
   if (bc != null && ac != null)
-    chips.push(chip('shape', `${bc} → ${ac} col.`));
+    chips.push(chip('shape', t('nettoyage.chips.shapeCols', { before: bc, after: ac })));
 
   return chips;
 }
 
-function buildDropDuplicatesChips(op: ProcessingOperation, r: OpResult | null): Chip[] {
+function buildDropDuplicatesChips(op: ProcessingOperation, r: OpResult | null, t: TFunction): Chip[] {
   const chips: Chip[] = [];
   const br = r?.before_shape?.rows;
   const ar = r?.after_shape?.rows;
   const removed = r?.rows_removed ?? (br != null && ar != null ? br - ar : 0);
 
   if (removed > 0) {
-    chips.push(chip('removed', `−${removed} ${plural(removed, 'doublon')}`, 'destructive'));
+    chips.push(chip('removed', t('nettoyage.chips.minusDup', { n: removed, count: removed }), 'destructive'));
     if (br != null && ar != null)
-      chips.push(chip('shape', `${br} → ${ar} lignes`));
+      chips.push(chip('shape', t('nettoyage.chips.shapeRows', { before: br, after: ar })));
   } else if (r) {
-    chips.push(chip('none', 'Aucun doublon trouvé', 'success'));
+    chips.push(chip('none', t('nettoyage.chips.noDup'), 'success'));
   }
 
   // Backend stores subset columns in op.columns, not in params.subset
   const subset = (op.columns ?? []).filter(Boolean);
   if (subset.length > 0) {
     const preview = subset.slice(0, 2).join(', ') + (subset.length > 2 ? ` +${subset.length - 2}` : '');
-    chips.push(chip('subset', `sur : ${preview}`));
+    chips.push(chip('subset', t('nettoyage.chips.onSubset', { cols: preview })));
   } else if (r) {
-    chips.push(chip('all', 'toutes les colonnes'));
+    chips.push(chip('all', t('nettoyage.chips.onAllCols')));
   }
 
   return chips;
 }
 
-function buildDropEmptyRowsChips(_op: ProcessingOperation, r: OpResult | null): Chip[] {
+function buildDropEmptyRowsChips(_op: ProcessingOperation, r: OpResult | null, t: TFunction): Chip[] {
   const chips: Chip[] = [];
   const br = r?.before_shape?.rows;
   const ar = r?.after_shape?.rows;
   const removed = r?.rows_removed ?? (br != null && ar != null ? br - ar : 0);
 
   if (removed > 0) {
-    chips.push(chip('removed', `−${removed} ${plural(removed, 'ligne')} vide${removed > 1 ? 's' : ''}`, 'destructive'));
+    chips.push(chip('removed', t('nettoyage.chips.minusEmptyRows', { n: removed, count: removed }), 'destructive'));
     if (br != null && ar != null)
-      chips.push(chip('shape', `${br} → ${ar} lignes`));
+      chips.push(chip('shape', t('nettoyage.chips.shapeRows', { before: br, after: ar })));
   } else if (r) {
-    chips.push(chip('none', 'Aucune ligne vide', 'success'));
+    chips.push(chip('none', t('nettoyage.chips.noEmptyRows'), 'success'));
   }
 
   return chips;
 }
 
-function buildDropEmptyColsChips(_op: ProcessingOperation, r: OpResult | null): Chip[] {
+function buildDropEmptyColsChips(_op: ProcessingOperation, r: OpResult | null, t: TFunction): Chip[] {
   const chips: Chip[] = [];
   const removed = r?.columns_removed ?? [];
   const bc = r?.before_shape?.cols;
   const ac = r?.after_shape?.cols;
 
   if (removed.length > 0) {
-    chips.push(chip('count', `−${removed.length} ${plural(removed.length, 'colonne')} vide${removed.length > 1 ? 's' : ''}`, 'destructive'));
+    chips.push(chip('count', t('nettoyage.chips.minusEmptyCols', { n: removed.length, count: removed.length }), 'destructive'));
     removed.slice(0, 3).forEach((c, i) =>
       chips.push(chip(`col-${i}`, <span className="font-mono">{c}</span>))
     );
     if (removed.length > 3)
-      chips.push(chip('more', `+${removed.length - 3} autres`));
+      chips.push(chip('more', t('nettoyage.chips.moreOthers', { n: removed.length - 3 })));
     if (bc != null && ac != null)
-      chips.push(chip('shape', `${bc} → ${ac} col.`));
+      chips.push(chip('shape', t('nettoyage.chips.shapeCols', { before: bc, after: ac })));
   } else if (r) {
-    chips.push(chip('none', 'Aucune colonne vide', 'success'));
+    chips.push(chip('none', t('nettoyage.chips.noEmptyCols'), 'success'));
   }
 
   return chips;
 }
 
-function buildRenameColumnsChips(op: ProcessingOperation, r: OpResult | null): Chip[] {
+function buildRenameColumnsChips(op: ProcessingOperation, r: OpResult | null, t: TFunction): Chip[] {
   const chips: Chip[] = [];
   const mapping = resolveRenameMapping(r, op.params ?? {});
   const entries = Object.entries(mapping);
@@ -177,16 +174,17 @@ function buildRenameColumnsChips(op: ProcessingOperation, r: OpResult | null): C
   );
 
   if (entries.length > 3)
-    chips.push(chip('more', `+${entries.length - 3} autres`));
+    chips.push(chip('more', t('nettoyage.chips.moreOthers', { n: entries.length - 3 })));
 
   return chips;
 }
 
-function buildSubstituteValuesChips(op: ProcessingOperation, r: OpResult | null): Chip[] {
+function buildSubstituteValuesChips(op: ProcessingOperation, r: OpResult | null, t: TFunction): Chip[] {
   const chips: Chip[] = [];
   const p = op.params ?? {};
-  const fromVal = p.treat_from_as_null ? 'null/vide' : String(p.from_value ?? '?');
-  const toVal   = p.to_value == null   ? 'null/vide' : String(p.to_value);
+  const nullOrEmpty = t('nettoyage.chips.nullOrEmpty');
+  const fromVal = p.treat_from_as_null ? nullOrEmpty : String(p.from_value ?? '?');
+  const toVal   = p.to_value == null   ? nullOrEmpty : String(p.to_value);
 
   chips.push(chip('subst', (
     <>
@@ -200,32 +198,32 @@ function buildSubstituteValuesChips(op: ProcessingOperation, r: OpResult | null)
   const total = totalChangedFromPerCol(perCol);
 
   if (total > 0)
-    chips.push(chip('count', `${total} ${plural(total, 'valeur')} modifiée${total > 1 ? 's' : ''}`, 'warning'));
+    chips.push(chip('count', t('nettoyage.chips.valuesChanged', { n: total, count: total }), 'warning'));
   else if (r)
-    chips.push(chip('none', 'Aucune valeur modifiée', 'success'));
+    chips.push(chip('none', t('nettoyage.chips.noChange'), 'success'));
 
   return chips;
 }
 
-function buildStripWhitespaceChips(op: ProcessingOperation, r: OpResult | null): Chip[] {
+function buildStripWhitespaceChips(op: ProcessingOperation, r: OpResult | null, t: TFunction): Chip[] {
   const chips: Chip[] = [];
   const cols = (op.columns ?? []).filter(Boolean);
 
   if (cols.length > 0)
-    chips.push(chip('cols', `${cols.length} ${plural(cols.length, 'colonne')}`));
+    chips.push(chip('cols', t('nettoyage.chips.cols', { n: cols.length, count: cols.length })));
 
   const perCol: PerColumnStats = r?.per_column ?? {};
   const total = totalChangedFromPerCol(perCol);
 
   if (total > 0)
-    chips.push(chip('count', `${total} ${plural(total, 'cellule')} nettoyée${total > 1 ? 's' : ''}`, 'warning'));
+    chips.push(chip('count', t('nettoyage.chips.cellsCleaned', { n: total, count: total }), 'warning'));
   else if (r)
-    chips.push(chip('none', 'Aucun espace trouvé', 'success'));
+    chips.push(chip('none', t('nettoyage.chips.noSpace'), 'success'));
 
   return chips;
 }
 
-function buildSchemaChips(op: ProcessingOperation): Chip[] {
+function buildSchemaChips(op: ProcessingOperation, t: TFunction): Chip[] {
   const chips: Chip[] = [];
   const p = op.params ?? {};
   const schemaAction = String(p.schema_action ?? '');
@@ -241,14 +239,14 @@ function buildSchemaChips(op: ProcessingOperation): Chip[] {
     ), 'rename'));
   } else if (schemaAction === 'clear_kind' && column) {
     chips.push(chip('clear', (
-      <><span className="font-mono">{column}</span>{' '}type réinitialisé</>
+      <><span className="font-mono">{column}</span>{' '}{t('nettoyage.chips.typeReset')}</>
     ), 'warning'));
   } else if (schemaAction === 'verify_categorical' && column) {
     const verified = p.verified !== false;
     chips.push(chip('verify', (
       <>
         <span className="font-mono">{column}</span>{' '}
-        {verified ? 'confirmé catégoriel' : 'confirmation retirée'}
+        {verified ? t('nettoyage.chips.confirmedCat') : t('nettoyage.chips.confirmationRemoved')}
       </>
     ), verified ? 'rename' : 'warning'));
   } else if (schemaAction === 'dismiss_alert') {
@@ -256,7 +254,7 @@ function buildSchemaChips(op: ProcessingOperation): Chip[] {
     const dismissed = p.dismissed !== false;
     chips.push(chip('alert', (
       <>
-        {dismissed ? 'Alerte ignorée' : 'Alerte rétablie'}
+        {dismissed ? t('nettoyage.chips.alertIgnored') : t('nettoyage.chips.alertRestored')}
         {key ? <span className="ml-1 font-mono opacity-70">{key}</span> : null}
       </>
     ), dismissed ? 'warning' : 'default'));
@@ -267,7 +265,7 @@ function buildSchemaChips(op: ProcessingOperation): Chip[] {
 
 // ── Public API ────────────────────────────────────────────────────────────────
 
-const ACTION_BUILDERS: Record<string, (op: ProcessingOperation, r: OpResult | null) => Chip[]> = {
+const ACTION_BUILDERS: Record<string, (op: ProcessingOperation, r: OpResult | null, t: TFunction) => Chip[]> = {
   drop_columns:    buildDropColumnsChips,
   drop_duplicates: buildDropDuplicatesChips,
   drop_empty_rows: buildDropEmptyRowsChips,
@@ -277,12 +275,12 @@ const ACTION_BUILDERS: Record<string, (op: ProcessingOperation, r: OpResult | nu
   strip_whitespace:  buildStripWhitespaceChips,
 };
 
-export function buildOpSummaryChips(op: ProcessingOperation): React.ReactNode[] {
+export function buildOpSummaryChips(op: ProcessingOperation, t: TFunction): React.ReactNode[] {
   const action = String(op.params?.action ?? '');
   const r = getResult(op);
 
   const builder = ACTION_BUILDERS[action];
-  const chips = builder ? builder(op, r) : buildSchemaChips(op);
+  const chips = builder ? builder(op, r, t) : buildSchemaChips(op, t);
 
   return chips.map(({ key, content, variant }) => (
     <span

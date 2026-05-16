@@ -5,6 +5,8 @@
  * Each alert type has one dedicated renderer component.
  */
 import React, { useMemo } from 'react';
+import { useTranslation } from 'react-i18next';
+import type { TFunction } from 'i18next';
 import { AlertTriangle, CheckCircle2, Info, LayoutList, Wrench, XCircle } from 'lucide-react';
 
 import { Modal }   from '@/components/ui/modal';
@@ -44,10 +46,11 @@ const SEVERITY_BADGE_CLASS: Record<AlertSeverity, string> = {
 // ── Shared action primitives ──────────────────────────────────────────────────
 
 function DismissButton({ onDismiss }: { onDismiss: () => void }) {
+  const { t } = useTranslation();
   return (
     <Button size="sm" variant="ghost" onClick={onDismiss} className="gap-2">
       <XCircle className="h-4 w-4" />
-      Ignorer
+      {t('nettoyage.alertsModal.ignore')}
     </Button>
   );
 }
@@ -59,6 +62,7 @@ interface DropButtonProps {
   onRunCleaning: ActionProps['onRunCleaning'];
 }
 function DropColumnButton({ column, disabled, onDismiss, onRunCleaning }: DropButtonProps) {
+  const { t } = useTranslation();
   return (
     <Button
       size="sm"
@@ -66,12 +70,12 @@ function DropColumnButton({ column, disabled, onDismiss, onRunCleaning }: DropBu
       disabled={disabled}
       className="gap-2"
       onClick={() => {
-        onRunCleaning('Suppression colonne', 'drop_columns' as CleaningAction, {}, [column]);
+        onRunCleaning(t('nettoyage.cleaning.opDropFromAlert'), 'drop_columns' as CleaningAction, {}, [column]);
         onDismiss();
       }}
     >
       <Wrench className="h-4 w-4" />
-      Supprimer cette colonne
+      {t('nettoyage.alertsModal.dropColumn')}
     </Button>
   );
 }
@@ -109,16 +113,17 @@ function ActionsDismissOnly({ onDismiss }: Pick<ActionProps, 'onDismiss'>) {
 }
 
 function ActionsHighCardinality({ alert, disableActions, kindOverrides, onDismiss, onSetOverride, onClearOverride, onRunCleaning }: ActionProps & { alert: Extract<AlertItem, { type: 'high_cardinality' }> }) {
+  const { t } = useTranslation();
   return (
     <div className="flex flex-wrap gap-2 mt-3">
       <Button size="sm" variant="outline" className="gap-2" onClick={() => { onSetOverride(alert.column, 'id'); onDismiss(); }}>
         <Wrench className="h-4 w-4" />
-        Marquer comme ID
+        {t('nettoyage.alertsModal.markAsId')}
       </Button>
       <DropColumnButton column={alert.column} disabled={disableActions} onDismiss={onDismiss} onRunCleaning={onRunCleaning} />
       {kindOverrides[alert.column] != null && (
         <Button size="sm" variant="ghost" onClick={() => onClearOverride(alert.column)}>
-          Annuler override
+          {t('nettoyage.alertsModal.cancelOverride')}
         </Button>
       )}
       <DismissButton onDismiss={onDismiss} />
@@ -127,19 +132,20 @@ function ActionsHighCardinality({ alert, disableActions, kindOverrides, onDismis
 }
 
 function ActionsVerifyCat({ alert, kindOverrides, onDismiss, onVerifyCategorical, onSetOverride, onClearOverride }: ActionProps & { alert: Extract<AlertItem, { type: 'verify_cat' }> }) {
+  const { t } = useTranslation();
   return (
     <div className="flex flex-wrap gap-2 mt-3">
       <Button size="sm" variant="outline" className="gap-2" onClick={() => onVerifyCategorical(alert.column, true)}>
         <CheckCircle2 className="h-4 w-4" />
-        Confirmer catégoriel
+        {t('nettoyage.alertsModal.confirmCat')}
       </Button>
       <Button size="sm" variant="outline" className="gap-2" onClick={() => onSetOverride(alert.column, 'numeric')}>
         <Wrench className="h-4 w-4" />
-        Rendre numérique
+        {t('nettoyage.alertsModal.makeNumeric')}
       </Button>
       {kindOverrides[alert.column] != null && (
         <Button size="sm" variant="ghost" onClick={() => onClearOverride(alert.column)}>
-          Annuler override
+          {t('nettoyage.alertsModal.cancelOverride')}
         </Button>
       )}
       <DismissButton onDismiss={onDismiss} />
@@ -149,62 +155,64 @@ function ActionsVerifyCat({ alert, kindOverrides, onDismiss, onVerifyCategorical
 
 // ── Alert card (title + description + actions) ────────────────────────────────
 
-function alertContent(alert: AlertItem): { title: string; description: string } {
+function alertContent(alert: AlertItem, t: TFunction): { title: string; description: string } {
   switch (alert.type) {
     case 'all_missing':
       return {
-        title: 'Colonne entièrement vide',
-        description: `"${alert.column}" ne contient aucune valeur (100 % manquants). Elle n'apportera rien au modèle.`,
+        title: t('nettoyage.alertsModal.allMissingTitle'),
+        description: t('nettoyage.alertsModal.allMissingDesc', { col: alert.column }),
       };
     case 'constant_column':
       return {
-        title: 'Colonne constante',
-        description: `"${alert.column}" n'a qu'une seule valeur unique — variance nulle. Ce type de colonne nuit à l'entraînement.`,
+        title: t('nettoyage.alertsModal.constantTitle'),
+        description: t('nettoyage.alertsModal.constantDesc', { col: alert.column }),
       };
     case 'missing_high':
       return {
-        title: 'Beaucoup de valeurs manquantes',
-        description: `"${alert.column}" : ${(alert.missingPct * 100).toFixed(1)} % manquants. Suggestion : supprimer la colonne.`,
+        title: t('nettoyage.alertsModal.missingHighTitle'),
+        description: t('nettoyage.alertsModal.missingHighDesc', { col: alert.column, pct: (alert.missingPct * 100).toFixed(1) }),
       };
     case 'missing_low':
       return {
-        title: 'Valeurs manquantes modérées',
-        description: `"${alert.column}" : ${(alert.missingPct * 100).toFixed(1)} % manquants. Suggestion : imputer (médiane / mode).`,
+        title: t('nettoyage.alertsModal.missingLowTitle'),
+        description: t('nettoyage.alertsModal.missingLowDesc', { col: alert.column, pct: (alert.missingPct * 100).toFixed(1) }),
       };
     case 'verify_cat':
       return {
-        title: 'Type ambigu',
-        description: `"${alert.column}" est typée catégorielle mais ses valeurs ressemblent à des nombres (ou la détection est peu sûre). Confirme le type ou convertis en numérique.`,
+        title: t('nettoyage.alertsModal.verifyCatTitle'),
+        description: t('nettoyage.alertsModal.verifyCatDesc', { col: alert.column }),
       };
     case 'high_cardinality':
       return {
-        title: 'Cardinalité très élevée',
-        description: `"${alert.column}" : ${alert.unique} valeurs uniques sur ${alert.nonMissing} lignes (${alert.pct} %). Probablement un identifiant ou du texte libre — à supprimer ou marquer comme ID.`,
+        title: t('nettoyage.alertsModal.highCardTitle'),
+        description: t('nettoyage.alertsModal.highCardDesc', { col: alert.column, unique: alert.unique, nonMissing: alert.nonMissing, pct: alert.pct }),
       };
     case 'likely_id':
       return {
-        title: 'Colonne identifiant détectée',
-        description: `"${alert.column}" est identifiée comme un identifiant (ID). Les colonnes ID ne doivent pas être utilisées comme features.`,
+        title: t('nettoyage.alertsModal.likelyIdTitle'),
+        description: t('nettoyage.alertsModal.likelyIdDesc', { col: alert.column }),
       };
     case 'high_outliers':
       return {
-        title: 'Beaucoup de valeurs aberrantes',
-        description: `"${alert.column}" : ~${alert.pct} % de valeurs hors IQR×1,5. À traiter en étape de préparation (scaling robuste ou winsorisation).`,
+        title: t('nettoyage.alertsModal.highOutliersTitle'),
+        description: t('nettoyage.alertsModal.highOutliersDesc', { col: alert.column, pct: alert.pct }),
       };
     case 'moderate_outliers':
       return {
-        title: 'Quelques valeurs aberrantes',
-        description: `"${alert.column}" : ~${alert.pct} % de valeurs aberrantes détectées (IQR×1,5). À surveiller en préparation.`,
+        title: t('nettoyage.alertsModal.moderateOutliersTitle'),
+        description: t('nettoyage.alertsModal.moderateOutliersDesc', { col: alert.column, pct: alert.pct }),
       };
     case 'highly_skewed':
       return {
-        title: 'Distribution très asymétrique',
-        description: `"${alert.column}" : asymétrie de ${alert.skewness.toFixed(2)}. Envisage une transformation (log, Yeo-Johnson) dans l'étape de préparation.`,
+        title: t('nettoyage.alertsModal.skewedTitle'),
+        description: t('nettoyage.alertsModal.skewedDesc', { col: alert.column, skew: alert.skewness.toFixed(2) }),
       };
     case 'parasite_values':
       return {
-        title: 'Valeurs non-numériques dans une colonne numérique',
-        description: `"${alert.column}" contient ${alert.count} valeur${alert.count > 1 ? 's' : ''} suspecte${alert.count > 1 ? 's' : ''} — probablement des valeurs manquantes déguisées.`,
+        title: t('nettoyage.alertsModal.parasiteTitle'),
+        description: alert.count > 1
+          ? t('nettoyage.alertsModal.parasiteDescOther', { col: alert.column, count: alert.count })
+          : t('nettoyage.alertsModal.parasiteDescOne', { col: alert.column, count: alert.count }),
       };
   }
 }
@@ -231,7 +239,8 @@ function AlertActions(props: ActionProps) {
 }
 
 function AlertCard({ alert, ...props }: ActionProps) {
-  const { title, description } = alertContent(alert);
+  const { t } = useTranslation();
+  const { title, description } = alertContent(alert, t);
   return (
     <div className="rounded-xl border border-border bg-muted/20 p-3">
       <div className="flex items-start gap-3">
@@ -294,6 +303,7 @@ export function AlertsModal({
   onClearOverride,
   onRunCleaning,
 }: AlertsModalProps) {
+  const { t } = useTranslation();
   const visibleAlerts = useMemo(
     () => buildAlerts(metaMap, verifiedCategorical, kindOverrides, thresholds)
             .filter((a) => !dismissedAlertKeys.has(alertKey(a))),
@@ -334,53 +344,53 @@ export function AlertsModal({
     );
 
   return (
-    <Modal isOpen={open} onClose={onClose} title="Alertes & recommandations" size="xl">
+    <Modal isOpen={open} onClose={onClose} title={t('nettoyage.alertsModal.title')} size="xl">
       <div className="space-y-3">
         {visibleAlerts.length === 0 ? (
           <div className="flex items-center gap-2 rounded-md border border-border bg-muted/30 p-4 text-sm text-muted-foreground">
             <CheckCircle2 className="h-4 w-4" />
-            Aucune alerte pour l'instant.
+            {t('nettoyage.alertsModal.none')}
           </div>
         ) : (
           <Tabs defaultValue="all" className="w-full">
             <TabsList className="grid w-full grid-cols-4 h-auto gap-1 p-1">
               <TabsTrigger value="all" className="gap-1.5 px-2 py-1.5 min-w-0">
                 <LayoutList className="h-3.5 w-3.5 shrink-0" />
-                <span className="hidden sm:inline truncate">Toutes</span>
+                <span className="hidden sm:inline truncate">{t('nettoyage.alertsModal.tabAll')}</span>
                 <Badge variant="outline" className="text-[10px] shrink-0">{visibleAlerts.length}</Badge>
               </TabsTrigger>
               <TabsTrigger value="error" className="gap-1.5 px-2 py-1.5 min-w-0" disabled={grouped.error.length === 0}>
                 <XCircle className="h-3.5 w-3.5 text-red-500 shrink-0" />
-                <span className="hidden sm:inline truncate">Erreurs</span>
+                <span className="hidden sm:inline truncate">{t('nettoyage.alertsModal.tabErrors')}</span>
                 {grouped.error.length > 0 && (
                   <Badge variant="outline" className={`text-[10px] shrink-0 ${SEVERITY_BADGE_CLASS.error}`}>{grouped.error.length}</Badge>
                 )}
               </TabsTrigger>
               <TabsTrigger value="warning" className="gap-1.5 px-2 py-1.5 min-w-0" disabled={grouped.warning.length === 0}>
                 <AlertTriangle className="h-3.5 w-3.5 text-amber-600 shrink-0" />
-                <span className="hidden sm:inline truncate">Avertissements</span>
+                <span className="hidden sm:inline truncate">{t('nettoyage.alertsModal.tabWarnings')}</span>
                 {grouped.warning.length > 0 && (
                   <Badge variant="outline" className={`text-[10px] shrink-0 ${SEVERITY_BADGE_CLASS.warning}`}>{grouped.warning.length}</Badge>
                 )}
               </TabsTrigger>
               <TabsTrigger value="info" className="gap-1.5 px-2 py-1.5 min-w-0" disabled={grouped.info.length === 0}>
                 <Info className="h-3.5 w-3.5 text-blue-500 shrink-0" />
-                <span className="hidden sm:inline truncate">Infos</span>
+                <span className="hidden sm:inline truncate">{t('nettoyage.alertsModal.tabInfo')}</span>
                 {grouped.info.length > 0 && (
                   <Badge variant="outline" className={`text-[10px] shrink-0 ${SEVERITY_BADGE_CLASS.info}`}>{grouped.info.length}</Badge>
                 )}
               </TabsTrigger>
             </TabsList>
 
-            <TabsContent value="all">{renderList(visibleAlerts, "Aucune alerte.")}</TabsContent>
-            <TabsContent value="error">{renderList(grouped.error, "Aucune erreur.")}</TabsContent>
-            <TabsContent value="warning">{renderList(grouped.warning, "Aucun avertissement.")}</TabsContent>
-            <TabsContent value="info">{renderList(grouped.info, "Aucune information.")}</TabsContent>
+            <TabsContent value="all">{renderList(visibleAlerts, t('nettoyage.alertsModal.emptyAll'))}</TabsContent>
+            <TabsContent value="error">{renderList(grouped.error, t('nettoyage.alertsModal.emptyErrors'))}</TabsContent>
+            <TabsContent value="warning">{renderList(grouped.warning, t('nettoyage.alertsModal.emptyWarnings'))}</TabsContent>
+            <TabsContent value="info">{renderList(grouped.info, t('nettoyage.alertsModal.emptyInfo'))}</TabsContent>
           </Tabs>
         )}
 
         <div className="flex justify-end pt-2">
-          <Button variant="outline" onClick={onClose}>Fermer</Button>
+          <Button variant="outline" onClick={onClose}>{t('nettoyage.alertsModal.close')}</Button>
         </div>
       </div>
     </Modal>

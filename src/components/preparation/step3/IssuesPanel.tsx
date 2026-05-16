@@ -30,6 +30,10 @@ export function IssuesPanel({
   const { t } = useTranslation();
   const [showAllIssues, setShowAllIssues] = useState(false);
 
+  if (!isValidating && counts.errors === 0 && !validationError) {
+    return null;
+  }
+
   const formatValidatedAt = (value: string | null): string => {
     if (!value) return t("preparation.columns.neverValidated");
     const date = new Date(value);

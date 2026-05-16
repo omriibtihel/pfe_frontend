@@ -271,7 +271,13 @@ export function NettoyagePage() {
         </motion.div>
 
         {/* ── Cleaning + Actions + Modaux ── */}
-        <ColumnSchemaSection state={state} data={data} actions={actions} projectId={projectId} />
+        <ColumnSchemaSection
+          state={state}
+          data={data}
+          actions={actions}
+          projectId={projectId}
+          hasUnsavedChanges={shouldWarnUnsaved || hasVersionUnsavedChanges}
+        />
 
         {/* ── Preview + Historique ── */}
         <motion.div

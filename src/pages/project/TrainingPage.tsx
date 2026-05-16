@@ -139,9 +139,14 @@ function ModeDialog({
 
           {/* Manual card */}
           <Card
-            className="cursor-pointer border-2 transition-colors hover:border-primary/60 hover:bg-primary/5"
+            className="relative cursor-pointer border-2 border-primary/40 transition-colors hover:border-primary/60 hover:bg-primary/5"
             onClick={onManual}
           >
+            <Badge
+              className="absolute -top-2 right-3 bg-primary text-primary-foreground text-[10px] px-2 py-0.5 shadow-sm"
+            >
+              {t("training.modeDialog.recommended")}
+            </Badge>
             <CardHeader className="pb-2">
               <CardTitle className="flex items-center gap-2 text-sm">
                 <SlidersHorizontal className="h-4 w-4 text-primary" />

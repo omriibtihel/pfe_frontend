@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { Database, RefreshCw, Trash2 } from "lucide-react";
 
 import { Modal } from "@/components/ui/modal";
@@ -35,8 +36,8 @@ function SectionLabel({ label, variant }: { label: string; variant: "primary" | 
   );
 }
 
-function FullStatCard({ label, value, total, unit }: {
-  label: string; value: number | null | undefined; total?: number; unit?: string;
+function FullStatCard({ label, value, total, unit, locale, pctLabel }: {
+  label: string; value: number | null | undefined; total?: number; unit?: string; locale: string; pctLabel: (pct: string) => string;
 }) {
   const num = value ?? 0;
   const pct = total && total > 0 ? (num / total) * 100 : null;
@@ -44,12 +45,12 @@ function FullStatCard({ label, value, total, unit }: {
     <div className="rounded-xl border border-primary/20 bg-primary/5 dark:bg-primary/10 p-3 space-y-1">
       <p className="text-[11px] text-muted-foreground">{label}</p>
       <p className="text-xl font-bold text-foreground">
-        {typeof value === "number" ? num.toLocaleString("fr-FR") : "—"}
+        {typeof value === "number" ? num.toLocaleString(locale) : "—"}
         {unit && <span className="ml-1 text-sm font-normal text-muted-foreground">{unit}</span>}
       </p>
       {pct !== null && (
         <>
-          <p className="text-[11px] text-muted-foreground">{pct.toFixed(1)}% du dataset</p>
+          <p className="text-[11px] text-muted-foreground">{pctLabel(pct.toFixed(1))}</p>
           <div className="h-1.5 rounded-full bg-muted/50 overflow-hidden">
             <div className="h-full bg-primary/50" style={{ width: `${Math.min(100, pct)}%` }} />
           </div>
@@ -136,6 +137,9 @@ export function InspectorModal({
   onClearOverride: (col: string) => Promise<void> | void;
   onVerifyCategorical: (col: string, verified: boolean) => Promise<void> | void;
 }) {
+  const { t, i18n } = useTranslation();
+  const locale = i18n.language?.startsWith("fr") ? "fr-FR" : "en-US";
+  const pctLabel = (pct: string) => t("nettoyage.inspector.datasetPct", { pct });
   const inspectorMeta = col ? (metaMap?.[col] ?? null) : null;
 
   const inspectorKind = col
@@ -170,11 +174,11 @@ export function InspectorModal({
     <Modal
       isOpen={open}
       onClose={onClose}
-      title={col ? `Profil colonne — ${col}` : "Profil colonne"}
+      title={col ? t("nettoyage.inspector.titleWithCol", { col }) : t("nettoyage.inspector.title")}
       size="xl"
     >
       {!col ? (
-        <div className="text-sm text-muted-foreground">Aucune colonne sélectionnée.</div>
+        <div className="text-sm text-muted-foreground">{t("nettoyage.inspector.noCol")}</div>
       ) : (
         <div className="space-y-4">
           {/* ── Meta bar ── */}
@@ -188,13 +192,13 @@ export function InspectorModal({
               </Badge>
               {inspectorIsOverridden && (
                 <Badge variant="outline" className="text-[11px] bg-secondary/10 border-secondary/20 text-secondary">
-                  override actif
+                  {t("nettoyage.inspector.overrideActive")}
                 </Badge>
               )}
               {inspectorMeta?.total != null && (
                 <span className="ml-auto flex items-center gap-1.5 text-[11px] text-primary font-medium">
                   <Database className="h-3.5 w-3.5" />
-                  {inspectorMeta.total.toLocaleString("fr-FR")} lignes totales
+                  {t("nettoyage.inspector.rowsTotal", { n: inspectorMeta.total.toLocaleString(locale) })}
                 </span>
               )}
             </div>
@@ -202,30 +206,31 @@ export function InspectorModal({
 
           {/* ── Tab bar ── */}
           <div className="flex flex-wrap gap-2">
-            {(["overview", "distribution", "type"] as const).map((t) => (
-              <Button key={t} variant={tab === t ? "default" : "outline"} size="sm" onClick={() => onTabChange(t)}>
-                {t === "overview" ? "Overview" : t === "distribution" ? "Distribution" : "Type"}
+            {(["overview", "distribution", "type"] as const).map((tn) => (
+              <Button key={tn} variant={tab === tn ? "default" : "outline"} size="sm" onClick={() => onTabChange(tn)}>
+                {tn === "overview" ? t("nettoyage.inspector.tabOverview") : tn === "distribution" ? t("nettoyage.inspector.tabDistribution") : t("nettoyage.inspector.tabType")}
               </Button>
             ))}
             <Button variant="ghost" size="sm" className="ml-auto" onClick={onRefresh} disabled={!effectiveDatasetId}>
               <RefreshCw className="h-4 w-4 mr-2" />
-              Rafraîchir
+              {t("nettoyage.inspector.refresh")}
             </Button>
           </div>
 
           {/* ══ OVERVIEW ══════════════════════════════════════════════════════ */}
           {tab === "overview" && (
             <div className="space-y-5">
-              <SectionLabel label="Statistiques complètes — dataset entier" variant="primary" />
+              <SectionLabel label={t("nettoyage.inspector.statsFull")} variant="primary" />
 
               {inspectorMeta ? (
                 <>
                   {/* Counts */}
                   <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                    <FullStatCard label="Total lignes" value={inspectorMeta.total} />
-                    <FullStatCard label="Manquants" value={inspectorMeta.missing} total={inspectorMeta.total} />
+                    <FullStatCard locale={locale} pctLabel={pctLabel} label={t("nettoyage.inspector.totalRows")} value={inspectorMeta.total} />
+                    <FullStatCard locale={locale} pctLabel={pctLabel} label={t("nettoyage.inspector.missing")} value={inspectorMeta.missing} total={inspectorMeta.total} />
                     <FullStatCard
-                      label="Valeurs uniques"
+                      locale={locale} pctLabel={pctLabel}
+                      label={t("nettoyage.inspector.uniqueVals")}
                       value={inspectorMeta.unique}
                       total={Math.max(1, inspectorMeta.total - inspectorMeta.missing)}
                     />
@@ -235,11 +240,13 @@ export function InspectorModal({
                   {isNumericKind && (
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                       <FullStatCard
-                        label="Asymétrie (skewness)"
+                        locale={locale} pctLabel={pctLabel}
+                        label={t("nettoyage.inspector.skewness")}
                         value={inspectorMeta.skewness != null ? parseFloat(inspectorMeta.skewness.toFixed(3)) : null}
                       />
                       <FullStatCard
-                        label="Taux d'outliers"
+                        locale={locale} pctLabel={pctLabel}
+                        label={t("nettoyage.inspector.outlierRatio")}
                         value={inspectorMeta.outlier_ratio != null
                           ? parseFloat((inspectorMeta.outlier_ratio * 100).toFixed(2))
                           : null}
@@ -251,7 +258,7 @@ export function InspectorModal({
                   {/* Numeric summary — min/max/mean/median/q1/q3 (numeric only) */}
                   {isNumericKind && inspectorMeta.min_val != null && (
                     <div className="space-y-2">
-                      <SectionLabel label="Résumé numérique — dataset entier" variant="muted" />
+                      <SectionLabel label={t("nettoyage.inspector.numericSummary")} variant="muted" />
                       <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
                         <StatTile label="min"    value={inspectorMeta.min_val} />
                         <StatTile label="q1"     value={inspectorMeta.q1_val} />
@@ -267,7 +274,7 @@ export function InspectorModal({
                   {inspectorMeta.parasites && inspectorMeta.parasites.count > 0 && (
                     <div className="rounded-xl border border-destructive/20 bg-destructive/5 p-3 space-y-1">
                       <p className="text-xs font-medium text-destructive">
-                        Valeurs parasites détectées ({inspectorMeta.parasites.count} occurrences)
+                        {t("nettoyage.inspector.parasiteDetected", { n: inspectorMeta.parasites.count })}
                       </p>
                       <div className="flex flex-wrap gap-1.5 mt-1">
                         {inspectorMeta.parasites.distinct.map((v) => (
@@ -275,7 +282,7 @@ export function InspectorModal({
                         ))}
                       </div>
                       <p className="text-[11px] text-muted-foreground">
-                        {Math.round(inspectorMeta.parasites.convertible_ratio * 100)}% des valeurs sont numériques.
+                        {t("nettoyage.inspector.parasiteNumericPct", { pct: Math.round(inspectorMeta.parasites.convertible_ratio * 100) })}
                       </p>
                     </div>
                   )}
@@ -283,7 +290,7 @@ export function InspectorModal({
                   {/* Sample values */}
                   {Array.isArray(inspectorMeta.sample) && inspectorMeta.sample.length > 0 && (
                     <div className="rounded-xl border border-primary/20 bg-primary/5 dark:bg-primary/10 p-3">
-                      <p className="text-xs font-medium text-primary mb-2">Exemples (depuis le dataset complet)</p>
+                      <p className="text-xs font-medium text-primary mb-2">{t("nettoyage.inspector.samplesTitle")}</p>
                       <div className="flex flex-wrap gap-1.5">
                         {inspectorMeta.sample.slice(0, 20).map((v, i) => (
                           <Badge key={`${v}-${i}`} variant="secondary" className="text-[11px] max-w-[200px] truncate">
@@ -295,7 +302,7 @@ export function InspectorModal({
                   )}
                 </>
               ) : (
-                <p className="text-xs text-muted-foreground">Métadonnées non disponibles pour cette colonne.</p>
+                <p className="text-xs text-muted-foreground">{t("nettoyage.inspector.noMeta")}</p>
               )}
             </div>
           )}
@@ -303,11 +310,11 @@ export function InspectorModal({
           {/* ══ DISTRIBUTION ══════════════════════════════════════════════════ */}
           {tab === "distribution" && (
             <div className="space-y-3">
-              <SectionLabel label="Distribution — dataset entier" variant="primary" />
+              <SectionLabel label={t("nettoyage.inspector.distSection")} variant="primary" />
 
               {distLoading && (
                 <div className="flex items-center justify-center py-8 text-sm text-muted-foreground">
-                  Chargement...
+                  {t("nettoyage.inspector.loading")}
                 </div>
               )}
 
@@ -315,10 +322,10 @@ export function InspectorModal({
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
                   <div className="rounded-xl border border-border bg-muted/20 p-3">
                     <p className="text-sm font-semibold">
-                      {distData.type === "histogram" ? "Histogramme" : "Valeurs fréquentes"}
+                      {distData.type === "histogram" ? t("nettoyage.inspector.distHistTitle") : t("nettoyage.inspector.distCatTitle")}
                     </p>
                     <p className="text-xs text-muted-foreground mt-1">
-                      {distData.total.toLocaleString("fr-FR")} valeurs non-nulles — dataset complet.
+                      {t("nettoyage.inspector.distNonNull", { n: distData.total.toLocaleString(locale) })}
                     </p>
                     <div className="mt-3">
                       {distData.type === "histogram"
@@ -329,18 +336,18 @@ export function InspectorModal({
                   </div>
 
                   <div className="rounded-xl border border-border bg-muted/20 p-3">
-                    <p className="text-sm font-semibold">Résumé</p>
+                    <p className="text-sm font-semibold">{t("nettoyage.inspector.summary")}</p>
                     <div className="mt-3 space-y-1.5 text-xs">
                       <div className="flex justify-between">
-                        <span className="text-muted-foreground">Type</span>
-                        <span className="font-medium">{distData.type === "histogram" ? "Numérique" : "Catégoriel"}</span>
+                        <span className="text-muted-foreground">{t("nettoyage.inspector.type")}</span>
+                        <span className="font-medium">{distData.type === "histogram" ? t("nettoyage.inspector.typeNumeric") : t("nettoyage.inspector.typeCategorical")}</span>
                       </div>
                       <div className="flex justify-between">
-                        <span className="text-muted-foreground">Valeurs non-nulles</span>
-                        <span className="font-medium">{distData.total.toLocaleString("fr-FR")}</span>
+                        <span className="text-muted-foreground">{t("nettoyage.inspector.nonNullValues")}</span>
+                        <span className="font-medium">{distData.total.toLocaleString(locale)}</span>
                       </div>
                       <div className="flex justify-between">
-                        <span className="text-muted-foreground">Catégories / bins</span>
+                        <span className="text-muted-foreground">{t("nettoyage.inspector.categoriesBins")}</span>
                         <span className="font-medium">{distData.bars.length}</span>
                       </div>
                     </div>
@@ -350,7 +357,7 @@ export function InspectorModal({
 
               {!distLoading && !distData && (
                 <p className="text-xs text-muted-foreground py-4 text-center">
-                  Distribution non disponible pour cette colonne.
+                  {t("nettoyage.inspector.distUnavailable")}
                 </p>
               )}
             </div>
@@ -360,38 +367,38 @@ export function InspectorModal({
           {tab === "type" && (
             <div className="space-y-3">
               <div className="rounded-xl border border-border bg-muted/20 p-3">
-                <p className="text-sm font-semibold">Changer le type (schema)</p>
+                <p className="text-sm font-semibold">{t("nettoyage.inspector.changeType")}</p>
                 <p className="text-xs text-muted-foreground mt-1">
-                  Cela ne modifie pas les valeurs : tu définis le <b>type métier</b> (Num/Cat/Bin/Date…) pour guider les étapes suivantes.
+                  {t("nettoyage.inspector.changeTypeHintPrefix")}<b>{t("nettoyage.inspector.changeTypeHintBold")}</b>{t("nettoyage.inspector.changeTypeHintSuffix")}
                 </p>
 
                 <div className="mt-3 grid grid-cols-1 md:grid-cols-3 gap-3 items-end">
                   <div className="md:col-span-1">
-                    <p className="text-xs text-muted-foreground mb-1">Type actuel</p>
+                    <p className="text-xs text-muted-foreground mb-1">{t("nettoyage.inspector.currentType")}</p>
                     <Badge variant="outline" className={kindBadgeClass(inspectorKind)}>
                       {kindLabel(inspectorKind)} • {inspectorKind}
                     </Badge>
                   </div>
 
                   <div className="md:col-span-2">
-                    <p className="text-xs text-muted-foreground mb-1">Nouveau type</p>
+                    <p className="text-xs text-muted-foreground mb-1">{t("nettoyage.inspector.newType")}</p>
                     <Select
                       value={normalizeKind(kindOverrides?.[col] ?? inspectorKind)}
                       onValueChange={(v) => void onSetOverride(col, (v ?? "other") as ColumnKind)}
                     >
                       <SelectTrigger className="w-full">
-                        <SelectValue placeholder="Choisir..." />
+                        <SelectValue placeholder={t("nettoyage.inspector.chooseTypePlaceholder")} />
                       </SelectTrigger>
                       <SelectContent>
-                        {TYPE_FILTERS.map((t) => (
-                          <SelectItem key={t.key} value={t.key}>{t.key}</SelectItem>
+                        {TYPE_FILTERS.map((tf) => (
+                          <SelectItem key={tf.key} value={tf.key}>{tf.key}</SelectItem>
                         ))}
                       </SelectContent>
                     </Select>
 
                     <div className="mt-2 flex flex-wrap gap-2">
                       <Button variant="outline" size="sm" onClick={() => void onClearOverride(col)} disabled={!inspectorIsOverridden}>
-                        Annuler override
+                        {t("nettoyage.inspector.cancelOverride")}
                       </Button>
                       {normalizeKind(inspectorKind) === "categorical" && (
                         <Button
@@ -399,7 +406,7 @@ export function InspectorModal({
                           size="sm"
                           onClick={() => void onVerifyCategorical(col, !inspectorVerifiedCat)}
                         >
-                          {inspectorVerifiedCat ? "Cat vérifié ✓" : "Confirmer catégoriel"}
+                          {inspectorVerifiedCat ? t("nettoyage.inspector.catVerified") : t("nettoyage.inspector.confirmCat")}
                         </Button>
                       )}
                     </div>
@@ -408,17 +415,17 @@ export function InspectorModal({
               </div>
 
               <div className="rounded-xl border border-border bg-muted/20 p-3">
-                <p className="text-sm font-semibold">Actions rapides</p>
-                <p className="text-xs text-muted-foreground mt-1">Supprimer la colonne si elle est inutile.</p>
+                <p className="text-sm font-semibold">{t("nettoyage.inspector.quickActions")}</p>
+                <p className="text-xs text-muted-foreground mt-1">{t("nettoyage.inspector.quickActionsHint")}</p>
                 <div className="mt-3 flex flex-wrap gap-2">
                   <Button
                     variant="destructive"
                     size="sm"
                     disabled={disableActions}
-                    onClick={() => void onRunCleaning("Suppression colonne (depuis inspector)", "drop_columns", {}, [col])}
+                    onClick={() => void onRunCleaning(t("nettoyage.cleaning.opDropFromInspector"), "drop_columns", {}, [col])}
                   >
                     <Trash2 className="h-4 w-4 mr-2" />
-                    Supprimer la colonne
+                    {t("nettoyage.inspector.dropCol")}
                   </Button>
                 </div>
               </div>
@@ -426,7 +433,7 @@ export function InspectorModal({
           )}
 
           <div className="flex justify-end gap-2 pt-2">
-            <Button variant="outline" onClick={onClose}>Fermer</Button>
+            <Button variant="outline" onClick={onClose}>{t("nettoyage.inspector.close")}</Button>
           </div>
         </div>
       )}

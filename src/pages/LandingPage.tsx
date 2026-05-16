@@ -1,4 +1,5 @@
 import { Link } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import { motion, useMotionValue, useTransform, useSpring, useInView, animate } from 'framer-motion';
 import { useRef, useEffect, useState, useCallback } from 'react';
 import {
@@ -22,6 +23,8 @@ import {
   X,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { LanguageSwitcher } from '@/components/LanguageSwitcher';
+import { ThemeToggle } from '@/components/ThemeToggle';
 
 /* ─────────────────────────────── helpers ─────────────────────────────── */
 
@@ -74,35 +77,35 @@ function TiltCard({ children, className = '' }: { children: React.ReactNode; cla
 
 /* ─────────────────────────────── data ─────────────────────────────── */
 
-const features = [
-  { icon: Brain,     title: "IA Avancée",              description: "Algorithmes de machine learning de pointe — Random Forest, XGBoost, réseaux de neurones — pour des prédictions précises.", color: "from-blue-500 to-cyan-400"    },
-  { icon: Database,  title: "Gestion des Données",      description: "Importez CSV/Excel, nettoyez automatiquement, détectez les anomalies et transformez vos données médicales.",             color: "from-cyan-500 to-teal-400"    },
-  { icon: BarChart3, title: "Visualisation Avancée",    description: "Graphiques interactifs, boxplots, corrélations et analyses SHAP pour explorer et interpréter vos modèles.",             color: "from-teal-500 to-emerald-400" },
-  { icon: Shield,    title: "Sécurité Médicale",        description: "Protection des données conforme aux normes RGPD et HDS. Chiffrement de bout en bout pour vos données sensibles.",        color: "from-violet-500 to-purple-400"},
-  { icon: Zap,       title: "Temps Réel",               description: "Entraînement rapide, prédictions instantanées et monitoring des métriques en direct pour un workflow optimisé.",         color: "from-amber-500 to-orange-400" },
-  { icon: TrendingUp,title: "Résultats Exportables",    description: "Rapports PDF détaillés, métriques de performance et comparaison de modèles pour valider et partager vos résultats.",    color: "from-pink-500 to-rose-400"   },
-];
+const FEATURE_KEYS = [
+  { icon: Brain,     key: "ai",       color: "from-blue-500 to-cyan-400" },
+  { icon: Database,  key: "data",     color: "from-cyan-500 to-teal-400" },
+  { icon: BarChart3, key: "viz",      color: "from-teal-500 to-emerald-400" },
+  { icon: Shield,    key: "security", color: "from-violet-500 to-purple-400" },
+  { icon: Zap,       key: "realtime", color: "from-amber-500 to-orange-400" },
+  { icon: TrendingUp, key: "export",  color: "from-pink-500 to-rose-400" },
+] as const;
 
-const pipeline = [
-  { step: '01', icon: Upload,       label: 'Import',       desc: 'CSV, Excel, images DICOM'          },
-  { step: '02', icon: Database,     label: 'Exploration',  desc: 'Analyse & visualisation'            },
-  { step: '03', icon: FlaskConical, label: 'Préparation',  desc: 'Nettoyage & feature engineering'   },
-  { step: '04', icon: Cpu,          label: 'Entraînement', desc: 'AutoML & sélection de modèles'     },
-  { step: '05', icon: TrendingUp,   label: 'Prédiction',   desc: 'Inférence & rapport exportable'    },
-];
+const PIPELINE_KEYS = [
+  { step: '01', icon: Upload,       key: 'import'  },
+  { step: '02', icon: Database,     key: 'explore' },
+  { step: '03', icon: FlaskConical, key: 'prepare' },
+  { step: '04', icon: Cpu,          key: 'train'   },
+  { step: '05', icon: TrendingUp,   key: 'predict' },
+] as const;
 
-const testimonials = [
-  { name: "Dr. Sophie Martin",  role: "Cardiologue, CHU Paris",          content: "MedIQ a transformé notre approche diagnostique. La précision des prédictions nous permet d'agir plus rapidement.", avatar: "SM", rating: 5 },
-  { name: "Prof. Jean Dubois",  role: "Chef de service, Institut Pasteur", content: "L'interface intuitive et la puissance des algorithmes font de cette plateforme un outil indispensable pour la recherche.", avatar: "JD", rating: 5 },
-  { name: "Dr. Marie Laurent",  role: "Oncologue, Gustave Roussy",        content: "Grâce à MedIQ, nous avons réduit de 40 % le temps d'analyse de nos données patients.",                           avatar: "ML", rating: 5 },
-];
+const TESTIMONIAL_KEYS = [
+  { key: 'sm', avatar: 'SM', rating: 5 },
+  { key: 'jd', avatar: 'JD', rating: 5 },
+  { key: 'ml', avatar: 'ML', rating: 5 },
+] as const;
 
-const statsData = [
-  { target: 98,  suffix: '%', label: 'Précision IA'   },
-  { target: 500, suffix: '+', label: 'Médecins'        },
-  { target: 50,  suffix: '+', label: 'Hôpitaux'        },
-  { target: 1,   suffix: 'M+',label: 'Prédictions'     },
-];
+const STATS_KEYS = [
+  { target: 98,  suffix: '%',  labelKey: 'precision' },
+  { target: 500, suffix: '+',  labelKey: 'doctors' },
+  { target: 50,  suffix: '+',  labelKey: 'hospitals' },
+  { target: 1,   suffix: 'M+', labelKey: 'predictions' },
+] as const;
 
 /* ─────────────────────────────── sub-components ─────────────────────────────── */
 
@@ -115,6 +118,22 @@ function StatCounter({ target, suffix, label }: { target: number; suffix: string
       </div>
       <div className="text-sm text-muted-foreground mt-1 font-medium">{label}</div>
     </div>
+  );
+}
+
+function StatsRow() {
+  const { t } = useTranslation();
+  return (
+    <>
+      {STATS_KEYS.map((s) => (
+        <StatCounter
+          key={s.labelKey}
+          target={s.target}
+          suffix={s.suffix}
+          label={t(`landing.stats.${s.labelKey}`)}
+        />
+      ))}
+    </>
   );
 }
 
@@ -146,6 +165,7 @@ function OrbField() {
 
 /* Mock dashboard card that floats in the hero */
 function DashboardMock() {
+  const { t } = useTranslation();
   return (
     <TiltCard className="relative w-full max-w-[480px] mx-auto">
       <div
@@ -157,7 +177,7 @@ function DashboardMock() {
           <div className="w-3 h-3 rounded-full bg-rose-400" />
           <div className="w-3 h-3 rounded-full bg-amber-400" />
           <div className="w-3 h-3 rounded-full bg-emerald-400" />
-          <span className="ml-3 text-xs text-muted-foreground font-mono">MedIQ — Dashboard</span>
+          <span className="ml-3 text-xs text-muted-foreground font-mono">{t("landing.dashboardMock.title")}</span>
         </div>
 
         {/* Content */}
@@ -165,9 +185,9 @@ function DashboardMock() {
           {/* Metric row */}
           <div className="grid grid-cols-3 gap-3">
             {[
-              { label: 'Précision', value: '97.4%', color: 'text-emerald-500' },
-              { label: 'F1-Score',  value: '0.961', color: 'text-blue-400'   },
-              { label: 'AUC-ROC',   value: '0.993', color: 'text-violet-400' },
+              { label: t("landing.dashboardMock.precision"), value: '97.4%', color: 'text-emerald-500' },
+              { label: t("landing.dashboardMock.f1"),        value: '0.961', color: 'text-blue-400'   },
+              { label: t("landing.dashboardMock.auc"),       value: '0.993', color: 'text-violet-400' },
             ].map((m) => (
               <div key={m.label} className="rounded-xl p-3 bg-muted/40 border border-border/30">
                 <div className={`text-lg font-bold ${m.color}`}>{m.value}</div>
@@ -178,7 +198,7 @@ function DashboardMock() {
 
           {/* Mini bar chart */}
           <div className="rounded-xl p-4 bg-muted/30 border border-border/30">
-            <div className="text-xs text-muted-foreground mb-3 font-medium">Distribution des prédictions</div>
+            <div className="text-xs text-muted-foreground mb-3 font-medium">{t("landing.dashboardMock.distributionTitle")}</div>
             <div className="flex items-end gap-1.5 h-16">
               {[45, 72, 58, 90, 67, 82, 55, 78, 61, 95, 70, 88].map((h, i) => (
                 <motion.div
@@ -224,7 +244,7 @@ function DashboardMock() {
         transition={{ duration: 3, repeat: Infinity, ease: 'easeInOut' }}
       >
         <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-        <span className="text-xs font-semibold text-emerald-500">Modèle actif</span>
+        <span className="text-xs font-semibold text-emerald-500">{t("landing.dashboardMock.activeModel")}</span>
       </motion.div>
 
       <motion.div
@@ -233,7 +253,7 @@ function DashboardMock() {
         transition={{ duration: 3.5, repeat: Infinity, ease: 'easeInOut', delay: 0.5 }}
       >
         <Sparkles className="w-3 h-3 text-blue-400" />
-        <span className="text-xs font-semibold text-blue-400">Prédiction IA</span>
+        <span className="text-xs font-semibold text-blue-400">{t("landing.dashboardMock.aiPrediction")}</span>
       </motion.div>
     </TiltCard>
   );
@@ -242,8 +262,36 @@ function DashboardMock() {
 /* ─────────────────────────────── main page ─────────────────────────────── */
 
 export default function LandingPage() {
+  const { t } = useTranslation();
   const [scrolled, setScrolled] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [isDark, setIsDark] = useState<boolean>(() => {
+    if (typeof window === "undefined") return false;
+    const stored = localStorage.getItem("theme");
+    const prefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
+    return stored === "dark" || (!stored && prefersDark);
+  });
+
+  useEffect(() => {
+    const handler = (e: StorageEvent) => {
+      if (e.key === "theme") setIsDark(e.newValue === "dark");
+    };
+    window.addEventListener("storage", handler);
+    return () => window.removeEventListener("storage", handler);
+  }, []);
+
+  const toggleTheme = () => {
+    const newDark = !isDark;
+    setIsDark(newDark);
+    document.documentElement.classList.toggle("dark", newDark);
+    localStorage.setItem("theme", newDark ? "dark" : "light");
+  };
+
+  const navLabels = [
+    t("landing.nav.features"),
+    t("landing.nav.pipeline"),
+    t("landing.nav.testimonials"),
+  ];
 
   useEffect(() => {
     const onScroll = () => setScrolled(window.scrollY > 20);
@@ -285,7 +333,7 @@ export default function LandingPage() {
 
             {/* Desktop links */}
             <div className="hidden md:flex items-center gap-8 text-sm">
-              {['Fonctionnalités','Pipeline','Témoignages'].map((label, i) => (
+              {navLabels.map((label, i) => (
                 <a
                   key={i}
                   href={`#${['features','pipeline','testimonials'][i]}`}
@@ -298,12 +346,14 @@ export default function LandingPage() {
 
             {/* CTA */}
             <div className="flex items-center gap-3">
+              <ThemeToggle isDark={isDark} onToggle={toggleTheme} />
+              <LanguageSwitcher variant="badge" />
               <Button variant="ghost" size="sm" asChild className="hidden sm:flex">
-                <Link to="/login">Connexion</Link>
+                <Link to="/login">{t("landing.nav.login")}</Link>
               </Button>
               <Button size="sm" variant="premium" asChild className="shadow-glow-sm">
                 <Link to="/signup" className="flex items-center gap-1.5">
-                  Commencer <ArrowRight className="w-3.5 h-3.5" />
+                  {t("landing.nav.start")} <ArrowRight className="w-3.5 h-3.5" />
                 </Link>
               </Button>
               <button
@@ -324,7 +374,7 @@ export default function LandingPage() {
             exit={{ opacity: 0, height: 0 }}
             className="md:hidden glass-premium border-t border-border/30 px-4 py-4 flex flex-col gap-3 text-sm"
           >
-            {['Fonctionnalités','Pipeline','Témoignages'].map((label, i) => (
+            {navLabels.map((label, i) => (
               <a
                 key={i}
                 href={`#${['features','pipeline','testimonials'][i]}`}
@@ -334,7 +384,7 @@ export default function LandingPage() {
                 {label}
               </a>
             ))}
-            <Link to="/login" className="text-muted-foreground hover:text-foreground font-medium py-1">Connexion</Link>
+            <Link to="/login" className="text-muted-foreground hover:text-foreground font-medium py-1">{t("landing.nav.login")}</Link>
           </motion.div>
         )}
       </motion.nav>
@@ -358,17 +408,17 @@ export default function LandingPage() {
                 className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-primary/10 border border-primary/25 mb-6"
               >
                 <span className="w-2 h-2 rounded-full bg-primary animate-pulse" />
-                <span className="text-sm font-semibold text-primary">Plateforme IA Médicale · v2.0</span>
+                <span className="text-sm font-semibold text-primary">{t("landing.hero.badge")}</span>
               </motion.div>
 
               {/* Heading */}
               <motion.h1
                 variants={{ hidden: { opacity: 0, y: 30 }, show: { opacity: 1, y: 0, transition: { duration: 0.7, ease: [0.22, 1, 0.36, 1] } } }}
-                className="text-5xl sm:text-6xl lg:text-7xl font-extrabold tracking-tight leading-[1.05] mb-6"
+                className="text-5xl sm:text-6xl lg:text-7xl font-black tracking-tight leading-[1.05] mb-6 text-foreground/85"
               >
-                L'IA qui{' '}
+                {t("landing.hero.titlePart1")}{' '}
                 <span className="relative inline-block">
-                  <span className="text-gradient-premium">révolutionne</span>
+                  <span className="text-gradient-premium">{t("landing.hero.titlePart2Hl")}</span>
                   <motion.span
                     className="absolute -bottom-1 left-0 h-[3px] rounded-full bg-gradient-to-r from-primary to-secondary"
                     initial={{ width: 0 }}
@@ -376,7 +426,7 @@ export default function LandingPage() {
                     transition={{ delay: 0.9, duration: 0.8, ease: 'easeOut' }}
                   />
                 </span>
-                <br />la médecine
+                <br />{t("landing.hero.titlePart3")}
               </motion.h1>
 
               {/* Sub */}
@@ -384,8 +434,7 @@ export default function LandingPage() {
                 variants={{ hidden: { opacity: 0, y: 20 }, show: { opacity: 1, y: 0, transition: { duration: 0.6 } } }}
                 className="text-lg sm:text-xl text-muted-foreground max-w-xl mb-8 leading-relaxed"
               >
-                Analysez vos données médicales, entraînez des modèles sur mesure et obtenez des prédictions fiables —
-                sans écrire une seule ligne de code.
+                {t("landing.hero.subtitle")}
               </motion.p>
 
               {/* CTAs */}
@@ -395,14 +444,14 @@ export default function LandingPage() {
               >
                 <Button size="lg" variant="premium" asChild className="text-base px-7 py-5 shadow-glow group">
                   <Link to="/signup" className="flex items-center gap-2">
-                    Démarrer gratuitement
+                    {t("landing.hero.ctaStart")}
                     <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
                   </Link>
                 </Button>
                 <Button size="lg" variant="outline" asChild className="text-base px-7 py-5 group">
                   <Link to="/login" className="flex items-center gap-2">
                     <Play className="w-4 h-4 fill-current" />
-                    Voir la démo
+                    {t("landing.hero.ctaDemo")}
                   </Link>
                 </Button>
               </motion.div>
@@ -412,10 +461,14 @@ export default function LandingPage() {
                 variants={{ hidden: { opacity: 0 }, show: { opacity: 1, transition: { duration: 0.6, delay: 0.2 } } }}
                 className="flex flex-wrap gap-5 text-sm text-muted-foreground"
               >
-                {['Essai 14 jours gratuit', 'Sans carte bancaire', 'RGPD conforme'].map((t) => (
-                  <div key={t} className="flex items-center gap-1.5">
+                {[
+                  t("landing.hero.trustTrial"),
+                  t("landing.hero.trustNoCard"),
+                  t("landing.hero.trustGdpr"),
+                ].map((label) => (
+                  <div key={label} className="flex items-center gap-1.5">
                     <CheckCircle2 className="w-4 h-4 text-emerald-500" />
-                    <span>{t}</span>
+                    <span>{label}</span>
                   </div>
                 ))}
               </motion.div>
@@ -440,7 +493,7 @@ export default function LandingPage() {
           transition={{ duration: 2, repeat: Infinity }}
         >
           <div className="w-px h-10 bg-gradient-to-b from-transparent via-muted-foreground/40 to-transparent" />
-          <span className="text-[10px] tracking-widest uppercase">Scroll</span>
+          <span className="text-[10px] tracking-widest uppercase">{t("landing.hero.scroll")}</span>
         </motion.div>
       </section>
 
@@ -451,9 +504,7 @@ export default function LandingPage() {
 
         <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="grid grid-cols-2 md:grid-cols-4 gap-8 lg:gap-12">
-            {statsData.map((s) => (
-              <StatCounter key={s.label} {...s} />
-            ))}
+            <StatsRow />
           </div>
         </div>
       </section>
@@ -471,21 +522,21 @@ export default function LandingPage() {
             className="text-center mb-16 max-w-2xl mx-auto"
           >
             <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-primary/10 border border-primary/20 mb-4 text-xs font-semibold text-primary uppercase tracking-wider">
-              Fonctionnalités
+              {t("landing.features.sectionLabel")}
             </div>
             <h2 className="text-3xl lg:text-5xl font-bold mb-4">
-              Tout ce dont vous avez{' '}
-              <span className="text-gradient-premium">besoin</span>
+              {t("landing.features.titlePart1")}{' '}
+              <span className="text-gradient-premium">{t("landing.features.titlePart2Hl")}</span>
             </h2>
             <p className="text-muted-foreground text-lg">
-              Une suite complète d'outils pour transformer vos données médicales en valeur clinique.
+              {t("landing.features.subtitle")}
             </p>
           </motion.div>
 
           <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {features.map((f, i) => (
+            {FEATURE_KEYS.map((f, i) => (
               <motion.div
-                key={i}
+                key={f.key}
                 initial={{ opacity: 0, y: 30 }}
                 whileInView={{ opacity: 1, y: 0 }}
                 viewport={{ once: true }}
@@ -499,11 +550,11 @@ export default function LandingPage() {
                     <div className={`w-12 h-12 rounded-xl bg-gradient-to-br ${f.color} flex items-center justify-center mb-5 shadow-lg group-hover:scale-110 transition-transform duration-300`}>
                       <f.icon className="w-6 h-6 text-white" />
                     </div>
-                    <h3 className="text-lg font-bold mb-2 relative z-10">{f.title}</h3>
-                    <p className="text-muted-foreground text-sm leading-relaxed relative z-10">{f.description}</p>
+                    <h3 className="text-lg font-bold mb-2 relative z-10">{t(`landing.features.items.${f.key}.title`)}</h3>
+                    <p className="text-muted-foreground text-sm leading-relaxed relative z-10">{t(`landing.features.items.${f.key}.description`)}</p>
 
                     <div className="mt-4 flex items-center gap-1 text-xs font-semibold text-primary opacity-0 group-hover:opacity-100 transition-opacity duration-300 relative z-10">
-                      En savoir plus <ChevronRight className="w-3 h-3" />
+                      {t("landing.features.learnMore")} <ChevronRight className="w-3 h-3" />
                     </div>
                   </div>
                 </TiltCard>
@@ -526,14 +577,14 @@ export default function LandingPage() {
             className="text-center mb-16"
           >
             <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-secondary/10 border border-secondary/20 mb-4 text-xs font-semibold text-secondary uppercase tracking-wider">
-              Pipeline
+              {t("landing.pipeline.sectionLabel")}
             </div>
             <h2 className="text-3xl lg:text-5xl font-bold mb-4">
-              De la donnée brute au{' '}
-              <span className="text-gradient-premium">résultat clinique</span>
+              {t("landing.pipeline.titlePart1")}{' '}
+              <span className="text-gradient-premium">{t("landing.pipeline.titlePart2Hl")}</span>
             </h2>
             <p className="text-muted-foreground text-lg max-w-xl mx-auto">
-              Un flux guidé, étape par étape, conçu pour les cliniciens comme pour les chercheurs.
+              {t("landing.pipeline.subtitle")}
             </p>
           </motion.div>
 
@@ -551,9 +602,9 @@ export default function LandingPage() {
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-3 lg:grid-cols-5 gap-8 relative z-10">
-              {pipeline.map((step, i) => (
+              {PIPELINE_KEYS.map((step, i) => (
                 <motion.div
-                  key={i}
+                  key={step.key}
                   initial={{ opacity: 0, y: 30 }}
                   whileInView={{ opacity: 1, y: 0 }}
                   viewport={{ once: true }}
@@ -569,8 +620,8 @@ export default function LandingPage() {
                     </div>
                   </div>
                   <div>
-                    <div className="font-bold text-base mb-1">{step.label}</div>
-                    <div className="text-xs text-muted-foreground leading-relaxed">{step.desc}</div>
+                    <div className="font-bold text-base mb-1">{t(`landing.pipeline.steps.${step.key}.label`)}</div>
+                    <div className="text-xs text-muted-foreground leading-relaxed">{t(`landing.pipeline.steps.${step.key}.desc`)}</div>
                   </div>
                 </motion.div>
               ))}
@@ -592,21 +643,21 @@ export default function LandingPage() {
             className="text-center mb-16"
           >
             <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-accent/10 border border-accent/20 mb-4 text-xs font-semibold text-accent uppercase tracking-wider">
-              Témoignages
+              {t("landing.testimonials.sectionLabel")}
             </div>
             <h2 className="text-3xl lg:text-5xl font-bold mb-4">
-              Ils nous font{' '}
-              <span className="text-gradient-premium">confiance</span>
+              {t("landing.testimonials.titlePart1")}{' '}
+              <span className="text-gradient-premium">{t("landing.testimonials.titlePart2Hl")}</span>
             </h2>
             <p className="text-muted-foreground text-lg max-w-xl mx-auto">
-              Des professionnels de santé de toute la France utilisent MedIQ au quotidien.
+              {t("landing.testimonials.subtitle")}
             </p>
           </motion.div>
 
           <div className="grid md:grid-cols-3 gap-6">
-            {testimonials.map((t, i) => (
+            {TESTIMONIAL_KEYS.map((item, i) => (
               <motion.div
-                key={i}
+                key={item.key}
                 initial={{ opacity: 0, y: 30 }}
                 whileInView={{ opacity: 1, y: 0 }}
                 viewport={{ once: true }}
@@ -618,22 +669,22 @@ export default function LandingPage() {
                     <div className="absolute top-4 right-6 text-7xl font-serif text-primary/10 leading-none select-none">"</div>
 
                     <div className="flex gap-0.5 mb-4">
-                      {Array.from({ length: t.rating }).map((_, j) => (
+                      {Array.from({ length: item.rating }).map((_, j) => (
                         <Star key={j} className="w-4 h-4 fill-gold-500 text-gold-500" />
                       ))}
                     </div>
 
                     <p className="text-foreground/90 leading-relaxed mb-6 flex-1 relative z-10 text-sm">
-                      "{t.content}"
+                      "{t(`landing.testimonials.items.${item.key}.content`)}"
                     </p>
 
                     <div className="flex items-center gap-3 relative z-10 mt-auto">
                       <div className="w-11 h-11 rounded-full bg-gradient-to-br from-primary to-secondary flex items-center justify-center text-primary-foreground font-bold text-sm shadow-glow-sm">
-                        {t.avatar}
+                        {item.avatar}
                       </div>
                       <div>
-                        <div className="font-semibold text-sm">{t.name}</div>
-                        <div className="text-xs text-muted-foreground">{t.role}</div>
+                        <div className="font-semibold text-sm">{t(`landing.testimonials.items.${item.key}.name`)}</div>
+                        <div className="text-xs text-muted-foreground">{t(`landing.testimonials.items.${item.key}.role`)}</div>
                       </div>
                     </div>
                   </div>
@@ -663,35 +714,39 @@ export default function LandingPage() {
                 <div className="relative z-10">
                   <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-primary/10 border border-primary/20 mb-6 text-xs font-semibold text-primary uppercase tracking-wider">
                     <Sparkles className="w-3.5 h-3.5" />
-                    Commencez aujourd'hui
+                    {t("landing.cta.badge")}
                   </div>
 
                   <h2 className="text-3xl lg:text-5xl font-extrabold mb-4">
-                    Prêt à transformer<br />
-                    <span className="text-gradient-premium">vos données médicales ?</span>
+                    {t("landing.cta.titlePart1")}<br />
+                    <span className="text-gradient-premium">{t("landing.cta.titlePart2Hl")}</span>
                   </h2>
 
                   <p className="text-muted-foreground text-lg mb-8 max-w-xl mx-auto">
-                    Rejoignez plus de 500 professionnels de santé qui améliorent leurs diagnostics grâce à l'IA.
+                    {t("landing.cta.subtitle")}
                   </p>
 
                   <div className="flex flex-col sm:flex-row items-center justify-center gap-4 mb-8">
                     <Button size="lg" variant="premium" asChild className="text-base px-8 py-5 shadow-glow group">
                       <Link to="/signup" className="flex items-center gap-2">
-                        Démarrer gratuitement
+                        {t("landing.cta.start")}
                         <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
                       </Link>
                     </Button>
                     <Button size="lg" variant="outline" asChild className="text-base px-8 py-5">
-                      <Link to="/login">Se connecter</Link>
+                      <Link to="/login">{t("landing.cta.login")}</Link>
                     </Button>
                   </div>
 
                   <div className="flex flex-wrap items-center justify-center gap-6 text-sm text-muted-foreground">
-                    {['14 jours gratuits', 'Sans carte bancaire', 'Support inclus'].map((t) => (
-                      <div key={t} className="flex items-center gap-1.5">
+                    {[
+                      t("landing.cta.trustTrial"),
+                      t("landing.cta.trustNoCard"),
+                      t("landing.cta.trustSupport"),
+                    ].map((label) => (
+                      <div key={label} className="flex items-center gap-1.5">
                         <CheckCircle2 className="w-4 h-4 text-emerald-500" />
-                        <span>{t}</span>
+                        <span>{label}</span>
                       </div>
                     ))}
                   </div>
@@ -714,13 +769,17 @@ export default function LandingPage() {
             </div>
 
             <div className="flex items-center gap-8 text-sm text-muted-foreground">
-              {['Mentions légales', 'Confidentialité', 'Contact'].map((l) => (
+              {[
+                t("landing.footer.legal"),
+                t("landing.footer.privacy"),
+                t("landing.footer.contact"),
+              ].map((l) => (
                 <a key={l} href="#" className="hover:text-foreground transition-colors">{l}</a>
               ))}
             </div>
 
             <div className="text-sm text-muted-foreground">
-              © 2025 MedIQ. Tous droits réservés.
+              {t("landing.footer.copyright")}
             </div>
           </div>
         </div>

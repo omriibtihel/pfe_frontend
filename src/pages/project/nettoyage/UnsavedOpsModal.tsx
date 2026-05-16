@@ -1,4 +1,5 @@
 import { AlertTriangle } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import { Modal } from "@/components/ui/modal";
 import { Button } from "@/components/ui/button";
 
@@ -16,11 +17,16 @@ export function UnsavedOpsModal({
   open,
   onStay,
   onLeave,
-  title = "Opérations non sauvegardées",
-  description = "Vous avez des opérations de nettoyage qui n'ont pas encore été sauvegardées en version. Si vous quittez, ces modifications seront perdues.",
-  stayLabel = "Rester sur la page",
-  leaveLabel = "Quitter sans sauvegarder",
+  title,
+  description,
+  stayLabel,
+  leaveLabel,
 }: Props) {
+  const { t } = useTranslation();
+  title = title ?? t("nettoyage.unsaved.title");
+  description = description ?? t("nettoyage.unsaved.desc");
+  stayLabel = stayLabel ?? t("nettoyage.unsaved.stay");
+  leaveLabel = leaveLabel ?? t("nettoyage.unsaved.leave");
   return (
     <Modal
       isOpen={open}

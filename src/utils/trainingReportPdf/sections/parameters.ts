@@ -7,56 +7,64 @@ import { modelName } from '../formatters';
 import { splitLabel } from '../session';
 
 export function renderParameters(doc: jsPDF, ctx: TrainingReportContext, y: number): number {
-  const { session, isReg } = ctx;
+  const { session } = ctx;
 
-  y = section(doc, '1.', "Paramètres de l'analyse", y);
+  y = section(doc, '1.', "Stratégie d'évaluation", y);
 
   const configRows: string[][] = [
-    ['Variable cible', session.config.targetColumn ?? 'N/A'],
-    ['Type de tâche', isReg ? 'Régression' : 'Classification'],
     ['Méthode de partitionnement', splitLabel(session)],
     ['Modèles évalués', (session.config.models ?? []).map(modelName).join(' — ') || 'N/A'],
     ["Métriques d'optimisation", (session.config.metrics ?? []).join(', ') || 'N/A'],
     [
       "Recherche d'hyperparamètres",
       session.config.useGridSearch
-        ? `Activée — validation croisée ${session.config.gridCvFolds} plis`
+        ? `GridSearchCV — validation croisée ${session.config.gridCvFolds} plis`
         : 'Désactivée',
     ],
     [
       'Gestion du déséquilibre',
-      session.config.balancing?.strategy !== 'none'
-        ? (session.config.balancing?.strategy ?? 'non spécifiée')
+      session.config.balancing?.strategy && session.config.balancing.strategy !== 'none'
+        ? session.config.balancing.strategy
         : 'Aucune',
     ],
   ];
 
   const prep = session.config.preprocessing?.defaults;
   if (prep) {
-    configRows.push([
-      'Prétraitement automatique',
-      [
-        `Imputation num. : ${prep.numericImputation}`,
-        `Normalisation : ${prep.numericScaling}`,
-        `Imputation cat. : ${prep.categoricalImputation}`,
-        `Encodage cat. : ${prep.categoricalEncoding}`,
-      ].join('\n'),
-    ]);
+    configRows.push(
+      ['Imputation numérique', prep.numericImputation],
+      ['Normalisation', prep.numericScaling],
+      ['Imputation catégorielle', prep.categoricalImputation],
+      ['Encodage catégoriel', prep.categoricalEncoding],
+    );
   }
 
   autoTable(doc, {
+    head: [['Paramètre', 'Valeur retenue']],
     body: configRows,
     startY: y,
     margin: { left: M, right: M },
-    styles: { fontSize: 8, cellPadding: 3.2, overflow: 'linebreak', valign: 'middle' },
+    styles: {
+      fontSize: 9,
+      cellPadding: 3.5,
+      overflow: 'linebreak',
+      valign: 'middle',
+      lineColor: C.border,
+      lineWidth: 0.15,
+    },
+    headStyles: {
+      fillColor: C.navy,
+      textColor: C.white,
+      fontStyle: 'bold',
+      fontSize: 9,
+      halign: 'left',
+    },
     columnStyles: {
-      0: { fontStyle: 'bold', fillColor: C.bg, cellWidth: 62, textColor: C.muted },
+      0: { fontStyle: 'bold', textColor: C.slate, cellWidth: 62, fillColor: C.navyLight },
       1: { textColor: C.slate },
     },
     theme: 'plain',
-    tableLineColor: C.border,
-    tableLineWidth: 0.15,
   });
 
-  return finalY(doc, y) + 10;
+  return finalY(doc, y) + 6;
 }

@@ -4,6 +4,7 @@
  */
 import { useMemo } from "react";
 import { useNavigate } from "react-router-dom";
+import { useTranslation } from "react-i18next";
 import { useToast } from "@/hooks/use-toast";
 
 import dataService from "@/services/dataService";
@@ -18,6 +19,7 @@ import { writeFallbackSchema, postSchemaAction, inferKindFallback } from "./useN
 export function useNettoyageActions(state: NettoyageState, data: NettoyageData, projectId: string) {
   const navigate = useNavigate();
   const { toast } = useToast();
+  const { t } = useTranslation();
 
   // ── Inspector ───────────────────────────────────────────────────────────────
   const openInspector = (col: string) => {
@@ -40,7 +42,7 @@ export function useNettoyageActions(state: NettoyageState, data: NettoyageData, 
     overrideColumns?: string[],
   ) => {
     if (!data.effectiveDatasetId) {
-      toast({ title: "Choisir un dataset", description: "Sélectionne un dataset avant d'appliquer une opération.", variant: "destructive" });
+      toast({ title: t("nettoyage.toast.pickDatasetTitle"), description: t("nettoyage.toast.pickDatasetDesc"), variant: "destructive" });
       return;
     }
 
@@ -49,11 +51,11 @@ export function useNettoyageActions(state: NettoyageState, data: NettoyageData, 
     const removed = selected.filter((c) => !state.columns.includes(c));
 
     if (removed.length) {
-      toast({ title: "Sélection invalide", description: `Colonnes ignorées (autre dataset): ${removed.join(", ")}`, variant: "destructive" });
+      toast({ title: t("nettoyage.toast.invalidSelectionTitle"), description: t("nettoyage.toast.invalidSelectionDesc", { cols: removed.join(", ") }), variant: "destructive" });
       return;
     }
     if (action === "drop_columns" && safeCols.length === 0) {
-      toast({ title: "Sélection requise", description: "Choisis au moins une colonne pour drop_columns.", variant: "destructive" });
+      toast({ title: t("nettoyage.toast.requiredSelectionTitle"), description: t("nettoyage.toast.requiredSelectionDesc"), variant: "destructive" });
       return;
     }
 
@@ -66,10 +68,10 @@ export function useNettoyageActions(state: NettoyageState, data: NettoyageData, 
       });
       if (!data.isEditingVersion) state.setHasDirtySession(true);
       await data.refreshProcessing(data.effectiveDatasetId, 1);
-      const colInfo = safeCols.length ? ` sur ${safeCols.join(", ")}` : "";
-      toast({ title: "Opération appliquée", description: `${description}${colInfo}` });
+      const desc = safeCols.length ? t("nettoyage.toast.opAppliedDescWithCols", { desc: description, cols: safeCols.join(", ") }) : description;
+      toast({ title: t("nettoyage.toast.opAppliedTitle"), description: desc });
     } catch (error) {
-      toast({ title: "Erreur", description: (error as Error).message, variant: "destructive" });
+      toast({ title: t("nettoyage.toast.errorTitle"), description: (error as Error).message, variant: "destructive" });
     }
   };
 
@@ -79,14 +81,14 @@ export function useNettoyageActions(state: NettoyageState, data: NettoyageData, 
     try {
       const res = await dataService.undoLastOperation(projectId, data.effectiveDatasetId);
       if (!(res?.ok ?? true)) {
-        toast({ title: "Rien à annuler", description: "Aucune opération trouvée.", variant: "destructive" });
+        toast({ title: t("nettoyage.toast.nothingToUndoTitle"), description: t("nettoyage.toast.nothingToUndoDesc"), variant: "destructive" });
         return;
       }
       if (!data.isEditingVersion) state.setHasDirtySession(true);
       await data.refreshProcessing(data.effectiveDatasetId, 1);
-      toast({ title: "Opération annulée" });
+      toast({ title: t("nettoyage.toast.undoneTitle") });
     } catch (error) {
-      toast({ title: "Erreur", description: (error as Error).message, variant: "destructive" });
+      toast({ title: t("nettoyage.toast.errorTitle"), description: (error as Error).message, variant: "destructive" });
     }
   };
 
@@ -108,9 +110,9 @@ export function useNettoyageActions(state: NettoyageState, data: NettoyageData, 
     try {
       const { blob, filename } = await dataService.exportCleaned(projectId, data.effectiveDatasetId);
       triggerBrowserDownload(blob, filename ?? `dataset_${data.effectiveDatasetId}_cleaned.csv`);
-      toast({ title: "Téléchargement", description: "Le fichier nettoyé a été téléchargé." });
+      toast({ title: t("nettoyage.toast.downloadTitle"), description: t("nettoyage.toast.downloadDesc") });
     } catch (e) {
-      toast({ title: "Erreur", description: (e as Error).message, variant: "destructive" });
+      toast({ title: t("nettoyage.toast.errorTitle"), description: (e as Error).message, variant: "destructive" });
     } finally {
       state.setIsDownloading(false);
     }
@@ -134,7 +136,7 @@ export function useNettoyageActions(state: NettoyageState, data: NettoyageData, 
     state.setIsSavingProcessed(true);
     try {
       if (!state.workspaceDatasetId) {
-        toast({ title: "Workspace introuvable", description: "Impossible d'enregistrer sans workspace.", variant: "destructive" });
+        toast({ title: t("nettoyage.toast.workspaceMissingTitle"), description: t("nettoyage.toast.workspaceMissingDesc"), variant: "destructive" });
         return;
       }
       await dataService.commitVersionWorkspace(projectId, data.versionId, state.workspaceDatasetId);
@@ -149,9 +151,9 @@ export function useNettoyageActions(state: NettoyageState, data: NettoyageData, 
 
       state.setWorkspaceDatasetId(newWsId);
       await data.refreshProcessing(newWsId, 1);
-      toast({ title: "Version mise à jour", description: `La version #${data.versionId} a été mise à jour avec les nouvelles données.` });
+      toast({ title: t("nettoyage.toast.versionUpdatedTitle"), description: t("nettoyage.toast.versionUpdatedDesc", { id: data.versionId }) });
     } catch (e) {
-      toast({ title: "Erreur", description: (e as Error).message, variant: "destructive" });
+      toast({ title: t("nettoyage.toast.errorTitle"), description: (e as Error).message, variant: "destructive" });
     } finally {
       state.setIsSavingProcessed(false);
     }
@@ -165,8 +167,8 @@ export function useNettoyageActions(state: NettoyageState, data: NettoyageData, 
     );
     if (isDuplicate) {
       toast({
-        title: "Nom déjà utilisé",
-        description: `Une version nommée "${trimmedName}" existe déjà dans ce projet.`,
+        title: t("nettoyage.toast.nameTakenTitle"),
+        description: t("nettoyage.toast.nameTakenDesc", { name: trimmedName }),
         variant: "destructive",
       });
       return;
@@ -182,11 +184,13 @@ export function useNettoyageActions(state: NettoyageState, data: NettoyageData, 
       state.setHasDirtySession(false);
       await data.refreshVersions();
       toast({
-        title: "Version enregistrée",
-        description: newVersionId ? `"${savedName}" (version #${newVersionId}) ajoutée à l'historique.` : "Version ajoutée à l'historique.",
+        title: t("nettoyage.toast.versionSavedTitle"),
+        description: newVersionId
+          ? t("nettoyage.toast.versionSavedDescId", { name: savedName, id: newVersionId })
+          : t("nettoyage.toast.versionSavedDescNoId"),
       });
     } catch (e) {
-      toast({ title: "Erreur", description: (e as Error).message, variant: "destructive" });
+      toast({ title: t("nettoyage.toast.errorTitle"), description: (e as Error).message, variant: "destructive" });
     } finally {
       state.setIsSavingProcessed(false);
     }
@@ -203,7 +207,7 @@ export function useNettoyageActions(state: NettoyageState, data: NettoyageData, 
       await postSchemaAction(projectId, data.effectiveDatasetId, { schema_action: "dismiss_alert", alert_key: key, dismissed });
       await data.refreshProcessing(data.effectiveDatasetId, state.page);
     } catch (e) {
-      toast({ title: "Erreur", description: (e as Error).message ?? "Schema non persisté", variant: "destructive" });
+      toast({ title: t("nettoyage.toast.errorTitle"), description: (e as Error).message ?? t("nettoyage.toast.schemaNotPersisted"), variant: "destructive" });
     }
   };
 
@@ -217,7 +221,7 @@ export function useNettoyageActions(state: NettoyageState, data: NettoyageData, 
       await postSchemaAction(projectId, data.effectiveDatasetId, { schema_action: "verify_categorical", column: col, verified });
       await data.refreshProcessing(data.effectiveDatasetId, state.page);
     } catch (e) {
-      toast({ title: "Erreur", description: (e as Error).message ?? "Schema non persisté", variant: "destructive" });
+      toast({ title: t("nettoyage.toast.errorTitle"), description: (e as Error).message ?? t("nettoyage.toast.schemaNotPersisted"), variant: "destructive" });
     }
   };
 
@@ -241,7 +245,7 @@ export function useNettoyageActions(state: NettoyageState, data: NettoyageData, 
       }
       await data.refreshProcessing(data.effectiveDatasetId, state.page);
     } catch (e) {
-      toast({ title: "Erreur", description: (e as Error).message ?? "Type non persisté", variant: "destructive" });
+      toast({ title: t("nettoyage.toast.errorTitle"), description: (e as Error).message ?? t("nettoyage.toast.typeNotPersisted"), variant: "destructive" });
     }
   };
 
@@ -263,7 +267,7 @@ export function useNettoyageActions(state: NettoyageState, data: NettoyageData, 
       }
       await data.refreshProcessing(data.effectiveDatasetId, state.page);
     } catch (e) {
-      toast({ title: "Erreur", description: (e as Error).message ?? "Schema non persisté", variant: "destructive" });
+      toast({ title: t("nettoyage.toast.errorTitle"), description: (e as Error).message ?? t("nettoyage.toast.schemaNotPersisted"), variant: "destructive" });
     }
   };
 
@@ -283,19 +287,19 @@ export function useNettoyageActions(state: NettoyageState, data: NettoyageData, 
     if (!data.effectiveDatasetId) return;
     const col = state.substColumn || "";
     if (!col.trim()) {
-      toast({ title: "Colonne requise", description: "Choisis une colonne pour la substitution.", variant: "destructive" });
+      toast({ title: t("nettoyage.toast.colRequiredTitle"), description: t("nettoyage.toast.colRequiredDesc"), variant: "destructive" });
       return;
     }
     if (!state.columns.includes(col)) {
-      toast({ title: "Colonne invalide", description: "Cette colonne n'existe pas dans le dataset courant.", variant: "destructive" });
+      toast({ title: t("nettoyage.toast.colInvalidTitle"), description: t("nettoyage.toast.colInvalidDesc"), variant: "destructive" });
       return;
     }
     if (!state.substTreatFromAsNull && state.substFrom.trim() === "") {
-      toast({ title: "Valeur à remplacer requise", description: 'Renseigne "From" (ou coche "From = null").', variant: "destructive" });
+      toast({ title: t("nettoyage.toast.fromRequiredTitle"), description: t("nettoyage.toast.fromRequiredDesc"), variant: "destructive" });
       return;
     }
     await runCleaning(
-      "Substitution de valeurs",
+      t("nettoyage.cleaning.substituteValues"),
       "substitute_values",
       {
         column: col,

@@ -1,30 +1,50 @@
 import type jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import type { ModelResult } from '@/types';
-import { formatMetricValue, metricDirection } from '@/utils/metricUtils';
-import { C, CW, M } from '../constants';
+import { metricDirection } from '@/utils/metricUtils';
+import { C, M } from '../constants';
 import type { TrainingReportContext } from '../context';
-import { cvForModel, isBounded } from '../enrichment';
-import { bar, dot, ensureY, fill, finalY, hrule, section, txtc } from '../drawing';
-import { modelName, num4, pct, safeN, sec } from '../formatters';
-import { quality, qualityColor, qualityLabel } from '../quality';
+import { ensureY, finalY, section, txtc } from '../drawing';
+import { modelName, num4, pct, sec } from '../formatters';
 
+/**
+ * Section 2 — Comparaison des performances.
+ * Tableau unique : 1 ligne par modèle, en-tête bleu marine, pas de couleurs sur les cellules.
+ * Le meilleur modèle est marqué d'un astérisque uniquement.
+ */
 export function renderComparison(doc: jsPDF, ctx: TrainingReportContext, y: number): number {
-  const { session, best, isReg, enrichmentFor } = ctx;
+  const { session, best, isReg } = ctx;
 
   y = ensureY(doc, y, 25);
   y = section(doc, '2.', 'Comparaison des performances', y);
 
-  // ── Table ─────────────────────────────────────────────────────────────────
-  const tHead = isReg
-    ? ['Model', 'R² (test)', 'RMSE', 'MAE', 'Train Score', 'Time']
-    : ['Model', 'Accuracy', 'Recall', 'Precision', 'F1-Score', 'ROC AUC', 'Time'];
+  // ── Tri par score primaire (descendant si higher_is_better, ascendant sinon)
+  const primaryMetric =
+    session.results.find((r) => r.primaryMetric?.name)?.primaryMetric?.name ?? 'accuracy';
+  const direction = metricDirection(primaryMetric);
+  const nullVal = direction === 'lower_is_better' ? Infinity : -Infinity;
 
-  const tBody: string[][] = session.results.map((r) => {
+  const sorted = [...session.results].sort((a, b) => {
+    const aS = a.testScore ?? nullVal;
+    const bS = b.testScore ?? nullVal;
+    return direction === 'lower_is_better' ? aS - bS : bS - aS;
+  });
+
+  // ── Entêtes & corps du tableau ────────────────────────────────────────────
+  // Pour la classification on lit les métriques directement depuis r.metrics
+  // (moyenne des plis en CV) — exactement comme la table UI, pour garantir
+  // que les valeurs affichées ici correspondent à celles de la session.
+  const tHead = isReg
+    ? ['Rang', 'Modèle', 'R² (test)', 'RMSE', 'MAE', 'Train', 'Temps']
+    : ['Rang', 'Modèle', 'AUC-ROC', 'PR-AUC', 'F1', 'Recall', 'Precision', 'Temps'];
+
+  const tBody: string[][] = sorted.map((r, idx) => {
     const isBest = r.id === best?.id;
+    const rank = r.testScore !== null && isFinite(r.testScore as number) ? `${idx + 1}` : '—';
     const label = (isBest ? '* ' : '') + modelName(r.modelType);
     if (isReg) {
       return [
+        rank,
         label,
         num4(r.metrics?.r2 ?? r.testScore),
         num4(r.metrics?.rmse),
@@ -33,14 +53,14 @@ export function renderComparison(doc: jsPDF, ctx: TrainingReportContext, y: numb
         sec(r.trainingTime),
       ];
     }
-    const cv = cvForModel(r, enrichmentFor(r.id).detail);
     return [
+      rank,
       label,
-      pct(cv.accuracy ?? r.testScore),
-      pct(cv.recallMain),
-      pct(cv.precisionMain),
-      pct(cv.f1Main),
-      pct(cv.rocAuc),
+      pct(r.metrics?.rocAuc),
+      pct(r.metrics?.prAuc),
+      pct(r.metrics?.f1),
+      pct(r.metrics?.recall),
+      pct(r.metrics?.precision),
       sec(r.trainingTime),
     ];
   });
@@ -50,166 +70,79 @@ export function renderComparison(doc: jsPDF, ctx: TrainingReportContext, y: numb
     body: tBody,
     startY: y,
     margin: { left: M, right: M },
+    styles: {
+      fontSize: 8.5,
+      cellPadding: 3,
+      overflow: 'linebreak',
+      valign: 'middle',
+      halign: 'center',
+      lineColor: C.border,
+      lineWidth: 0.15,
+    },
     headStyles: {
       fillColor: C.navy,
       textColor: C.white,
       fontStyle: 'bold',
-      fontSize: 7.5,
+      fontSize: 8.5,
       halign: 'center',
-      overflow: 'linebreak',
-      cellPadding: 3,
-    },
-    bodyStyles: {
-      fontSize: 8,
-      textColor: C.slate,
-      halign: 'center',
-      overflow: 'linebreak',
-      cellPadding: 3,
     },
     columnStyles: {
-      0: { halign: 'left', fontStyle: 'bold', cellWidth: 42, overflow: 'linebreak' },
+      0: { cellWidth: 14, fontStyle: 'bold', textColor: C.muted },
+      1: { halign: 'left', fontStyle: 'bold', cellWidth: 46, textColor: C.slate },
     },
     alternateRowStyles: { fillColor: C.bg },
     didParseCell: (data) => {
       if (data.section !== 'body') return;
-      const r = session.results[data.row.index];
+      const r = sorted[data.row.index];
+      // Pour le meilleur modèle, on garde simplement le texte en gras sans surlignage
       if (r?.id === best?.id) {
-        data.cell.styles.fillColor = C.amberBg;
-        data.cell.styles.textColor = C.amber;
         data.cell.styles.fontStyle = 'bold';
+        data.cell.styles.textColor = C.navy;
       }
     },
-    tableLineColor: C.border,
-    tableLineWidth: 0.15,
+    theme: 'plain',
   });
 
   y = finalY(doc, y) + 4;
 
-  // ── Légende ───────────────────────────────────────────────────────────────
+  // ── Note de bas de tableau ───────────────────────────────────────────────
   const evalNote = (model: ModelResult): string => {
     if (model.evaluationSource?.isIndependentTest) {
       const n = model.evaluationSource.nSamples;
-      return `Évaluation finale sur test holdout séparé${n ? ` (${n} lignes)` : ''}.`;
+      return `Évaluation sur jeu de test indépendant${n ? ` (${n} lignes)` : ''}.`;
     }
-    return `Score = ${model.evaluationSource?.label ?? 'validation croisée'} — pas de jeu de test indépendant.`;
+    return `Score = ${model.evaluationSource?.label ?? 'validation croisée (moyenne des plis)'}.`;
   };
 
   if (best) {
+    const noteLines = [
+      `* Modèle recommandé. Recall = Sensibilité. Precision = Valeur Prédictive Positive (VPP).`,
+      evalNote(best),
+    ];
     doc.setFont('helvetica', 'italic');
-    doc.setFontSize(7);
-    txtc(doc, C.muted);
-    doc.text(
-      `* Best model.  Recall = Sensitivity.  Precision = Positive Predictive Value (PPV).  ${evalNote(best)}`,
-      M,
-      y,
-    );
-    y += 8;
-  }
-
-  // ── Ranking visualization ─────────────────────────────────────────────────
-  const sessionPrimaryMetric =
-    session.results.find((r) => r.primaryMetric?.name)?.primaryMetric?.name ?? 'accuracy';
-
-  const sortedResults = [...session.results].sort((a, b) => {
-    const direction = metricDirection(sessionPrimaryMetric);
-    const nullVal = direction === 'lower_is_better' ? Infinity : -Infinity;
-    const aScore = a.testScore ?? nullVal;
-    const bScore = b.testScore ?? nullVal;
-    return direction === 'lower_is_better' ? aScore - bScore : bScore - aScore;
-  });
-
-  // Only models with a real, finite testScore can be ranked.
-  const rankedModels = sortedResults.filter(
-    (r) => r.testScore !== null && isFinite(r.testScore as number),
-  );
-  const hasRanking = rankedModels.length > 0;
-
-  const rankLabel = (model: ModelResult, rank: number): string => {
-    if (model.testScore === null || !isFinite(model.testScore as number)) return '—';
-    return `#${rank + 1}`;
-  };
-
-  if (hasRanking) {
-    const barNeeded = 8 + rankedModels.length * 9 + 6;
-    y = ensureY(doc, y, barNeeded);
-
-    doc.setFont('helvetica', 'bold');
     doc.setFontSize(8);
-    txtc(doc, C.navy);
-    const vizLabel = `${best?.primaryMetric?.displayName ?? best?.primaryMetric?.name ?? 'Score'} — ${best?.evaluationSource?.label ?? 'évaluation'}`;
-    doc.text(`Performance ranking : ${vizLabel}`, M, y);
-    y += 5;
-
-    doc.setFont('helvetica', 'normal');
-    doc.setFontSize(6.5);
     txtc(doc, C.muted);
-    doc.text('Rang', M + 2, y);
-    doc.text('Model', M + 14, y);
-    doc.text('Performance', M + 52, y);
-    doc.text('Score', M + 118, y);
-    doc.text('Level', M + 135, y);
-    y += 3;
-    hrule(doc, y);
-    y += 3;
-
-    const BAR_X = M + 50;
-    const BAR_LEN = 65;
-    const BAR_H2 = 4;
-
-    for (let idx = 0; idx < rankedModels.length; idx++) {
-      const r = rankedModels[idx];
-      const isBest = r.id === best?.id;
-      const score = safeN(r.testScore);
-
-      const rMetricName = r.primaryMetric?.name;
-      const rLowerIsBetter =
-        (r.primaryMetric?.direction ?? metricDirection(rMetricName ?? 'accuracy')) === 'lower_is_better';
-      const rBounded = isBounded(rMetricName);
-      const q = rBounded ? quality(score, rLowerIsBetter) : 'na';
-
-      if (isBest) {
-        fill(doc, C.amberBg);
-        doc.rect(M, y - 1, CW, BAR_H2 + 4, 'F');
-      }
-
-      doc.setFont('helvetica', isBest ? 'bold' : 'normal');
-      doc.setFontSize(8.5);
-      txtc(doc, isBest ? C.amber : C.slate);
-      doc.text(rankLabel(r, idx), M + 2, y + 3.5);
-
-      doc.text((isBest ? '* ' : '  ') + modelName(r.modelType), M + 14, y + 3.5);
-
-      if (rBounded) {
-        bar(doc, BAR_X, y, BAR_LEN, BAR_H2, score, rLowerIsBetter);
-      }
-
-      doc.setFont('helvetica', 'bold');
-      doc.setFontSize(8.5);
-      txtc(doc, rBounded ? qualityColor(q) : C.slate);
-      doc.text(formatMetricValue(r.testScore, rMetricName), BAR_X + BAR_LEN + 4, y + 3.5);
-
-      if (rBounded) {
-        dot(doc, BAR_X + BAR_LEN + 23, y + 2.2, q);
-        doc.setFont('helvetica', 'normal');
-        doc.setFontSize(7.5);
-        txtc(doc, qualityColor(q));
-        doc.text(qualityLabel(q), BAR_X + BAR_LEN + 27, y + 3.5);
-      }
-
-      y += BAR_H2 + 5;
+    for (const line of noteLines) {
+      doc.text(line, M, y);
+      y += 4;
     }
   } else {
-    y = ensureY(doc, y, 14);
     doc.setFont('helvetica', 'italic');
     doc.setFontSize(8);
-    doc.setTextColor(150, 100, 0);
+    txtc(doc, C.muted);
     doc.text(
       "Classement non disponible — aucun score d'évaluation indépendant pour cette session.",
       M,
-      y + 4,
+      y,
     );
-    doc.setTextColor(0, 0, 0);
-    y += 10;
+    y += 4;
   }
+
+  // ── Mention de la métrique de tri ────────────────────────────────────────
+  const primaryDisplay =
+    session.results.find((r) => r.primaryMetric?.name)?.primaryMetric?.displayName ?? primaryMetric;
+  const dirLabel = direction === 'lower_is_better' ? 'plus bas = meilleur' : 'plus haut = meilleur';
+  doc.text(`Tri par ${primaryDisplay} (${dirLabel}).`, M, y);
+
   return y + 6;
 }

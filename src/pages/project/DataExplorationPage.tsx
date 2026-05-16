@@ -1,9 +1,11 @@
 import {
   AlertCircle,
   AlertTriangle,
+  ArrowRight,
   ArrowUpDown,
   BarChart3,
   CheckCircle,
+  ChevronDown,
   Database,
   FileText,
   Layers,
@@ -15,7 +17,7 @@ import {
 } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { useParams } from 'react-router-dom';
+import { Link, useParams } from 'react-router-dom';
 
 import { ReportExportModal } from '@/components/report/ReportExportModal';
 import { Badge } from '@/components/ui/badge';
@@ -166,6 +168,8 @@ export default function DataExplorationPage() {
   // Report export
   const [showReport, setShowReport] = useState(false);
   const [correlationData, setCorrelationData] = useState<CorrelationOut | null>(null);
+  const [statsSearch, setStatsSearch] = useState('');
+  const [parasiteOpen, setParasiteOpen] = useState(false);
 
   // ── Derived data ────────────────────────────────────────────────────────────
 
@@ -928,15 +932,33 @@ export default function DataExplorationPage() {
             {/* Parasite values block */}
             {colProfiles.some((c) => c.parasites && c.parasites.count > 0) && (
               <Card className="border-orange-200 dark:border-orange-800">
-                <CardHeader className="pb-2">
-                  <CardTitle className="text-base flex items-center gap-2">
-                    <AlertCircle className="h-4 w-4 text-orange-500" />
-                    {t('dataExploration.page.analysis.parasiteTitle')}
-                  </CardTitle>
-                  <CardDescription>
-                    {t('dataExploration.page.analysis.parasiteDesc')}
-                  </CardDescription>
-                </CardHeader>
+                <button
+                  type="button"
+                  onClick={() => setParasiteOpen((v) => !v)}
+                  aria-expanded={parasiteOpen}
+                  className="w-full text-left"
+                >
+                  <CardHeader className="pb-2">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <CardTitle className="text-base flex items-center gap-2">
+                          <AlertCircle className="h-4 w-4 text-orange-500" />
+                          {t('dataExploration.page.analysis.parasiteTitle')}
+                          <Badge variant="secondary" className="ml-1">
+                            {colProfiles.filter((c) => c.parasites && c.parasites.count > 0).length}
+                          </Badge>
+                        </CardTitle>
+                        <CardDescription>
+                          {t('dataExploration.page.analysis.parasiteDesc')}
+                        </CardDescription>
+                      </div>
+                      <ChevronDown
+                        className={`h-4 w-4 text-muted-foreground mt-1 flex-shrink-0 transition-transform ${parasiteOpen ? 'rotate-180' : ''}`}
+                      />
+                    </div>
+                  </CardHeader>
+                </button>
+                {parasiteOpen && (
                 <CardContent>
                   <div className="space-y-2">
                     {colProfiles
@@ -970,6 +992,7 @@ export default function DataExplorationPage() {
                       ))}
                   </div>
                 </CardContent>
+                )}
               </Card>
             )}
 
@@ -977,13 +1000,27 @@ export default function DataExplorationPage() {
             {colProfiles.filter((c) => c.kind === 'numeric' && c.numeric).length > 0 && (
               <Card>
                 <CardHeader className="pb-2">
-                  <CardTitle className="text-base flex items-center gap-2">
-                    <BarChart3 className="h-4 w-4 text-blue-500" />
-                    {t('dataExploration.page.analysis.statsTitle')}
-                  </CardTitle>
-                  <CardDescription>
-                    {t('dataExploration.page.analysis.statsDesc')}
-                  </CardDescription>
+                  <div className="flex items-start justify-between gap-4 flex-wrap">
+                    <div>
+                      <CardTitle className="text-base flex items-center gap-2">
+                        <BarChart3 className="h-4 w-4 text-blue-500" />
+                        {t('dataExploration.page.analysis.statsTitle')}
+                      </CardTitle>
+                      <CardDescription>
+                        {t('dataExploration.page.analysis.statsDesc')}
+                      </CardDescription>
+                    </div>
+                    <div className="relative w-full sm:w-64">
+                      <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
+                      <Input
+                        type="text"
+                        value={statsSearch}
+                        onChange={(e) => setStatsSearch(e.target.value)}
+                        placeholder={t('dataExploration.page.analysis.statsSearchPlaceholder')}
+                        className="h-8 pl-8 text-sm"
+                      />
+                    </div>
+                  </div>
                 </CardHeader>
                 <CardContent>
                   <div className="overflow-x-auto">
@@ -994,7 +1031,8 @@ export default function DataExplorationPage() {
                             (h) => (
                               <th
                                 key={h}
-                                className="px-3 py-2 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wide"
+                                title={t(`dataExploration.page.analysis.statsColsTooltip.${h}`)}
+                                className="px-3 py-2 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wide cursor-help"
                               >
                                 {t(`dataExploration.page.analysis.statsCols.${h}`)}
                               </th>
@@ -1005,6 +1043,11 @@ export default function DataExplorationPage() {
                       <tbody>
                         {colProfiles
                           .filter((c) => c.kind === 'numeric' && c.numeric)
+                          .filter((c) =>
+                            statsSearch.trim() === ''
+                              ? true
+                              : c.name.toLowerCase().includes(statsSearch.trim().toLowerCase()),
+                          )
                           .map((col) => (
                             <tr
                               key={col.name}
@@ -1041,6 +1084,15 @@ export default function DataExplorationPage() {
             />
           </TabsContent>
         </Tabs>
+
+        <div className="flex justify-end pt-2">
+          <Button asChild>
+            <Link to={`/projects/${projectId}/charts`}>
+              {t('dataExploration.page.nextStep')}
+              <ArrowRight className="ml-2 h-4 w-4" />
+            </Link>
+          </Button>
+        </div>
       </div>
 
       {/* ── Target modal ──────────────────────────────────────────────────── */}

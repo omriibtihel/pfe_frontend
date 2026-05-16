@@ -10,19 +10,30 @@ interface FileUploadProps {
   className?: string;
   label?: string;
   description?: string;
+  /**
+   * If provided, the component becomes controlled: it displays this file
+   * (instead of its internal state) and delegates removal to `onRemove`.
+   */
+  currentFile?: { name: string; size: number } | null;
+  onRemove?: () => void;
 }
 
-export function FileUpload({ 
-  accept = ".csv,.xlsx,.xls", 
+export function FileUpload({
+  accept = ".csv,.xlsx,.xls",
   maxSize = 50,
-  onUpload, 
+  onUpload,
   className,
   label = "Glissez votre fichier ici",
-  description = "ou cliquez pour parcourir"
+  description = "ou cliquez pour parcourir",
+  currentFile,
+  onRemove,
 }: FileUploadProps) {
+  const isControlled = currentFile !== undefined;
   const [isDragging, setIsDragging] = useState(false);
-  const [file, setFile] = useState<File | null>(null);
+  const [localFile, setLocalFile] = useState<File | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const file: { name: string; size: number } | null = isControlled ? currentFile : localFile;
+  const setFile = (f: File | null) => { if (!isControlled) setLocalFile(f); };
 
   const handleDragOver = useCallback((e: React.DragEvent) => {
     e.preventDefault();
@@ -67,6 +78,7 @@ export function FileUpload({
   const clearFile = () => {
     setFile(null);
     setError(null);
+    onRemove?.();
   };
 
   const formatFileSize = (bytes: number) => {

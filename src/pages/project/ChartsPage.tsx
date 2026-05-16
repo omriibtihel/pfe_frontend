@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Link, useParams } from "react-router-dom";
-import { ChevronRight, Download, RefreshCw } from "lucide-react";
+import { ArrowRight, ChevronRight, Download, RefreshCw } from "lucide-react";
 
 import { AppLayout } from "@/layouts/AppLayout";
 import { Button } from "@/components/ui/button";
@@ -959,6 +959,15 @@ export function ChartsPage() {
             </Card>
           </TabsContent>
         </Tabs>
+
+        <div className="flex justify-end pt-2">
+          <Button asChild>
+            <Link to={`/projects/${projectId}/nettoyage`}>
+              {t("charts.page.nextStep")}
+              <ArrowRight className="ml-2 h-4 w-4" />
+            </Link>
+          </Button>
+        </div>
 
       </div>
     </AppLayout>

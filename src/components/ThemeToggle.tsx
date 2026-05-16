@@ -78,11 +78,19 @@ export function ThemeToggle({ isDark, onToggle, className }: ThemeToggleProps) {
       className={cn(
         "relative h-8 w-14 shrink-0 overflow-hidden rounded-full",
         "outline-none focus-visible:ring-2 focus-visible:ring-primary/50",
+        "ring-1 ring-inset ring-white/10",
+        "shadow-[inset_0_1px_2px_rgba(255,255,255,0.18),inset_0_-1px_2px_rgba(0,0,0,0.25),0_1px_2px_rgba(0,0,0,0.15)]",
         "transition-colors duration-500",
         className
       )}
-      style={{ background: isDark ? "#0f172a" : "#60a5fa" }}
+      style={{
+        background: isDark
+          ? "linear-gradient(135deg, #1e293b, #0f172a)"
+          : "linear-gradient(135deg, hsl(214 92% 56%), hsl(191 96% 41%))",
+      }}
     >
+      {/* Glossy highlight overlay */}
+      <div className="pointer-events-none absolute inset-0 rounded-full bg-gradient-to-b from-white/15 via-transparent to-black/10" />
       {/* ── Dark: stars ─────────────────────────────────────────────── */}
       <AnimatePresence>
         {isDark && (

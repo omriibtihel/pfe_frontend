@@ -358,12 +358,22 @@ export function Step1DatasetTarget({ projectId, config, onConfigChange }: Step1P
                     formatter={(value: number) => [value.toLocaleString(), t("training.step1.distributionTooltip")]}
                   />
                   <Bar dataKey="count" radius={[4, 4, 0, 0]}>
-                    {distribution.bars.map((_, idx) => (
-                      <Cell
-                        key={idx}
-                        fill={`hsl(${(idx * 47) % 360} 65% 55%)`}
-                      />
-                    ))}
+                    {distribution.bars.map((_, idx) => {
+                      const palette = [
+                        "hsl(var(--primary))",
+                        "hsl(var(--accent))",
+                        "hsl(var(--primary) / 0.7)",
+                        "hsl(var(--accent) / 0.7)",
+                        "hsl(var(--primary) / 0.45)",
+                        "hsl(var(--accent) / 0.45)",
+                      ];
+                      return (
+                        <Cell
+                          key={idx}
+                          fill={palette[idx % palette.length]}
+                        />
+                      );
+                    })}
                   </Bar>
                 </BarChart>
               </ResponsiveContainer>

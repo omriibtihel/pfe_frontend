@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { motion } from "framer-motion";
 import {
   ResponsiveContainer,
@@ -47,15 +48,15 @@ const fade: any = {
   transition: { duration: 0.45, ease: "easeOut" },
 };
 
-const STATUS_STYLE = {
-  PENDING: { label: "En attente", color: "#f59e0b" },
-  APPROVED: { label: "Approuves", color: "#22c55e" },
-  REJECTED: { label: "Rejetes", color: "#ef4444" },
+const STATUS_COLORS = {
+  PENDING: "#f59e0b",
+  APPROVED: "#22c55e",
+  REJECTED: "#ef4444",
 } as const;
 
-const ROLE_STYLE = {
-  DOCTOR: { label: "Medecins", color: "#0ea5e9" },
-  ADMIN: { label: "Admins", color: "#fb923c" },
+const ROLE_COLORS = {
+  DOCTOR: "#0ea5e9",
+  ADMIN: "#fb923c",
 } as const;
 
 function toPercent(value: number, total: number): number {
@@ -63,19 +64,24 @@ function toPercent(value: number, total: number): number {
   return Math.round((value / total) * 100);
 }
 
-function statusLabel(s?: string) {
-  const v = (s || "").toUpperCase();
-  if (v === "PENDING") return "En attente";
-  if (v === "APPROVED") return "Approuve";
-  if (v === "REJECTED") return "Rejete";
-  return v || "-";
+function makeStatusLabel(t: (key: string) => string) {
+  return (s?: string) => {
+    const v = (s || "").toUpperCase();
+    if (v === "PENDING" || v === "APPROVED" || v === "REJECTED") {
+      return t(`adminDashboard.statusLabel.${v}`);
+    }
+    return v || "-";
+  };
 }
 
-function roleLabel(r?: string) {
-  const v = (r || "").toUpperCase();
-  if (v === "ADMIN") return "Admin";
-  if (v === "DOCTOR") return "Medecin";
-  return v || "-";
+function makeRoleLabel(t: (key: string) => string) {
+  return (r?: string) => {
+    const v = (r || "").toUpperCase();
+    if (v === "ADMIN" || v === "DOCTOR") {
+      return t(`adminDashboard.roleLabel.${v}`);
+    }
+    return v || "-";
+  };
 }
 
 function statusVariant(s?: string): "default" | "secondary" | "destructive" {
@@ -107,6 +113,9 @@ type KpiCard = {
 
 export default function AdminDashboardPage() {
   const { toast } = useToast();
+  const { t } = useTranslation();
+  const statusLabel = useMemo(() => makeStatusLabel(t), [t]);
+  const roleLabel = useMemo(() => makeRoleLabel(t), [t]);
 
   const [stats, setStats] = useState<AdminStats | null>(null);
   const [pendingUsers, setPendingUsers] = useState<User[]>([]);
@@ -132,7 +141,7 @@ export default function AdminDashboardPage() {
       setPendingUsers(pendingResponse);
     } catch (error) {
       toast({
-        title: "Erreur",
+        title: t("adminDashboard.toastErrTitle"),
         description: (error as Error).message,
         variant: "destructive",
       });
@@ -162,42 +171,42 @@ export default function AdminDashboardPage() {
     return [
       {
         key: "PENDING",
-        label: STATUS_STYLE.PENDING.label,
+        label: t("adminDashboard.statusLabel.PENDING"),
         value: stats.pending_users,
-        color: STATUS_STYLE.PENDING.color,
+        color: STATUS_COLORS.PENDING,
       },
       {
         key: "APPROVED",
-        label: STATUS_STYLE.APPROVED.label,
+        label: t("adminDashboard.statusPlural.APPROVED"),
         value: stats.approved_users,
-        color: STATUS_STYLE.APPROVED.color,
+        color: STATUS_COLORS.APPROVED,
       },
       {
         key: "REJECTED",
-        label: STATUS_STYLE.REJECTED.label,
+        label: t("adminDashboard.statusPlural.REJECTED"),
         value: stats.rejected_users,
-        color: STATUS_STYLE.REJECTED.color,
+        color: STATUS_COLORS.REJECTED,
       },
     ];
-  }, [stats]);
+  }, [stats, t]);
 
   const roleData = useMemo(() => {
     if (!stats) return [];
     return [
       {
         key: "DOCTOR",
-        label: ROLE_STYLE.DOCTOR.label,
+        label: t("adminDashboard.rolePlural.DOCTOR"),
         value: stats.doctors,
-        color: ROLE_STYLE.DOCTOR.color,
+        color: ROLE_COLORS.DOCTOR,
       },
       {
         key: "ADMIN",
-        label: ROLE_STYLE.ADMIN.label,
+        label: t("adminDashboard.rolePlural.ADMIN"),
         value: stats.admins,
-        color: ROLE_STYLE.ADMIN.color,
+        color: ROLE_COLORS.ADMIN,
       },
     ];
-  }, [stats]);
+  }, [stats, t]);
 
   const roleTotal = useMemo(
     () => roleData.reduce((sum, item) => sum + item.value, 0),
@@ -230,9 +239,9 @@ export default function AdminDashboardPage() {
     return [
       {
         id: "total",
-        label: "Total comptes",
+        label: t("adminDashboard.kpi.total"),
         value: stats ? String(totalUsers) : "-",
-        helper: "base utilisateurs",
+        helper: t("adminDashboard.kpi.totalHelper"),
         icon: Users2,
         accentClass:
           "from-sky-500/18 via-cyan-500/8 to-transparent border-sky-500/20",
@@ -240,9 +249,9 @@ export default function AdminDashboardPage() {
       },
       {
         id: "pending",
-        label: "En attente",
+        label: t("adminDashboard.kpi.pending"),
         value: stats ? String(stats.pending_users) : "-",
-        helper: `${pendingRate}% du volume`,
+        helper: t("adminDashboard.kpi.pendingHelper", { pct: pendingRate }),
         icon: Clock3,
         accentClass:
           "from-amber-500/18 via-amber-400/8 to-transparent border-amber-500/20",
@@ -250,9 +259,9 @@ export default function AdminDashboardPage() {
       },
       {
         id: "approved",
-        label: "Approuves",
+        label: t("adminDashboard.kpi.approved"),
         value: stats ? `${approvalRate}%` : "-",
-        helper: `${stats?.approved_users ?? 0} comptes valides`,
+        helper: t("adminDashboard.kpi.approvedHelper", { n: stats?.approved_users ?? 0 }),
         icon: UserCheck2,
         accentClass:
           "from-emerald-500/18 via-emerald-400/8 to-transparent border-emerald-500/20",
@@ -260,16 +269,16 @@ export default function AdminDashboardPage() {
       },
       {
         id: "rejected",
-        label: "Rejetes",
+        label: t("adminDashboard.kpi.rejected"),
         value: stats ? `${rejectionRate}%` : "-",
-        helper: `${stats?.rejected_users ?? 0} comptes refuses`,
+        helper: t("adminDashboard.kpi.rejectedHelper", { n: stats?.rejected_users ?? 0 }),
         icon: UserX2,
         accentClass:
           "from-rose-500/18 via-rose-400/8 to-transparent border-rose-500/20",
         iconClass: "bg-rose-500/15 text-rose-600 dark:text-rose-300",
       },
     ];
-  }, [approvalRate, pendingRate, rejectionRate, stats, totalUsers]);
+  }, [approvalRate, pendingRate, rejectionRate, stats, totalUsers, t]);
 
   const filteredPending = useMemo(() => {
     const query = search.trim().toLowerCase();
@@ -286,13 +295,13 @@ export default function AdminDashboardPage() {
     try {
       await adminService.approveUser(user.id);
       toast({
-        title: "Succes",
-        description: `Utilisateur approuve: ${user.fullName}`,
+        title: t("adminDashboard.toastSuccessTitle"),
+        description: t("adminDashboard.toastApproved", { name: user.fullName }),
       });
       await load(false);
     } catch (error) {
       toast({
-        title: "Erreur",
+        title: t("adminDashboard.toastErrTitle"),
         description: (error as Error).message,
         variant: "destructive",
       });
@@ -314,8 +323,8 @@ export default function AdminDashboardPage() {
     try {
       await adminService.rejectUser(rejectTarget.id, rejectReason.trim() || undefined);
       toast({
-        title: "Succes",
-        description: `Utilisateur rejete: ${rejectTarget.fullName}`,
+        title: t("adminDashboard.toastSuccessTitle"),
+        description: t("adminDashboard.toastRejected", { name: rejectTarget.fullName }),
       });
       setRejectOpen(false);
       setRejectTarget(null);
@@ -323,7 +332,7 @@ export default function AdminDashboardPage() {
       await load(false);
     } catch (error) {
       toast({
-        title: "Erreur",
+        title: t("adminDashboard.toastErrTitle"),
         description: (error as Error).message,
         variant: "destructive",
       });
@@ -349,15 +358,14 @@ export default function AdminDashboardPage() {
             <div className="space-y-3">
               <Badge className="rounded-full bg-foreground/10 px-3 py-1 text-xs text-foreground hover:bg-foreground/10">
                 <Sparkles className="mr-1.5 h-3.5 w-3.5" />
-                Admin Control Center
+                {t("adminDashboard.chip")}
               </Badge>
               <div>
                 <h1 className="text-3xl font-bold tracking-tight text-foreground sm:text-4xl">
-                  Dashboard admin
+                  {t("adminDashboard.title")}
                 </h1>
                 <p className="mt-2 max-w-2xl text-sm text-foreground/75 sm:text-base">
-                  Vision temps reel des validations, du flux de moderation et de la
-                  composition des comptes.
+                  {t("adminDashboard.subtitle")}
                 </p>
               </div>
             </div>
@@ -370,14 +378,14 @@ export default function AdminDashboardPage() {
                 disabled={refreshing || loading}
               >
                 <RefreshCw className={`mr-2 h-4 w-4 ${refreshing ? "animate-spin" : ""}`} />
-                Rafraichir les donnees
+                {t("adminDashboard.refresh")}
               </Button>
               <Badge
                 variant="secondary"
                 className="h-10 rounded-xl border border-foreground/15 bg-background/55 px-3 text-sm"
               >
                 <ShieldCheck className="mr-2 h-4 w-4" />
-                Queue: {stats?.pending_users ?? 0}
+                {t("adminDashboard.queue", { n: stats?.pending_users ?? 0 })}
               </Badge>
             </div>
           </div>
@@ -422,20 +430,20 @@ export default function AdminDashboardPage() {
           <Card className="ai-surface-strong xl:col-span-3">
             <CardHeader className="space-y-3 pb-2">
               <div className="flex items-center justify-between gap-3">
-                <CardTitle className="text-xl">Etat des validations</CardTitle>
+                <CardTitle className="text-xl">{t("adminDashboard.statusCardTitle")}</CardTitle>
                 <Badge variant="secondary" className="rounded-full px-3 py-1 text-xs">
-                  {totalUsers} comptes
+                  {t("adminDashboard.accountsBadge", { n: totalUsers })}
                 </Badge>
               </div>
               <p className="text-sm text-muted-foreground">
-                Distribution des statuts sur l&apos;ensemble de la base.
+                {t("adminDashboard.statusCardHint")}
               </p>
             </CardHeader>
             <CardContent className="grid gap-4 pt-2 lg:grid-cols-[2fr,1fr]">
               <div className="h-[300px]">
                 {!stats || totalUsers === 0 ? (
                   <div className="flex h-full items-center justify-center rounded-2xl border border-dashed text-sm text-muted-foreground">
-                    Aucune donnee disponible
+                    {t("adminDashboard.noData")}
                   </div>
                 ) : (
                   <ResponsiveContainer width="100%" height="100%">
@@ -486,7 +494,7 @@ export default function AdminDashboardPage() {
                         }}
                       />
                     </div>
-                    <p className="mt-2 text-xs text-muted-foreground">{item.value} comptes</p>
+                    <p className="mt-2 text-xs text-muted-foreground">{t("adminDashboard.accountsLabel", { n: item.value })}</p>
                   </div>
                 ))}
               </div>
@@ -496,18 +504,18 @@ export default function AdminDashboardPage() {
           <Card className="ai-surface xl:col-span-2">
             <CardHeader className="space-y-3 pb-2">
               <div className="flex items-center justify-between gap-3">
-                <CardTitle className="text-xl">Composition des roles</CardTitle>
+                <CardTitle className="text-xl">{t("adminDashboard.rolesCardTitle")}</CardTitle>
                 <UserCog2 className="h-4 w-4 text-muted-foreground" />
               </div>
               <p className="text-sm text-muted-foreground">
-                Repartition des medecins et des administrateurs.
+                {t("adminDashboard.rolesCardHint")}
               </p>
             </CardHeader>
             <CardContent className="space-y-4 pt-2">
               <div className="h-[220px]">
                 {!stats || roleTotal === 0 ? (
                   <div className="flex h-full items-center justify-center rounded-2xl border border-dashed text-sm text-muted-foreground">
-                    Aucune donnee disponible
+                    {t("adminDashboard.noData")}
                   </div>
                 ) : (
                   <ResponsiveContainer width="100%" height="100%">
@@ -542,7 +550,7 @@ export default function AdminDashboardPage() {
                       {item.value}
                     </p>
                     <p className="text-xs text-muted-foreground">
-                      {toPercent(item.value, roleTotal)}% du total roles
+                      {t("adminDashboard.rolePct", { pct: toPercent(item.value, roleTotal) })}
                     </p>
                   </div>
                 ))}
@@ -555,9 +563,9 @@ export default function AdminDashboardPage() {
           <CardHeader className="space-y-3">
             <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
               <div>
-                <CardTitle className="text-xl">Utilisateurs en attente</CardTitle>
+                <CardTitle className="text-xl">{t("adminDashboard.pendingTableTitle")}</CardTitle>
                 <p className="mt-1 text-sm text-muted-foreground">
-                  Validez ou rejetez rapidement les nouvelles inscriptions.
+                  {t("adminDashboard.pendingTableHint")}
                 </p>
               </div>
 
@@ -565,7 +573,7 @@ export default function AdminDashboardPage() {
                 <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
                 <Input
                   className="h-10 rounded-xl border-border/60 bg-background/70 pl-10 backdrop-blur-xl"
-                  placeholder="Rechercher (nom / email)..."
+                  placeholder={t("adminDashboard.searchPlaceholder")}
                   value={search}
                   onChange={(event) => setSearch(event.target.value)}
                 />
@@ -583,18 +591,18 @@ export default function AdminDashboardPage() {
             ) : filteredPending.length === 0 ? (
               <div className="flex flex-col items-center justify-center gap-2 rounded-2xl border border-dashed py-14 text-center">
                 <CheckCircle2 className="h-8 w-8 text-emerald-500" />
-                <p className="font-medium">Aucun utilisateur en attente</p>
-                <p className="text-sm text-muted-foreground">La file de moderation est vide.</p>
+                <p className="font-medium">{t("adminDashboard.emptyTitle")}</p>
+                <p className="text-sm text-muted-foreground">{t("adminDashboard.emptyHint")}</p>
               </div>
             ) : (
               <div className="overflow-x-auto scrollbar-modern">
                 <table className="w-full min-w-[760px] text-sm">
                   <thead>
                     <tr className="border-b border-border/60 text-left text-xs uppercase tracking-wide text-muted-foreground">
-                      <th className="py-3 pr-4 font-semibold">Utilisateur</th>
-                      <th className="py-3 pr-4 font-semibold">Role</th>
-                      <th className="py-3 pr-4 font-semibold">Statut</th>
-                      <th className="py-3 text-right font-semibold">Actions</th>
+                      <th className="py-3 pr-4 font-semibold">{t("adminDashboard.th.user")}</th>
+                      <th className="py-3 pr-4 font-semibold">{t("adminDashboard.th.role")}</th>
+                      <th className="py-3 pr-4 font-semibold">{t("adminDashboard.th.status")}</th>
+                      <th className="py-3 text-right font-semibold">{t("adminDashboard.th.actions")}</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -633,7 +641,7 @@ export default function AdminDashboardPage() {
                               disabled={actionLoadingId === user.id}
                             >
                               <CheckCircle2 className="mr-2 h-4 w-4" />
-                              Approuver
+                              {t("adminDashboard.approve")}
                             </Button>
 
                             <Button
@@ -644,7 +652,7 @@ export default function AdminDashboardPage() {
                               disabled={actionLoadingId === user.id}
                             >
                               <XCircle className="mr-2 h-4 w-4" />
-                              Rejeter
+                              {t("adminDashboard.reject")}
                             </Button>
                           </div>
                         </td>
@@ -662,11 +670,11 @@ export default function AdminDashboardPage() {
         isOpen={rejectOpen}
         onClose={() => setRejectOpen(false)}
         onOpenChange={setRejectOpen}
-        title="Rejeter l'utilisateur"
+        title={t("adminDashboard.rejectModalTitle")}
         description={
           rejectTarget
-            ? `Vous allez rejeter ${rejectTarget.fullName}. Vous pouvez préciser une raison (optionnel).`
-            : "Vous pouvez préciser une raison (optionnel)."
+            ? t("adminDashboard.rejectModalDescUser", { name: rejectTarget.fullName })
+            : t("adminDashboard.rejectModalDescDefault")
         }
         size="lg"
         footer={
@@ -677,7 +685,7 @@ export default function AdminDashboardPage() {
               onClick={() => setRejectOpen(false)}
               disabled={actionLoadingId === rejectTarget?.id}
             >
-              Annuler
+              {t("adminDashboard.cancel")}
             </Button>
             <Button
               variant="destructive"
@@ -686,17 +694,17 @@ export default function AdminDashboardPage() {
               disabled={!rejectTarget || actionLoadingId === rejectTarget?.id}
             >
               <XCircle className="mr-2 h-4 w-4" />
-              Confirmer
+              {t("adminDashboard.confirm")}
             </Button>
           </div>
         }
       >
         <div className="space-y-2">
-          <Label htmlFor="rejectReason">Raison</Label>
+          <Label htmlFor="rejectReason">{t("adminDashboard.reasonLabel")}</Label>
           <Textarea
             id="rejectReason"
             className="min-h-[120px] resize-none rounded-xl"
-            placeholder="Ex : informations manquantes, email invalide, etc."
+            placeholder={t("adminDashboard.reasonPlaceholder")}
             value={rejectReason}
             onChange={(event) => setRejectReason(event.target.value)}
             rows={4}

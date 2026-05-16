@@ -34,27 +34,38 @@ export function dot(doc: jsPDF, x: number, y: number, q: Quality): void {
   doc.circle(x, y, 1.3, 'F');
 }
 
-/** En-tête de section numérotée (bandeau). */
+/** En-tête de section numérotée — style sobre, sans bandeau. */
 export function section(doc: jsPDF, num: string, title: string, y: number): number {
-  y = ensureY(doc, y, 18);
-  y += 4;
-  // Background band
-  fill(doc, C.navyLight);
-  doc.rect(M, y, CW, 11, 'F');
-  // Left accent bar
-  fill(doc, C.navy);
-  doc.rect(M, y, 4, 11, 'F');
-  // Section number
+  y = ensureY(doc, y, 16);
+  y += 6;
+
   doc.setFont('helvetica', 'bold');
-  doc.setFontSize(7.5);
-  txtc(doc, C.teal);
-  doc.text(num, M + 8, y + 7.5);
-  // Title
+  doc.setFontSize(13);
+  txtc(doc, C.navy);
+  // "1. Titre" — numéro et titre dans la même couleur, lisible et direct
+  const label = `${num.replace(/\.$/, '')}. ${title}`;
+  doc.text(label, M, y);
+
+  // Trait fin discret sous le titre pour aérer la mise en page
+  drawc(doc, C.border);
+  doc.setLineWidth(0.25);
+  doc.line(M, y + 2.5, W - M, y + 2.5);
+  doc.setLineWidth(0.1);
+
+  txtc(doc, C.slate);
+  return y + 9;
+}
+
+/** Sous-titre numéroté (ex. "2.1 Suppression des lignes"). */
+export function subsection(doc: jsPDF, num: string, title: string, y: number): number {
+  y = ensureY(doc, y, 10);
+  y += 3;
+  doc.setFont('helvetica', 'bold');
   doc.setFontSize(10);
   txtc(doc, C.navy);
-  doc.text(title.toUpperCase(), M + 19, y + 7.5);
+  doc.text(`${num} ${title}`, M, y);
   txtc(doc, C.slate);
-  return y + 16;
+  return y + 5;
 }
 
 /** Séparateur horizontal léger. */

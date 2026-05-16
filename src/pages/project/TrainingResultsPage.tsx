@@ -85,18 +85,18 @@ export function TrainingResultsPage() {
         const message =
           err instanceof Error
             ? err.message
-            : "Impossible de charger les résultats d'entraînement.";
+            : t('trainingResults.page.errLoad');
         setError(message);
         if (silent) {
           setSilentPollFailed(true);
         } else {
-          toast({ title: 'Erreur', description: message, variant: 'destructive' });
+          toast({ title: t('trainingResults.page.toastErrTitle'), description: message, variant: 'destructive' });
         }
       } finally {
         if (!silent) setIsLoading(false);
       }
     },
-    [projectId, sessionId, toast],
+    [projectId, sessionId, toast, t],
   );
 
   useEffect(() => {
@@ -133,8 +133,8 @@ export function TrainingResultsPage() {
           await trainingService.unsaveModel(String(projectId), session.id, modelId);
           if (activeModelId === modelId) setActiveModelId(null);
           toast({
-            title: 'Modèle retiré',
-            description: 'Le modèle a été retiré des modèles sauvegardés.',
+            title: t('trainingResults.page.toastModelRemovedTitle'),
+            description: t('trainingResults.page.toastModelRemovedDesc'),
           });
         } else {
           const response = await trainingService.saveModel(
@@ -154,8 +154,8 @@ export function TrainingResultsPage() {
           if (response.isNowActive) setActiveModelId(resolvedId);
           else if (!activeModelId) setActiveModelId(resolvedId);
           toast({
-            title: 'Modèle sauvegardé',
-            description: 'Ce modèle est maintenant disponible pour les prédictions.',
+            title: t('trainingResults.page.toastModelSavedTitle'),
+            description: t('trainingResults.page.toastModelSavedDesc'),
           });
         }
       } catch (err: unknown) {
@@ -167,9 +167,9 @@ export function TrainingResultsPage() {
         });
 
         toast({
-          title: 'Erreur',
+          title: t('trainingResults.page.toastErrTitle'),
           description:
-            err instanceof Error ? err.message : "Échec de l'enregistrement du modèle.",
+            err instanceof Error ? err.message : t('trainingResults.page.errSaveModel'),
           variant: 'destructive',
         });
       } finally {
@@ -180,7 +180,7 @@ export function TrainingResultsPage() {
         });
       }
     },
-    [session, projectId, savedModelIds, savingModelIds, activeModelId, toast],
+    [session, projectId, savedModelIds, savingModelIds, activeModelId, toast, t],
   );
 
   const handleDownloadReport = useCallback(
@@ -193,7 +193,7 @@ export function TrainingResultsPage() {
       try {
         if (format === 'pdf') {
           if (!session.results.length) {
-            throw new Error("Le PDF est disponible dès qu'au moins un résultat est généré.");
+            throw new Error(t('trainingResults.page.pdfNoResult'));
           }
 
           await waitForNextPaint();
@@ -203,15 +203,15 @@ export function TrainingResultsPage() {
         }
       } catch (err: unknown) {
         toast({
-          title: format === 'pdf' ? 'Export PDF impossible' : 'Export JSON impossible',
-          description: getDownloadErrorMessage(format, err),
+          title: format === 'pdf' ? t('trainingResults.page.pdfErrTitle') : t('trainingResults.page.jsonErrTitle'),
+          description: getDownloadErrorMessage(format, err, t),
           variant: 'destructive',
         });
       } finally {
         setDownloadingFormat(null);
       }
     },
-    [downloadingFormat, projectId, session, toast],
+    [downloadingFormat, projectId, session, toast, t],
   );
 
   const { bestModel, hasMixedMetrics } = useMemo(() => {
@@ -234,7 +234,7 @@ export function TrainingResultsPage() {
   if (!session) {
     return (
       <AppLayout>
-        <main className="py-8" aria-label="Erreur de chargement">
+        <main className="py-8" aria-label={t('trainingResults.page.ariaLoadError')}>
           <Card className="border-destructive/30">
             <CardContent className="flex items-start gap-3 py-6">
               <AlertTriangle
@@ -242,9 +242,9 @@ export function TrainingResultsPage() {
                 aria-hidden="true"
               />
               <div>
-                <p className="font-medium">Session introuvable</p>
+                <p className="font-medium">{t('trainingResults.page.sessionNotFound')}</p>
                 <p className="mt-1 text-sm text-muted-foreground">
-                  {error ?? 'Session introuvable.'}
+                  {error ?? t('trainingResults.page.sessionNotFoundDefault')}
                 </p>
               </div>
             </CardContent>
@@ -291,12 +291,12 @@ export function TrainingResultsPage() {
                     <div className="min-w-0 flex-1">
                       <p className="font-medium">
                         {session.status === 'queued'
-                          ? 'En attente de démarrage...'
-                          : 'Entraînement en cours...'}
+                          ? t('trainingResults.page.stateQueued')
+                          : t('trainingResults.page.stateRunning')}
                       </p>
                       {session.currentModel ? (
                         <p className="mt-0.5 truncate text-xs text-muted-foreground">
-                          Modèle en cours&nbsp;:{' '}
+                          {t('trainingResults.page.currentModelLabel')}{' '}
                           <span className="font-medium text-primary">{session.currentModel}</span>
                         </p>
                       ) : null}
@@ -311,12 +311,11 @@ export function TrainingResultsPage() {
                             <span
                               data-testid="silent-poll-failed"
                               className="inline-flex h-2 w-2 shrink-0 rounded-full bg-amber-500"
-                              aria-label="Mise à jour automatique échouée"
+                              aria-label={t('trainingResults.page.silentPollFailedAria')}
                             />
                           </TooltipTrigger>
                           <TooltipContent side="top" className="max-w-xs text-xs">
-                            Dernière mise à jour automatique a échoué — les données affichées
-                            peuvent être obsolètes.
+                            {t('trainingResults.page.silentPollFailedTip')}
                           </TooltipContent>
                         </Tooltip>
                       </TooltipProvider>
@@ -326,7 +325,7 @@ export function TrainingResultsPage() {
                   <Progress
                     value={progressValue}
                     className="h-2"
-                    aria-label={`Progression de l'entraînement : ${Math.round(progressValue)}%`}
+                    aria-label={t('trainingResults.page.progressAria', { pct: Math.round(progressValue) })}
                   />
 
                   <p className="text-right text-xs text-muted-foreground" aria-hidden="true">
@@ -346,9 +345,9 @@ export function TrainingResultsPage() {
                     aria-hidden="true"
                   />
                   <div>
-                    <p className="font-medium text-destructive">Échec de l'entraînement</p>
+                    <p className="font-medium text-destructive">{t('trainingResults.page.failedTitle')}</p>
                     <p className="mt-1 text-sm text-muted-foreground">
-                      {session.errorMessage || 'Consultez les logs backend pour plus de détails.'}
+                      {session.errorMessage || t('trainingResults.page.failedDefault')}
                     </p>
                   </div>
                 </CardContent>
@@ -366,11 +365,10 @@ export function TrainingResultsPage() {
                   />
                   <div>
                     <p className="font-medium text-amber-800 dark:text-amber-300">
-                      Métriques primaires hétérogènes
+                      {t('trainingResults.page.mixedMetricsTitle')}
                     </p>
                     <p className="mt-1 text-sm text-muted-foreground">
-                      Les modèles de cette session utilisent des métriques primaires différentes.
-                      Le classement automatique est désactivé pour éviter une comparaison de scores incompatibles.
+                      {t('trainingResults.page.mixedMetricsDesc')}
                     </p>
                   </div>
                 </CardContent>
@@ -402,7 +400,7 @@ export function TrainingResultsPage() {
           {hasResults ? (
             <motion.section variants={staggerItem} aria-labelledby="model-details-heading">
               <h2 id="model-details-heading" className="mb-4 text-lg font-semibold">
-                Détails par modèle
+                {t('trainingResults.page.detailsHeading')}
               </h2>
 
               <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
@@ -434,10 +432,10 @@ export function TrainingResultsPage() {
                     aria-hidden="true"
                   />
                   <p className="text-sm font-medium text-muted-foreground">
-                    Aucun résultat disponible pour l'instant.
+                    {t('trainingResults.page.noResults')}
                   </p>
                   <p className="mt-1 text-xs text-muted-foreground">
-                    Cette page se met à jour automatiquement dès qu'un modèle termine.
+                    {t('trainingResults.page.noResultsHint')}
                   </p>
                 </CardContent>
               </Card>

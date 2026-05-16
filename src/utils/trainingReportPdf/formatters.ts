@@ -1,5 +1,8 @@
 // ── Formateurs ────────────────────────────────────────────────────────────────
 export function safeN(v: unknown): number | null {
+  // Number(null) === 0 et Number('') === 0 — on doit donc filtrer ces cas
+  // avant la conversion pour éviter de transformer "valeur manquante" en zéro.
+  if (v == null || v === '') return null;
   const n = Number(v);
   return Number.isFinite(n) ? n : null;
 }

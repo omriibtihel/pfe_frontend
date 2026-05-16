@@ -205,8 +205,15 @@ export function Step6Summary({ projectId, config, onStartTraining, onGoToResults
 
   const displayConfig = useMemo(() => {
     const normalized = validation.normalized_config;
-    if (normalized && Object.keys(normalized).length > 0) return normalized;
-    return config;
+    const base =
+      normalized && Object.keys(normalized).length > 0 ? normalized : config;
+    const sm = (base as { splitMethod?: string }).splitMethod;
+    if (sm && sm !== "holdout") {
+      const { trainRatio: _t, valRatio: _v, ...rest } =
+        base as Record<string, unknown>;
+      return rest;
+    }
+    return base;
   }, [config, validation.normalized_config]);
 
   const detailErrors = useMemo(
@@ -315,26 +322,15 @@ export function Step6Summary({ projectId, config, onStartTraining, onGoToResults
         </CardContent>
       </Card>
 
-      {(validating || !!validation.errors.length || !!validation.warnings.length) && (
+      {!validating && !!validation.errors.length && (
         <Card className="border-border/60">
           <CardHeader className="pb-2">
             <CardTitle className="text-sm flex items-center gap-2">
               <ShieldAlert className="h-4 w-4 text-primary" />
               {t("training.step6.validationTitle")}
-              {validating ? (
-                <Badge variant="outline" className="ml-auto text-xs">
-                  {t("training.step6.validationChecking")}
-                </Badge>
-              ) : (
-                <Badge
-                  variant={validation.errors.length ? "destructive" : "secondary"}
-                  className="ml-auto text-xs"
-                >
-                  {validation.errors.length
-                    ? t("training.step6.validationErrors", { n: validation.errors.length })
-                    : t("training.step6.validationWarnings", { n: validation.warnings.length })}
-                </Badge>
-              )}
+              <Badge variant="destructive" className="ml-auto text-xs">
+                {t("training.step6.validationErrors", { n: validation.errors.length })}
+              </Badge>
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-3">
@@ -428,6 +424,9 @@ export function Step6Summary({ projectId, config, onStartTraining, onGoToResults
               <div>
                 <p className="font-semibold text-sm">
                   {status === "queued" ? t("training.step6.stateQueued") : t("training.step6.stateRunning")}
+                </p>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  {t("training.step6.runningPatienceNote")}
                 </p>
                 <p className="text-xs text-muted-foreground">
                   {t("training.step6.sessionInfo", {
