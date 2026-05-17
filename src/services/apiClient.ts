@@ -92,6 +92,16 @@ class ApiClient {
     });
   }
 
+  /**
+   * Register an extra request interceptor (used by the demo module to inject
+   * a mock adapter when in demo mode). Safe to call once at app boot.
+   */
+  attachRequestInterceptor(
+    onFulfilled: Parameters<AxiosInstance["interceptors"]["request"]["use"]>[0],
+  ) {
+    this.axios.interceptors.request.use(onFulfilled);
+  }
+
   setToken(token: string | null) {
     this.token = token;
     if (token) localStorage.setItem(TOKEN_KEY, token);

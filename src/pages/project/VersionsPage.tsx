@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { useNavigate, useParams } from "react-router-dom";
+import { useLocation, useNavigate, useParams } from "react-router-dom";
 import { motion } from "framer-motion";
 import {
   GitBranch,
@@ -28,6 +28,7 @@ import { useToast } from "@/hooks/use-toast";
 import datasetService, { DatasetOut as DatasetListItem } from "@/services/datasetService";
 import dataService, { VersionUI } from "@/services/dataService";
 import { staggerContainer, staggerItem } from "@/components/ui/page-transition";
+import { withDemoPrefix } from "@/demo/paths";
 
 // ── Label maps ────────────────────────────────────────────────────────────────
 
@@ -115,9 +116,11 @@ export function VersionsPage() {
   const { id } = useParams();
   const projectId = id!;
   const navigate = useNavigate();
+  const location = useLocation();
   const { toast } = useToast();
   const { t } = useTranslation();
   const opLabel = useMemo(() => makeOpLabel(t), [t]);
+  const appPath = (path: string) => withDemoPrefix(path, location.pathname);
 
   const [datasets, setDatasets] = useState<DatasetListItem[]>([]);
   const [versions, setVersions] = useState<VersionUI[]>([]);
@@ -302,7 +305,7 @@ export function VersionsPage() {
               <Button
                 size="sm"
                 className="flex-1 bg-gradient-to-r from-primary to-secondary"
-                onClick={() => navigate(`/projects/${projectId}/nettoyage?version=${v.id}`)}
+                onClick={() => navigate(appPath(`/projects/${projectId}/nettoyage?version=${v.id}`))}
               >
                 <Target className="mr-1 h-3.5 w-3.5" />
                 {t("versions.preprocess")}
@@ -314,7 +317,7 @@ export function VersionsPage() {
                 className="flex-1"
                 disabled={!canPredict}
                 title={canPredict ? undefined : t("versions.trainDisabledTooltip")}
-                onClick={() => navigate(`/projects/${projectId}/versions/${v.id}/training`)}
+                onClick={() => navigate(appPath(`/projects/${projectId}/versions/${v.id}/training`))}
               >
                 <GitBranch className="mr-1 h-3.5 w-3.5" />
                 {t("versions.train")}

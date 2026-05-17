@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import {
   Activity,
   AlertTriangle,
@@ -30,6 +30,7 @@ import { AppLayout } from '@/layouts/AppLayout';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import type { ExplanationMethod, PredictionResponse, PredictionRow } from '@/types';
+import { withDemoPrefix } from '@/demo/paths';
 
 import { CounterfactualModal } from './CounterfactualModal';
 import { ExplanationModal } from './ExplanationModal';
@@ -51,6 +52,8 @@ export function BatchPredictionResults({
   projectId: string;
 }) {
   const navigate = useNavigate();
+  const location = useLocation();
+  const appPath = (path: string) => withDemoPrefix(path, location.pathname);
 
   const {
     getRowExplanations,
@@ -132,7 +135,7 @@ export function BatchPredictionResults({
             variant="ghost"
             size="sm"
             className="-ml-2 self-start text-xs text-muted-foreground hover:text-foreground"
-            onClick={() => navigate(`/projects/${projectId}/predict`)}
+            onClick={() => navigate(appPath(`/projects/${projectId}/predict`))}
           >
             <ArrowLeft className="h-3.5 w-3.5 mr-1" /> Nouvelle prédiction
           </Button>

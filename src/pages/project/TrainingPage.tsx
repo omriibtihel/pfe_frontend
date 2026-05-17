@@ -1,6 +1,6 @@
 import { useState, useCallback, useMemo, useEffect } from "react";
 import { useTranslation } from "react-i18next";
-import { useParams, useNavigate } from "react-router-dom";
+import { useLocation, useParams, useNavigate } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Bot,
@@ -52,6 +52,7 @@ import { Step5Metrics } from "@/components/training/wizard/Step5Metrics";
 import { Step6Summary } from "@/components/training/wizard/Step6Summary";
 import { loadPrepConfig, savePrepConfig } from "@/utils/prepConfig";
 import dataService from "@/services/dataService";
+import { withDemoPrefix } from "@/demo/paths";
 
 const STEP_KEYS = [
   { tk: "training.steps.datasetTarget", icon: <Database  className="h-5 w-5" /> },
@@ -113,6 +114,7 @@ function ModeDialog({
         <div className="grid grid-cols-2 gap-3">
           {/* AutoML card */}
           <Card
+            data-tour="train-mode-automl"
             className="cursor-pointer border-2 transition-colors hover:border-primary/60 hover:bg-primary/5"
             onClick={() => setShowAutoML(true)}
           >
@@ -139,6 +141,7 @@ function ModeDialog({
 
           {/* Manual card */}
           <Card
+            data-tour="train-mode-manual"
             className="relative cursor-pointer border-2 border-primary/40 transition-colors hover:border-primary/60 hover:bg-primary/5"
             onClick={onManual}
           >
@@ -193,8 +196,13 @@ export function TrainingPage() {
   const routeVersionId = params.versionId;
 
   const navigate = useNavigate();
+  const location = useLocation();
   const { toast } = useToast();
   const { t } = useTranslation();
+  const appPath = useCallback(
+    (path: string) => withDemoPrefix(path, location.pathname),
+    [location.pathname],
+  );
   const steps = useMemo(
     () => STEP_KEYS.map((s) => ({ label: t(s.tk), icon: s.icon })),
     [t]
@@ -293,10 +301,10 @@ export function TrainingPage() {
       const versionId = String(config.datasetVersionId || routeVersionId || "").trim();
       if (!versionId) return;
       navigate(
-        `/projects/${projectId}/versions/${versionId}/training/results?session=${encodeURIComponent(sessionId)}`
+        appPath(`/projects/${projectId}/versions/${versionId}/training/results?session=${encodeURIComponent(sessionId)}`)
       );
     },
-    [config.datasetVersionId, projectId, routeVersionId, navigate]
+    [appPath, config.datasetVersionId, projectId, routeVersionId, navigate]
   );
 
   // ── Navigation ─────────────────────────────────────────────────────────────
@@ -402,7 +410,7 @@ export function TrainingPage() {
       return;
     }
     navigate(
-      `/projects/${projectId}/versions/${versionId}/training/results?session=${encodeURIComponent(sessionId)}`
+      appPath(`/projects/${projectId}/versions/${versionId}/training/results?session=${encodeURIComponent(sessionId)}`)
     );
   };
 
@@ -516,6 +524,7 @@ export function TrainingPage() {
         <AnimatePresence mode="wait" custom={1}>
           <motion.div
             key={currentStep}
+            data-tour="train-step-content"
             custom={1}
             variants={slideVariants}
             initial="enter"
@@ -578,6 +587,7 @@ export function TrainingPage() {
               onClick={handleNext}
               disabled={!canGoNext}
               className="gap-2 gradient-premium text-primary-foreground"
+              data-tour="train-next-btn"
             >
               {currentStep === 0 && trainingMode === null ? (
                 <>
@@ -638,7 +648,7 @@ export function TrainingPage() {
                   const sid = String(s.id);
                   const vId = String(s.datasetVersionId || config.datasetVersionId || routeVersionId || "");
                   const href = vId
-                    ? `/projects/${projectId}/versions/${vId}/training/results?session=${encodeURIComponent(sid)}`
+                    ? appPath(`/projects/${projectId}/versions/${vId}/training/results?session=${encodeURIComponent(sid)}`)
                     : null;
                   const nModels = s.results?.length ?? 0;
                   const statusColor =

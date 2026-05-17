@@ -3,7 +3,7 @@
  * Aucun JSX. Consomme useNettoyageState + useNettoyageData.
  */
 import { useMemo } from "react";
-import { useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { useToast } from "@/hooks/use-toast";
 
@@ -14,12 +14,15 @@ import { countVisibleAlerts } from "@/components/nettoyage/AlertsModal";
 import type { NettoyageState } from "./useNettoyageState";
 import type { NettoyageData } from "./useNettoyageData";
 import { writeFallbackSchema, postSchemaAction, inferKindFallback } from "./useNettoyageData";
+import { withDemoPrefix } from "@/demo/paths";
 
 // ── Hook ──────────────────────────────────────────────────────────────────────
 export function useNettoyageActions(state: NettoyageState, data: NettoyageData, projectId: string) {
   const navigate = useNavigate();
+  const location = useLocation();
   const { toast } = useToast();
   const { t } = useTranslation();
+  const appPath = (path: string) => withDemoPrefix(path, location.pathname);
 
   // ── Inspector ───────────────────────────────────────────────────────────────
   const openInspector = (col: string) => {
@@ -316,14 +319,14 @@ export function useNettoyageActions(state: NettoyageState, data: NettoyageData, 
   };
 
   // ── Navigation ──────────────────────────────────────────────────────────────
-  const navigateToVersions = () => navigate(`/projects/${projectId}/versions`);
+  const navigateToVersions = () => navigate(appPath(`/projects/${projectId}/versions`));
 
   /** Passe en mode édition d'une version spécifique. */
   const navigateToVersion = (versionId: number) =>
-    navigate(`/projects/${projectId}/nettoyage?version=${versionId}`);
+    navigate(appPath(`/projects/${projectId}/nettoyage?version=${versionId}`));
 
   /** Quitte le mode édition et revient au mode dataset normal. */
-  const exitVersionMode = () => navigate(`/projects/${projectId}/nettoyage`);
+  const exitVersionMode = () => navigate(appPath(`/projects/${projectId}/nettoyage`));
 
   return {
     openInspector,

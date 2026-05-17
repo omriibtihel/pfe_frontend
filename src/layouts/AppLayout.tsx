@@ -20,6 +20,7 @@ import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { ProfileMenu } from "@/components/ProfileMenu";
+import { withDemoPrefix } from "@/demo/paths";
 
 interface AppLayoutProps {
   children: ReactNode;
@@ -89,19 +90,27 @@ export function AppLayout({ children, hideSidebar = false }: AppLayoutProps) {
 
   const location = useLocation();
 
-  const pathSegments = location.pathname.split("/").filter(Boolean);
+  // Strip an optional leading "/demo" so the guided tour reuses the same
+  // sidebar logic without each helper needing demo-mode awareness.
+  const rawSegments = location.pathname.split("/").filter(Boolean);
+  const appPath = (path: string) => withDemoPrefix(path, location.pathname);
+  const pathSegments = rawSegments[0] === "demo" ? rawSegments.slice(1) : rawSegments;
   const isProjectPage = pathSegments[0] === "projects" && Boolean(pathSegments[1]);
   const projectId = isProjectPage ? pathSegments[1] : null;
 
+  // Normalized pathname with the demo prefix stripped, so all nav-matching
+  // helpers below can ignore demo mode entirely.
+  const normalizedPath = "/" + pathSegments.join("/");
+
   const isRootNavActive = (path: string) => {
-    if (path === "/dashboard") return location.pathname === "/dashboard";
-    if (path === "/projects") return location.pathname.startsWith("/projects");
-    return location.pathname === path || location.pathname.startsWith(`${path}/`);
+    if (path === "/dashboard") return normalizedPath === "/dashboard";
+    if (path === "/projects") return normalizedPath.startsWith("/projects");
+    return normalizedPath === path || normalizedPath.startsWith(`${path}/`);
   };
 
   const isProjectNavActive = (segment: string) => {
     if (!projectId) return false;
-    const current = location.pathname;
+    const current = normalizedPath;
     const base = `/projects/${projectId}/${segment}`;
 
     if (segment === "training") {
@@ -149,7 +158,7 @@ export function AppLayout({ children, hideSidebar = false }: AppLayoutProps) {
           <Button variant="ghost" size="icon" onClick={() => setMobileMenuOpen((prev) => !prev)}>
             {mobileMenuOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
           </Button>
-          <Link to="/dashboard" className="flex items-center gap-2.5">
+          <Link to={appPath("/dashboard")} className="flex items-center gap-2.5">
             <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-primary via-secondary to-accent shadow-glow-sm">
               <Activity className="h-5 w-5 text-white" />
             </div>
@@ -171,6 +180,7 @@ export function AppLayout({ children, hideSidebar = false }: AppLayoutProps) {
 
       {!hideSidebar && (
       <aside
+        data-tour="sidebar"
         className={cn(
           "fixed inset-y-0 left-0 z-50 flex h-full flex-col border-r border-border/60 bg-card/90 backdrop-blur-2xl transition-[transform,width] duration-300",
           // Mobile: drawer width adapts to small screens (max 88vw, capped at 18rem)
@@ -182,7 +192,7 @@ export function AppLayout({ children, hideSidebar = false }: AppLayoutProps) {
         aria-hidden={isMobile && !mobileMenuOpen}
       >
         <div className="flex h-20 items-center justify-between border-b border-border/60 px-5">
-          <Link to="/dashboard" className="flex items-center gap-3" onClick={() => setMobileMenuOpen(false)}>
+          <Link to={appPath("/dashboard")} className="flex items-center gap-3" onClick={() => setMobileMenuOpen(false)}>
             <div className="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-primary via-secondary to-accent shadow-lg shadow-primary/20">
               <Activity className="h-6 w-6 text-white" />
             </div>
@@ -210,7 +220,7 @@ export function AppLayout({ children, hideSidebar = false }: AppLayoutProps) {
             return (
               <Link
                 key={item.path}
-                to={item.path}
+                to={appPath(item.path)}
                 onClick={() => setMobileMenuOpen(false)}
                 title={showLabels ? undefined : item.label}
                 aria-label={item.label}
@@ -239,7 +249,7 @@ export function AppLayout({ children, hideSidebar = false }: AppLayoutProps) {
               </div>
 
               {projectNavItems.map((item) => {
-                const fullPath = `/projects/${projectId}/${item.path}`;
+                const fullPath = appPath(`/projects/${projectId}/${item.path}`);
                 const isActive = isProjectNavActive(item.path);
                 return (
                   <Link
@@ -248,6 +258,7 @@ export function AppLayout({ children, hideSidebar = false }: AppLayoutProps) {
                     onClick={() => setMobileMenuOpen(false)}
                     title={showLabels ? undefined : item.label}
                     aria-label={item.label}
+                    data-tour={`nav-${item.path}`}
                     className={cn(
                       "flex items-center gap-3 rounded-xl py-3 transition-all duration-300",
                       showLabels ? "px-4" : "justify-center px-0",

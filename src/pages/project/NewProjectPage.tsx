@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
 import { ArrowLeft, FolderOpen, Loader2, Plus } from "lucide-react";
 import { useTranslation } from "react-i18next";
@@ -15,16 +15,19 @@ import { useAuth } from "@/contexts/AuthContext";
 import { projectService } from "@/services/projectService";
 import { fadeInUp } from "@/components/ui/page-transition";
 import { ProfileMenu } from "@/components/ProfileMenu";
+import { withDemoPrefix } from "@/demo/paths";
 
 export function NewProjectPage() {
   const { t } = useTranslation();
   const navigate = useNavigate();
+  const location = useLocation();
   const { toast } = useToast();
   const { user } = useAuth();
 
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [isCreating, setIsCreating] = useState(false);
+  const appPath = (path: string) => withDemoPrefix(path, location.pathname);
 
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -47,7 +50,7 @@ export function NewProjectPage() {
         description: t("newProject.successTabular"),
       });
 
-      navigate(`/projects/${project.id}/import`);
+      navigate(appPath(`/projects/${project.id}/import`));
     } catch (error) {
       toast({
         title: t("newProject.errorTitle"),
@@ -73,7 +76,7 @@ export function NewProjectPage() {
             type="button"
             variant="ghost"
             size="sm"
-            onClick={() => navigate("/dashboard")}
+            onClick={() => navigate(appPath("/dashboard"))}
             className="-ml-2 gap-2"
             disabled={isCreating}
           >
@@ -107,6 +110,7 @@ export function NewProjectPage() {
                 <Label htmlFor="name">{t("newProject.nameLabel")}</Label>
                 <Input
                   id="name"
+                  data-tour="new-project-name"
                   value={name}
                   onChange={(e) => setName(e.target.value)}
                   placeholder={t("newProject.namePlaceholder")}
@@ -119,6 +123,7 @@ export function NewProjectPage() {
                 <Label htmlFor="description">{t("newProject.descriptionLabel")}</Label>
                 <Textarea
                   id="description"
+                  data-tour="new-project-description"
                   value={description}
                   onChange={(e) => setDescription(e.target.value)}
                   placeholder={t("newProject.descriptionPlaceholder")}
@@ -131,7 +136,7 @@ export function NewProjectPage() {
                 <Button
                   type="button"
                   variant="outline"
-                  onClick={() => navigate("/dashboard")}
+                  onClick={() => navigate(appPath("/dashboard"))}
                   className="w-full sm:flex-1"
                   disabled={isCreating}
                 >
@@ -140,6 +145,7 @@ export function NewProjectPage() {
 
                 <Button
                   type="submit"
+                  data-tour="new-project-submit"
                   disabled={isCreating || !name.trim()}
                   className="w-full bg-gradient-to-r from-primary to-secondary sm:flex-1"
                 >

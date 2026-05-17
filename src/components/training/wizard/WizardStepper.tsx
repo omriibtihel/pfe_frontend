@@ -36,6 +36,7 @@ export function WizardStepper({ steps, currentStep, onStepClick, completedSteps 
           return (
             <button
               key={i}
+              data-tour={`train-step-${i}`}
               onClick={() => isAccessible && onStepClick(i)}
               disabled={!isAccessible}
               className={cn(

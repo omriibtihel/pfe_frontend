@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useMemo } from "react";
+import React, { useEffect, useState, useCallback, useMemo } from "react";
 import {
   ComposedChart,
   Bar,
@@ -146,6 +146,21 @@ export function NormalityTestPanel({
 
   const [selectedCols, setSelectedCols] = useState<string[]>([]);
   const [search, setSearch] = useState("");
+
+  // Demo mode UX: pre-select the first two numeric columns so the tour can
+  // simulate launching the normality test without driving the column picker
+  // (Radix Popover + Checkbox synthetic events are unreliable). No-op for
+  // real users since this only fires when the demo flag is present.
+  useEffect(() => {
+    try {
+      if (sessionStorage.getItem("__mediq_demo_active__") !== "1") return;
+    } catch {
+      return;
+    }
+    if (selectedCols.length > 0) return;
+    if (numericCols.length === 0) return;
+    setSelectedCols(numericCols.slice(0, 2).map((c) => c.name));
+  }, [numericCols, selectedCols.length]);
   const [results, setResults] = useState<NormalityColResult[] | null>(null);
   const [correctionApplied, setCorrectionApplied] = useState(false);
   const [kTested, setKTested] = useState(0);
@@ -288,7 +303,7 @@ export function NormalityTestPanel({
         <div className="flex flex-wrap items-center gap-2">
           <Popover>
             <PopoverTrigger asChild>
-              <Button variant="outline" size="sm" className="gap-2 h-8 text-sm font-normal">
+              <Button variant="outline" size="sm" className="gap-2 h-8 text-sm font-normal" data-tour="normality-picker-trigger">
                 <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />
                 Colonnes numériques
                 {selectedCols.length > 0 && (
@@ -315,6 +330,7 @@ export function NormalityTestPanel({
                   filteredCols.map((c) => (
                     <div
                       key={c.name}
+                      data-tour={`normality-col-${c.name}`}
                       onClick={() => toggleCol(c.name)}
                       className="flex items-center gap-2.5 px-3 py-2 cursor-pointer hover:bg-muted/50 transition-colors"
                     >
@@ -347,6 +363,7 @@ export function NormalityTestPanel({
           ))}
 
           <Button
+            data-tour="normality-run"
             onClick={() => void runTests()}
             disabled={loading || selectedCols.length === 0}
             size="sm"
@@ -431,6 +448,7 @@ export function NormalityTestPanel({
                         return (
                           <React.Fragment key={r.col}>
                             <tr
+                              data-tour={`normality-result-row-${r.col}`}
                               onClick={() => toggleRow(r.col, r)}
                               className={`border-b cursor-pointer transition-colors ${
                                 isOpen ? "bg-primary/8" : "hover:bg-muted/40"

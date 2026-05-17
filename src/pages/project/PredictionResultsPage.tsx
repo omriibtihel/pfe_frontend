@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import { AlertTriangle, ArrowLeft, Loader2, Target } from 'lucide-react';
 
 import { AppLayout } from '@/layouts/AppLayout';
@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/button';
 import { BatchPredictionResults, SinglePredictionResult } from '@/components/prediction/predictionResults';
 import { useToast } from '@/hooks/use-toast';
 import type { PredictionResponse } from '@/types';
+import { withDemoPrefix } from '@/demo/paths';
 
 /**
  * Detect single-prediction (manual form) mode: the manual flow stores
@@ -20,8 +21,10 @@ function _isSingleMode(result: PredictionResponse): boolean {
 export function PredictionResultsPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const location = useLocation();
   const { toast } = useToast();
   const { t } = useTranslation();
+  const appPath = (path: string) => withDemoPrefix(path, location.pathname);
 
   const [result, setResult] = useState<PredictionResponse | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -72,7 +75,7 @@ export function PredictionResultsPage() {
               {t('predictionResults.parseErrorDesc')}
             </p>
           </div>
-          <Button onClick={() => navigate(`/projects/${id}/predict`)}>
+          <Button onClick={() => navigate(appPath(`/projects/${id}/predict`))}>
             <ArrowLeft className="h-4 w-4 mr-2" /> {t('predictionResults.newPrediction')}
           </Button>
         </div>
@@ -93,7 +96,7 @@ export function PredictionResultsPage() {
               {t('predictionResults.emptyDesc')}
             </p>
           </div>
-          <Button onClick={() => navigate(`/projects/${id}/predict`)}>
+          <Button onClick={() => navigate(appPath(`/projects/${id}/predict`))}>
             <ArrowLeft className="h-4 w-4 mr-2" /> {t('predictionResults.back')}
           </Button>
         </div>

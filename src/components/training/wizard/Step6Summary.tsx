@@ -400,6 +400,7 @@ export function Step6Summary({ projectId, config, onStartTraining, onGoToResults
 
       {status === "idle" && (
         <Button
+          data-tour="train-launch-btn"
           size="lg"
           className="w-full h-14 text-lg gradient-premium text-primary-foreground shadow-glow hover:shadow-glow transition-all duration-300 hover:-translate-y-0.5"
           onClick={handleStart}

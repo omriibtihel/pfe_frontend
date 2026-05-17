@@ -34,6 +34,10 @@ import PredictionResultsPage from "@/pages/project/PredictionResultsPage";
 // Admin Pages
 import AdminDashboardPage from "@/pages/admin/AdminDashboardPage";
 
+// Demo / guided tour
+import DemoLayout from "@/demo/DemoLayout";
+import DemoRouteGuard from "@/demo/DemoRouteGuard";
+
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -46,6 +50,7 @@ const App = () => (
         <Toaster />
         <Sonner />
         <BrowserRouter>
+          <DemoRouteGuard />
           <Routes>
             <Route path="/" element={<LandingPage />} />
             <Route path="/login" element={<LoginPage />} />
@@ -74,6 +79,24 @@ const App = () => (
 
             {/* Admin Routes */}
             <Route path="/admin" element={<ProtectedRoute requireAdmin><AdminDashboardPage /></ProtectedRoute>} />
+
+            {/* Demo / guided tour — no auth required; demoAdapter mocks the backend */}
+            <Route path="/demo" element={<DemoLayout />}>
+              <Route index element={<Navigate to="dashboard" replace />} />
+              <Route path="dashboard" element={<DashboardPage />} />
+              <Route path="projects" element={<DashboardPage />} />
+              <Route path="projects/new" element={<NewProjectPage />} />
+              <Route path="projects/:id/import" element={<ImportPage />} />
+              <Route path="projects/:id/database" element={<DataExplorationPage />} />
+              <Route path="projects/:id/charts" element={<ChartsPage />} />
+              <Route path="projects/:id/nettoyage" element={<NettoyagePage />} />
+              <Route path="projects/:id/preparation" element={<PreparationPage />} />
+              <Route path="projects/:id/training" element={<TrainingPage />} />
+              <Route path="projects/:projectId/versions/:versionId/training" element={<TrainingPage />} />
+              <Route path="projects/:projectId/versions/:versionId/training/results" element={<TrainingResultsPage />} />
+              <Route path="projects/:id/predict" element={<PredictionPage />} />
+              <Route path="projects/:id/predict/results" element={<PredictionResultsPage />} />
+            </Route>
 
             <Route path="*" element={<NotFound />} />
           </Routes>

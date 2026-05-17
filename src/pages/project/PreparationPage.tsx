@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { Link, useNavigate, useParams } from "react-router-dom";
+import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
 import {
   ArrowRight,
   Brain,
@@ -46,6 +46,7 @@ import {
 
 import type { TrainingConfig, TrainingBalancingConfig, FeatureEngineeringConfig } from "@/types";
 import { DEFAULT_FEATURE_ENGINEERING } from "@/types";
+import { withDemoPrefix } from "@/demo/paths";
 
 /** PrepConfig cast as a minimal TrainingConfig subset for child components that expect TrainingConfig */
 function toTrainingConfig(prep: PrepConfig): TrainingConfig {
@@ -79,7 +80,9 @@ export function PreparationPage() {
   const projectId = id!;
   const { toast } = useToast();
   const navigate = useNavigate();
+  const location = useLocation();
   const { t } = useTranslation();
+  const appPath = (path: string) => withDemoPrefix(path, location.pathname);
 
   const [isLoading, setIsLoading] = useState(true);
   const [versions, setVersions] = useState<VersionUI[]>([]);
@@ -309,7 +312,7 @@ export function PreparationPage() {
       <div className="space-y-6">
         {/* Breadcrumb */}
         <div className="flex items-center gap-2 text-sm text-muted-foreground">
-          <Link to={`/projects/${projectId}/versions`} className="hover:text-foreground transition-colors">
+          <Link to={appPath(`/projects/${projectId}/versions`)} className="hover:text-foreground transition-colors">
             {t("preparation.page.breadcrumbVersions")}
           </Link>
           <ChevronRight className="h-4 w-4" />
@@ -395,7 +398,7 @@ export function PreparationPage() {
           <Card>
             <CardContent className="py-10 text-center text-sm text-muted-foreground">
               {t("preparation.page.noVersion")}{" "}
-              <Link to={`/projects/${projectId}/nettoyage`} className="underline">
+              <Link to={appPath(`/projects/${projectId}/nettoyage`)} className="underline">
                 {t("preparation.page.noVersionLink")}
               </Link>.
             </CardContent>
@@ -414,8 +417,8 @@ export function PreparationPage() {
           </div>
           <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
             <div className="flex items-center justify-between">
-              <TabsList>
-                <TabsTrigger value="split" className="gap-2">
+              <TabsList data-tour="prep-tabs">
+                <TabsTrigger value="split" className="gap-2" data-tour="prep-tab-split">
                   <Scissors className="h-4 w-4" />
                   {t("preparation.page.tabSplit")}
                 </TabsTrigger>
@@ -423,7 +426,7 @@ export function PreparationPage() {
                 <Tooltip>
                   <TooltipTrigger asChild>
                     <span>
-                      <TabsTrigger value="columns" className="gap-2" disabled={!splitDone}>
+                      <TabsTrigger value="columns" className="gap-2" disabled={!splitDone} data-tour="prep-tab-columns">
                         {!splitDone && <Lock className="h-3.5 w-3.5 text-muted-foreground" />}
                         <Columns className="h-4 w-4" />
                         {t("preparation.page.tabColumns")}
@@ -444,7 +447,7 @@ export function PreparationPage() {
                 <Tooltip>
                   <TooltipTrigger asChild>
                     <span>
-                      <TabsTrigger value="balancing" className="gap-2" disabled={!splitDone}>
+                      <TabsTrigger value="balancing" className="gap-2" disabled={!splitDone} data-tour="prep-tab-balancing">
                         {!splitDone && <Lock className="h-3.5 w-3.5 text-muted-foreground" />}
                         <RefreshCw className="h-4 w-4" />
                         {t("preparation.page.tabBalancing")}
@@ -460,7 +463,7 @@ export function PreparationPage() {
                 <Tooltip>
                   <TooltipTrigger asChild>
                     <span>
-                      <TabsTrigger value="features" className="gap-2" disabled={!splitDone}>
+                      <TabsTrigger value="features" className="gap-2" disabled={!splitDone} data-tour="prep-tab-features">
                         {!splitDone && <Lock className="h-3.5 w-3.5 text-muted-foreground" />}
                         <FlaskConical className="h-4 w-4" />
                         {prepConfig.taskType === "classification"
@@ -486,13 +489,14 @@ export function PreparationPage() {
                   disabled={step3Validation.hasErrors || !splitDone}
                   className="gap-2"
                   size="sm"
+                  data-tour="prep-save"
                 >
                   <Save className="h-4 w-4" />
                   {t("preparation.page.btnSave")}
                 </Button>
                 {isSaved && savedVersionId === selectedVersionId && (
                   <Button
-                    onClick={() => navigate(`/projects/${projectId}/versions/${selectedVersionId}/training`)}
+                    onClick={() => navigate(appPath(`/projects/${projectId}/versions/${selectedVersionId}/training`))}
                     className="gap-2"
                     size="sm"
                     variant="secondary"

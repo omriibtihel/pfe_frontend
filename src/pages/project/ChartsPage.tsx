@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { Link, useParams } from "react-router-dom";
+import { Link, useLocation, useParams } from "react-router-dom";
 import { ArrowRight, ChevronRight, Download, RefreshCw } from "lucide-react";
 
 import { AppLayout } from "@/layouts/AppLayout";
@@ -27,6 +27,7 @@ import databaseService, {
 
 import CorrelationHeatmap from "@/components/ui/CorrelationHeatmap";
 import { NormalityTestPanel } from "@/components/ui/NormalityTestPanel";
+import { withDemoPrefix } from "@/demo/paths";
 
 // ── Sub-modules (types, constants, UI, panels) ──────────────────────────────
 import type { UiColumn, ChartKind } from "./_charts/types";
@@ -49,8 +50,10 @@ const PROFILE_TOPK = 20;
 export function ChartsPage() {
   const { id } = useParams();
   const projectId = id!;
+  const location = useLocation();
   const { toast } = useToast();
   const { t } = useTranslation();
+  const appPath = (path: string) => withDemoPrefix(path, location.pathname);
 
   // ── Loading ──────────────────────────────────────────────────────────────
   const [isLoading,    setIsLoading]    = useState(true);
@@ -545,7 +548,7 @@ export function ChartsPage() {
 
         {/* Breadcrumb */}
         <div className="flex items-center gap-2 text-sm text-muted-foreground">
-          <Link to={`/projects/${projectId}/database`} className="hover:text-foreground transition-colors">
+          <Link to={appPath(`/projects/${projectId}/database`)} className="hover:text-foreground transition-colors">
             {t("charts.page.breadcrumbDatabase")}
           </Link>
           <ChevronRight className="h-4 w-4" />
@@ -553,7 +556,7 @@ export function ChartsPage() {
         </div>
 
         {/* Hero */}
-        <div className="relative overflow-hidden rounded-2xl border bg-gradient-to-br from-slate-50 via-white to-sky-50 dark:from-slate-950 dark:via-slate-950 dark:to-slate-900">
+        <div data-tour="charts-hero" className="relative overflow-hidden rounded-2xl border bg-gradient-to-br from-slate-50 via-white to-sky-50 dark:from-slate-950 dark:via-slate-950 dark:to-slate-900">
           <div className="absolute inset-0 pointer-events-none opacity-40 [background:radial-gradient(circle_at_20%_0%,rgba(59,130,246,0.18),transparent_40%),radial-gradient(circle_at_90%_30%,rgba(99,102,241,0.14),transparent_45%)]" />
           <div className="relative p-5 md:p-7 flex flex-col sm:flex-row sm:items-center gap-4">
             <div className="flex-1 min-w-0">
@@ -615,9 +618,9 @@ export function ChartsPage() {
 
         {/* Tabs */}
         <Tabs defaultValue="charts">
-          <TabsList className="mb-4">
-            <TabsTrigger value="charts">{t("charts.page.tabs.charts")}</TabsTrigger>
-            <TabsTrigger value="normality">{t("charts.page.tabs.normality")}</TabsTrigger>
+          <TabsList className="mb-4" data-tour="charts-tabs">
+            <TabsTrigger value="charts" data-tour="charts-tab-charts">{t("charts.page.tabs.charts")}</TabsTrigger>
+            <TabsTrigger value="normality" data-tour="charts-tab-normality">{t("charts.page.tabs.normality")}</TabsTrigger>
           </TabsList>
 
           <TabsContent value="normality">
@@ -649,6 +652,7 @@ export function ChartsPage() {
                             return (
                               <button
                                 key={key}
+                                data-tour={`charts-kind-${key}`}
                                 onClick={() => setChartKind(key)}
                                 title={label}
                                 className={[
@@ -962,7 +966,7 @@ export function ChartsPage() {
 
         <div className="flex justify-end pt-2">
           <Button asChild>
-            <Link to={`/projects/${projectId}/nettoyage`}>
+            <Link to={appPath(`/projects/${projectId}/nettoyage`)}>
               {t("charts.page.nextStep")}
               <ArrowRight className="ml-2 h-4 w-4" />
             </Link>

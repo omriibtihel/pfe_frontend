@@ -168,6 +168,7 @@ export function Step4Models({ projectId, config, onConfigChange }: Step4Props) {
               return (
                 <motion.label
                   key={m.value}
+                  data-tour={`train-model-${m.value}`}
                   initial={{ opacity: 0, y: 8 }}
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ delay: i * 0.04 }}

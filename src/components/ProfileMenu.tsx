@@ -17,6 +17,7 @@ import {
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { LanguageSwitcher } from "@/components/LanguageSwitcher";
 import { UserProfileDialog } from "@/components/UserProfileDialog";
+import { purgeDemoSessionStorage, useDemo } from "@/demo/DemoContext";
 
 type Variant = "sidebar" | "inline" | "card";
 
@@ -29,6 +30,7 @@ interface ProfileMenuProps {
 export function ProfileMenu({ variant, sidebarOpen = true }: ProfileMenuProps) {
   const { t } = useTranslation();
   const { user, logout } = useAuth();
+  const demo = useDemo();
   const navigate = useNavigate();
 
   const [profileOpen, setProfileOpen] = useState(false);
@@ -56,6 +58,13 @@ export function ProfileMenu({ variant, sidebarOpen = true }: ProfileMenuProps) {
   };
 
   const handleLogout = async () => {
+    if (demo.active) {
+      demo.restorePreviousAuth();
+      purgeDemoSessionStorage();
+      window.location.assign("/");
+      return;
+    }
+
     await logout();
     navigate("/login");
   };

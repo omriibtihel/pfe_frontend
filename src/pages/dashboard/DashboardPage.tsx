@@ -1,5 +1,5 @@
 import { Fragment, useEffect, useMemo, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import { animate, motion, useMotionValue, useTransform } from "framer-motion";
 import {
   ArrowUpRight,
@@ -54,6 +54,7 @@ import type { Project } from "@/types";
 import { useToast } from "@/hooks/use-toast";
 import { staggerContainer, staggerItem, fadeInUp } from "@/components/ui/page-transition";
 import datasetService from "@/services/datasetService";
+import { withDemoPrefix } from "@/demo/paths";
 
 type SortKey = "recent" | "name" | "oldest";
 type ViewMode = "grid" | "list";
@@ -95,6 +96,7 @@ export function DashboardPage() {
   const { t, i18n } = useTranslation();
   const { user } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
   const { toast } = useToast();
 
   const [projects, setProjects] = useState<Project[]>([]);
@@ -151,15 +153,16 @@ export function DashboardPage() {
   }, [i18n.language]);
 
   const firstName = (user?.fullName ?? "").trim().split(/\s+/)[0] ?? "";
+  const appPath = (path: string) => withDemoPrefix(path, location.pathname);
 
   const openProject = async (project: Project) => {
     setOpenLoadingId(project.id);
     try {
       const datasets = await datasetService.list(project.id);
       if (datasets.length > 0) {
-        navigate(`/projects/${project.id}/database`);
+        navigate(appPath(`/projects/${project.id}/database`));
       } else {
-        navigate(`/projects/${project.id}/import`);
+        navigate(appPath(`/projects/${project.id}/import`));
       }
     } catch (error) {
       toast({
@@ -340,7 +343,7 @@ export function DashboardPage() {
                 </span>
               </div>
 
-              <div className="min-w-0">
+              <div className="min-w-0" data-tour="dashboard-hero">
                 <h1 className="text-2xl font-bold leading-tight tracking-tight sm:text-3xl md:text-[2rem] lg:text-[2.25rem] xl:text-[2.5rem] 2xl:text-[2.75rem]">
                   {greeting}
                   {firstName && (
@@ -362,8 +365,9 @@ export function DashboardPage() {
               {/* CTA */}
               <div className="flex w-full">
                 <Button
+                  data-tour="dashboard-new-project"
                   className="group/cta relative h-11 w-full gap-2 overflow-hidden bg-gradient-to-r from-primary via-[hsl(265_85%_60%)] to-secondary shadow-lg shadow-primary/30 transition-all hover:-translate-y-0.5 hover:shadow-xl hover:shadow-primary/40 sm:w-auto"
-                  onClick={() => navigate("/projects/new")}
+                  onClick={() => navigate(appPath("/projects/new"))}
                 >
                   <span className="pointer-events-none absolute inset-0 -translate-x-full bg-gradient-to-r from-transparent via-white/25 to-transparent transition-transform duration-700 group-hover/cta:translate-x-full" />
                   <Plus className="h-4 w-4 transition-transform group-hover/cta:rotate-90" />
@@ -505,7 +509,7 @@ export function DashboardPage() {
                   <p className="text-lg font-semibold">{t("dashboard.emptyTitle")}</p>
                   <p className="max-w-md text-sm text-muted-foreground">{t("dashboard.emptySub")}</p>
                 </div>
-                <Button className="mt-2 gap-2 shadow-lg shadow-primary/20" onClick={() => navigate("/projects/new")}>
+                <Button className="mt-2 gap-2 shadow-lg shadow-primary/20" onClick={() => navigate(appPath("/projects/new"))}>
                   <Plus className="h-4 w-4" />
                   {t("dashboard.createFirst")}
                 </Button>

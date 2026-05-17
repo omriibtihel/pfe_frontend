@@ -263,6 +263,29 @@ function buildSchemaChips(op: ProcessingOperation, t: TFunction): Chip[] {
   return chips;
 }
 
+// ── Generic fallback (unknown / future cleaning actions) ──────────────────────
+
+/**
+ * Résumé minimal basé uniquement sur les deltas de forme — utilisé quand
+ * `params.action` ne correspond à aucun builder spécialisé. On ne retombe
+ * jamais sur `buildSchemaChips` (qui n'a de sens que pour `op_type=schema`).
+ */
+function buildGenericCleaningChips(_op: ProcessingOperation, r: OpResult | null, t: TFunction): Chip[] {
+  if (!r) return [];
+  const chips: Chip[] = [];
+  const br = r.before_shape?.rows;
+  const ar = r.after_shape?.rows;
+  const bc = r.before_shape?.cols;
+  const ac = r.after_shape?.cols;
+
+  if (br != null && ar != null && br !== ar)
+    chips.push(chip('rows', t('nettoyage.chips.shapeRows', { before: br, after: ar })));
+  if (bc != null && ac != null && bc !== ac)
+    chips.push(chip('cols', t('nettoyage.chips.shapeCols', { before: bc, after: ac })));
+
+  return chips;
+}
+
 // ── Public API ────────────────────────────────────────────────────────────────
 
 const ACTION_BUILDERS: Record<string, (op: ProcessingOperation, r: OpResult | null, t: TFunction) => Chip[]> = {
@@ -276,11 +299,19 @@ const ACTION_BUILDERS: Record<string, (op: ProcessingOperation, r: OpResult | nu
 };
 
 export function buildOpSummaryChips(op: ProcessingOperation, t: TFunction): React.ReactNode[] {
-  const action = String(op.params?.action ?? '');
+  const opType = String(op.op_type ?? '').toLowerCase();
   const r = getResult(op);
 
-  const builder = ACTION_BUILDERS[action];
-  const chips = builder ? builder(op, r, t) : buildSchemaChips(op, t);
+  let chips: Chip[];
+  if (opType === 'schema') {
+    chips = buildSchemaChips(op, t);
+  } else {
+    // op_type "cleaning" (ou inconnu mais non-schema) : dispatch sur l'action,
+    // fallback générique sur les deltas de forme — jamais sur les chips schema.
+    const action = String(op.params?.action ?? '');
+    const builder = ACTION_BUILDERS[action];
+    chips = builder ? builder(op, r, t) : buildGenericCleaningChips(op, r, t);
+  }
 
   return chips.map(({ key, content, variant }) => (
     <span

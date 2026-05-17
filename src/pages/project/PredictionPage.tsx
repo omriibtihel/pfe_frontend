@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import {
   AlertCircle,
   Bookmark,
@@ -43,6 +43,7 @@ import {
 import { predictionService } from '@/services/predictionService';
 import { trainingService } from '@/services/trainingService';
 import type { PredictionResponse, SavedModelSummary } from '@/types';
+import { withDemoPrefix } from '@/demo/paths';
 
 const formatScore = (
   score: number | null | undefined,
@@ -57,8 +58,10 @@ const formatScore = (
 export function PredictionPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const location = useLocation();
   const { toast } = useToast();
   const { t } = useTranslation();
+  const appPath = (path: string) => withDemoPrefix(path, location.pathname);
 
   const [savedModels, setSavedModels] = useState<SavedModelSummary[]>([]);
   const [selectedVersionId, setSelectedVersionId] = useState<string>('');
@@ -165,7 +168,7 @@ export function PredictionPage() {
       sessionStorage.setItem('lastPrediction', JSON.stringify(result));
       sessionStorage.setItem('lastPredictionFile', file?.name ?? 'manual');
       toast({ title: t('prediction.page.toastPredictionDone', { n: result.nRows }) });
-      navigate(`/projects/${id}/predict/results`);
+      navigate(appPath(`/projects/${id}/predict/results`));
     } catch (error) {
       toast({
         title: t('prediction.page.toastPredictionErrTitle'),
@@ -185,7 +188,7 @@ export function PredictionPage() {
   return (
     <AppLayout>
       <div className="w-full space-y-6">
-        <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+        <div data-tour="predict-header" className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
           <div>
             <h1 className="text-3xl font-bold text-foreground">{t('prediction.page.title')}</h1>
             <p className="mt-1 text-muted-foreground">
@@ -216,7 +219,7 @@ export function PredictionPage() {
                 <Button
                   variant="link"
                   className="mt-1 h-auto p-0 text-sm"
-                  onClick={() => navigate(`/projects/${id}/training`)}
+                  onClick={() => navigate(appPath(`/projects/${id}/training`))}
                 >
                   {t('prediction.page.goToTraining')}
                 </Button>
@@ -394,6 +397,7 @@ export function PredictionPage() {
         {/* Mode selection — two-card grid */}
         <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
           <Card
+            data-tour="predict-mode-manual"
             className={`cursor-pointer transition-all ${
               mode === 'manual' ? 'border-primary ring-2 ring-primary' : 'hover:border-primary/50'
             }`}
@@ -450,6 +454,7 @@ export function PredictionPage() {
           </Card>
 
           <Card
+            data-tour="predict-mode-file"
             className={`cursor-pointer transition-all ${
               mode === 'file' ? 'border-primary ring-2 ring-primary' : 'hover:border-primary/50'
             }`}
@@ -475,6 +480,7 @@ export function PredictionPage() {
         </div>
 
         <Button
+          data-tour="predict-launch"
           size="lg"
           className="h-14 w-full bg-gradient-to-r from-primary to-secondary text-lg shadow-glow"
           onClick={handlePredict}

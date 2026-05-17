@@ -448,12 +448,60 @@ export default function LandingPage() {
                     <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
                   </Link>
                 </Button>
-                <Button size="lg" variant="outline" asChild className="text-base px-7 py-5 group">
-                  <Link to="/login" className="flex items-center gap-2">
-                    <Play className="w-4 h-4 fill-current" />
-                    {t("landing.hero.ctaDemo")}
-                  </Link>
-                </Button>
+                <motion.div
+                  className="relative inline-flex"
+                  animate={{ scale: [1, 1.04, 1] }}
+                  transition={{ duration: 2.2, repeat: Infinity, ease: 'easeInOut' }}
+                >
+                  {/* Ping rings — expanding pulses */}
+                  <motion.span
+                    aria-hidden
+                    className="absolute inset-0 rounded-xl border-2 border-primary/50"
+                    animate={{ scale: [1, 1.25, 1.4], opacity: [0.6, 0.2, 0] }}
+                    transition={{ duration: 2, repeat: Infinity, ease: 'easeOut' }}
+                  />
+                  <motion.span
+                    aria-hidden
+                    className="absolute inset-0 rounded-xl border-2 border-secondary/40"
+                    animate={{ scale: [1, 1.25, 1.4], opacity: [0.6, 0.2, 0] }}
+                    transition={{ duration: 2, repeat: Infinity, ease: 'easeOut', delay: 1 }}
+                  />
+
+                  {/* Pulsing aura behind the demo CTA */}
+                  <motion.span
+                    aria-hidden
+                    className="absolute -inset-1.5 rounded-2xl bg-gradient-to-r from-primary via-secondary to-primary opacity-60 blur-lg"
+                    animate={{ opacity: [0.45, 0.85, 0.45], scale: [1, 1.08, 1] }}
+                    transition={{ duration: 2.6, repeat: Infinity, ease: 'easeInOut' }}
+                  />
+
+                  <Button
+                    size="lg"
+                    variant="premium"
+                    asChild
+                    className="relative text-base px-8 py-6 shadow-glow group overflow-hidden ring-1 ring-primary/30"
+                  >
+                    <Link to="/demo" className="flex items-center gap-2 font-semibold">
+                      {/* Shimmer sweep — continuous */}
+                      <motion.span
+                        aria-hidden
+                        className="pointer-events-none absolute inset-0 bg-gradient-to-r from-transparent via-white/30 to-transparent"
+                        initial={{ x: '-100%' }}
+                        animate={{ x: '100%' }}
+                        transition={{ duration: 2.4, repeat: Infinity, ease: 'easeInOut', repeatDelay: 0.6 }}
+                      />
+                      <motion.span
+                        aria-hidden
+                        className="relative z-10 inline-flex items-center justify-center w-5 h-5 rounded-full bg-white/20"
+                        animate={{ scale: [1, 1.2, 1] }}
+                        transition={{ duration: 1.4, repeat: Infinity, ease: 'easeInOut' }}
+                      >
+                        <Play className="w-3 h-3 fill-current" />
+                      </motion.span>
+                      <span className="relative z-10">{t("landing.hero.ctaDemo")}</span>
+                    </Link>
+                  </Button>
+                </motion.div>
               </motion.div>
 
               {/* Trust row */}

@@ -17,9 +17,10 @@ import {
 } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Link, useParams } from 'react-router-dom';
+import { Link, useLocation, useParams } from 'react-router-dom';
 
 import { ReportExportModal } from '@/components/report/ReportExportModal';
+import { withDemoPrefix } from '@/demo/paths';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import {
@@ -76,8 +77,10 @@ import { fmt, KIND_COLORS, makeKindLabel, pctLabel } from './dataExploration/typ
 export default function DataExplorationPage() {
   const { id } = useParams<{ id: string }>();
   const projectId = id!;
+  const location = useLocation();
   const { toast } = useToast();
   const { t } = useTranslation();
+  const appPath = (path: string) => withDemoPrefix(path, location.pathname);
   const kindLabel = useMemo(() => makeKindLabel(t), [t]);
 
   const {
@@ -374,7 +377,7 @@ export default function DataExplorationPage() {
       <div className="space-y-6">
 
         {/* ── Page header ─────────────────────────────────────────────────── */}
-        <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-4">
+        <div data-tour="explore-header" className="flex flex-col md:flex-row md:items-start md:justify-between gap-4">
           <div>
             <h1 className="text-3xl font-bold text-foreground flex items-center gap-3">
               <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-primary to-primary/60">
@@ -542,16 +545,16 @@ export default function DataExplorationPage() {
 
         {/* ── Tabs ─────────────────────────────────────────────────────────── */}
         <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
-          <TabsList className="grid grid-cols-3 w-full max-w-md">
-            <TabsTrigger value="apercu" className="flex items-center gap-1.5">
+          <TabsList className="grid grid-cols-3 w-full max-w-md" data-tour="explore-tabs">
+            <TabsTrigger value="apercu" className="flex items-center gap-1.5" data-tour="explore-tab-overview">
               <Database className="h-4 w-4" />
               {t('dataExploration.page.tabs.overview')}
             </TabsTrigger>
-            <TabsTrigger value="colonnes" className="flex items-center gap-1.5">
+            <TabsTrigger value="colonnes" className="flex items-center gap-1.5" data-tour="explore-tab-columns">
               <Layers className="h-4 w-4" />
               {t('dataExploration.page.tabs.columns')}
             </TabsTrigger>
-            <TabsTrigger value="analyse" className="flex items-center gap-1.5">
+            <TabsTrigger value="analyse" className="flex items-center gap-1.5" data-tour="explore-tab-analysis">
               <BarChart3 className="h-4 w-4" />
               {t('dataExploration.page.tabs.analysis')}
             </TabsTrigger>
@@ -760,6 +763,7 @@ export default function DataExplorationPage() {
                           return (
                             <button
                               key={col.name}
+                              data-tour={`explore-col-row-${col.name}`}
                               className={`w-full grid grid-cols-[1fr_100px_80px_80px] gap-2 items-center px-4 py-2.5 border-b text-left text-sm transition-colors ${
                                 hasParasites
                                   ? 'bg-red-50/60 dark:bg-red-950/20 border-b-red-200 dark:border-b-red-900/40 border-l-2 border-l-red-500 hover:bg-red-100/60 dark:hover:bg-red-950/40'
@@ -1087,7 +1091,7 @@ export default function DataExplorationPage() {
 
         <div className="flex justify-end pt-2">
           <Button asChild>
-            <Link to={`/projects/${projectId}/charts`}>
+            <Link to={appPath(`/projects/${projectId}/charts`)}>
               {t('dataExploration.page.nextStep')}
               <ArrowRight className="ml-2 h-4 w-4" />
             </Link>

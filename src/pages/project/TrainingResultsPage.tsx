@@ -268,7 +268,7 @@ export function TrainingResultsPage() {
           animate="animate"
           variants={staggerContainer}
         >
-          <motion.div variants={staggerItem}>
+          <motion.div variants={staggerItem} data-tour="results-header">
             <TrainingResultsHeader
               session={session}
               preferredFormat={preferredReportFormat}
@@ -377,7 +377,7 @@ export function TrainingResultsPage() {
           ) : null}
 
           {hasResults ? (
-            <motion.div variants={staggerItem}>
+            <motion.div variants={staggerItem} data-tour="results-overview">
               <ResultsOverview
                 session={session}
                 bestModel={bestModel}
@@ -388,7 +388,7 @@ export function TrainingResultsPage() {
           ) : null}
 
           {hasResults ? (
-            <motion.div variants={staggerItem}>
+            <motion.div variants={staggerItem} data-tour="results-comparison">
               <ModelsComparisonTable
                 session={session}
                 bestModel={bestModel}
@@ -398,7 +398,7 @@ export function TrainingResultsPage() {
           ) : null}
 
           {hasResults ? (
-            <motion.section variants={staggerItem} aria-labelledby="model-details-heading">
+            <motion.section variants={staggerItem} aria-labelledby="model-details-heading" data-tour="results-details">
               <h2 id="model-details-heading" className="mb-4 text-lg font-semibold">
                 {t('trainingResults.page.detailsHeading')}
               </h2>

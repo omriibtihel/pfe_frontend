@@ -139,6 +139,7 @@ export function NettoyagePage() {
 
         {/* ── Header ── */}
         <motion.div
+          data-tour="nettoyage-hero"
           initial={{ opacity: 0, y: -10 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.5, ease: "easeOut" }}
@@ -281,6 +282,7 @@ export function NettoyagePage() {
 
         {/* ── Preview + Historique ── */}
         <motion.div
+          data-tour="nettoyage-grid"
           initial={{ opacity: 0, y: 15 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.5, delay: 0.3, ease: "easeOut" }}

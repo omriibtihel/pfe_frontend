@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { useParams, useNavigate } from "react-router-dom";
+import { useParams, useNavigate, useLocation } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Upload,
@@ -31,13 +31,16 @@ import datasetService, {
   DatasetOut,
   DatasetPreviewOut,
 } from "@/services/datasetService";
+import { withDemoPrefix } from "@/demo/paths";
 
 export function ImportPage() {
   const { id } = useParams();
   const projectId = id!;
   const navigate = useNavigate();
+  const location = useLocation();
   const { toast } = useToast();
   const { t } = useTranslation();
+  const appPath = (path: string) => withDemoPrefix(path, location.pathname);
 
   const [file, setFile] = useState<File | null>(null);
   const [datasets, setDatasets] = useState<DatasetOut[]>([]);
@@ -234,7 +237,7 @@ export function ImportPage() {
         </motion.div>
 
         {/* Upload */}
-        <motion.div variants={staggerItem}>
+        <motion.div variants={staggerItem} data-tour="import-upload">
           <Card className="border-2 border-dashed border-primary/30 bg-gradient-to-br from-primary/5 to-secondary/5">
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
@@ -269,6 +272,7 @@ export function ImportPage() {
               variants={staggerItem}
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
+              data-tour="import-preview"
             >
               <Card>
                 <CardHeader className="space-y-3">
@@ -280,7 +284,7 @@ export function ImportPage() {
 
                     <div className="flex items-center gap-2">
                       <Button
-                        onClick={() => navigate(`/projects/${projectId}/database`)}
+                        onClick={() => navigate(appPath(`/projects/${projectId}/database`))}
                         className="bg-gradient-to-r from-primary to-secondary"
                       >
                         <Database className="h-4 w-4 mr-2" />
@@ -292,7 +296,7 @@ export function ImportPage() {
                   {/* ✅ rows selector */}
                   <div className="flex flex-col md:flex-row md:items-end md:justify-between gap-4">
                   {/* Left: rows input */}
-                  <div className="flex flex-col gap-1">
+                  <div className="flex flex-col gap-1" data-tour="import-rows">
                     <Label htmlFor="rows" className="text-sm">
                       {t("import.rowsLabel")}
                     </Label>
@@ -320,6 +324,7 @@ export function ImportPage() {
                       onClick={onClickPreview}
                       disabled={isLoadingPreview}
                       className="h-9"
+                      data-tour="import-preview-btn"
                     >
                       <Eye className="h-4 w-4 mr-2" />
                       {t("import.preview")}

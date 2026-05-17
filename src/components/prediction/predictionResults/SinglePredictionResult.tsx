@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import {
   AlertTriangle,
   ArrowLeft,
@@ -19,6 +19,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { PredictionReportPanel } from '@/components/prediction/PredictionReportPanel';
+import { withDemoPrefix } from '@/demo/paths';
 import type {
   ExplanationMethod,
   LimeLocalItem,
@@ -359,6 +360,8 @@ export function SinglePredictionResult({
   projectId: string;
 }) {
   const navigate = useNavigate();
+  const location = useLocation();
+  const appPath = (path: string) => withDemoPrefix(path, location.pathname);
 
   const row = result.rows[0];
   const isClassification = result.taskType === 'classification';
@@ -431,7 +434,7 @@ export function SinglePredictionResult({
             <XCircle className="h-7 w-7" />
           </div>
           <h2 className="text-xl font-semibold">Aucune ligne dans le résultat</h2>
-          <Button onClick={() => navigate(`/projects/${projectId}/predict`)}>
+          <Button onClick={() => navigate(appPath(`/projects/${projectId}/predict`))}>
             <ArrowLeft className="h-4 w-4 mr-2" /> Retour
           </Button>
         </div>
@@ -448,7 +451,7 @@ export function SinglePredictionResult({
             variant="ghost"
             size="sm"
             className="-ml-2 self-start text-xs text-muted-foreground hover:text-foreground"
-            onClick={() => navigate(`/projects/${projectId}/predict`)}
+            onClick={() => navigate(appPath(`/projects/${projectId}/predict`))}
           >
             <ArrowLeft className="h-3.5 w-3.5 mr-1" /> Nouvelle prédiction
           </Button>

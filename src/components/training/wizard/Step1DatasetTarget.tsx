@@ -98,7 +98,7 @@ export function Step1DatasetTarget({ projectId, config, onConfigChange }: Step1P
 
     loadVersionData();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [projectId, config.datasetVersionId]);
+  }, [projectId, config.datasetVersionId, versions]);
 
   // 3) Load unique values + distribution for the selected target column
   useEffect(() => {
@@ -187,7 +187,7 @@ export function Step1DatasetTarget({ projectId, config, onConfigChange }: Step1P
         </Card>
 
         {/* Target Column */}
-        <Card className="glass-premium shadow-card">
+        <Card className="glass-premium shadow-card" data-tour="train-step1-target">
           <CardHeader className="pb-3">
             <CardTitle className="flex items-center gap-2 text-base">
               <div className="p-2 rounded-xl bg-secondary/10">
@@ -202,12 +202,12 @@ export function Step1DatasetTarget({ projectId, config, onConfigChange }: Step1P
               onValueChange={handleTargetChange}
               disabled={!columns.length}
             >
-              <SelectTrigger className="h-11">
+              <SelectTrigger className="h-11" data-tour="train-step1-target-trigger">
                 <SelectValue placeholder={t("training.step1.targetPlaceholder")} />
               </SelectTrigger>
               <SelectContent>
                 {columns.map((c) => (
-                  <SelectItem key={c.name} value={c.name}>
+                  <SelectItem key={c.name} value={c.name} data-tour={`train-step1-target-option-${c.name}`}>
                     <div className="flex items-center gap-2">
                       <span>{c.name}</span>
                       <Badge variant="outline" className="text-[10px] px-1.5 py-0">
