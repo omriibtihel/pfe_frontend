@@ -35,6 +35,7 @@ export interface MetricsSummary {
   rmse?: number | null;
   mae?: number | null;
   mse?: number | null;
+  mape?: number | null;
 }
 
 export interface SplitSummary {
@@ -210,6 +211,7 @@ export interface ResidualAnalysisData {
   histogram: ResidualHistogram;
   qq_points: [number, number][];
   n_samples: number;
+  source?: 'holdout_test' | 'cv_oof' | null;
 }
 
 export interface ArtifactWarning {

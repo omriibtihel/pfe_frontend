@@ -1,5 +1,5 @@
 export const LOWER_IS_BETTER = new Set([
-  "rmse", "mae", "mse", "log_loss", "brier_score"
+  "rmse", "mae", "mse", "mape", "log_loss", "brier_score"
 ]);
 
 /**

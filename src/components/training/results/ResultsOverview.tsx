@@ -140,6 +140,9 @@ export function ResultsOverview({
             <>
               <StatChip label="RMSE (meilleur)" value={toNumber(bestModel.metrics.rmse)} accent />
               <StatChip label="MAE (meilleur)" value={toNumber(bestModel.metrics.mae)} />
+              {bestModel.metrics.mape != null && (
+                <StatChip label="MAPE (meilleur)" value={toPercent(bestModel.metrics.mape)} />
+              )}
             </>
           )}
         </div>

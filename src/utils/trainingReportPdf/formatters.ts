@@ -41,6 +41,7 @@ export const METRIC_LABELS: Record<string, string> = {
   rmse:              'RMSE',
   mae:               'MAE',
   mse:               'MSE',
+  mape:              'MAPE',
   train_score:       'Train Score',
 };
 

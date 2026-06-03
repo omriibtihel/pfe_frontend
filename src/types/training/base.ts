@@ -38,6 +38,7 @@ export type MetricType =
   | 'mse'
   | 'rmse'
   | 'mae'
+  | 'mape'
   | 'r2';
 export type SplitMethod =
   | 'holdout'

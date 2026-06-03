@@ -74,6 +74,7 @@ const regressionMetricGroupDefs: MetricGroupDef[] = [
     { value: "mae", hasHelp: true, hasRange: true },
     { value: "mse", hasHelp: true, hasRange: false },
     { value: "rmse", hasHelp: true, hasRange: true },
+    { value: "mape", hasHelp: true, hasRange: true },
   ]},
   { id: "fit", options: [
     { value: "r2", hasHelp: true, hasRange: true },

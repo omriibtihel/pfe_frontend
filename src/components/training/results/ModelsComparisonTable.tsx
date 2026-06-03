@@ -51,6 +51,7 @@ const METRIC_DESCRIPTIONS: Record<string, string> = {
   r2: 'Coefficient de détermination (R²). Plus proche de 1 = meilleure explication de la variance.',
   rmse: "Racine de l'erreur quadratique moyenne. Pénalise les grandes erreurs.",
   mae: 'Erreur absolue moyenne. Robuste aux valeurs aberrantes.',
+  mape: 'Erreur absolue moyenne en pourcentage. Sensible aux cibles proches de 0 (ignorées dans le calcul).',
   mse: 'Erreur quadratique moyenne.',
   time: "Temps d'entraînement en secondes.",
 };

@@ -263,9 +263,25 @@ export function ModelCardAnalyseTab({ result, isRegression, classView }: ModelCa
             count,
           }));
           const qqData = ra.qq_points.map(([t, s]) => ({ theoretical: t, sample: s }));
+          const sourceLabel =
+            ra.source === 'cv_oof'
+              ? 'CV out-of-fold (validation croisée)'
+              : ra.source === 'holdout_test'
+                ? 'Holdout test set'
+                : null;
           return (
             <section aria-label="Analyse des résidus">
-              <p className="mb-1.5 text-xs font-medium">Analyse des résidus</p>
+              <div className="mb-1.5 flex items-center gap-2">
+                <p className="text-xs font-medium">Analyse des résidus</p>
+                {sourceLabel && (
+                  <span
+                    className="rounded-full border border-border/50 bg-muted/60 px-1.5 py-0.5 text-[10px] text-muted-foreground"
+                    title="Source des résidus utilisés pour le diagnostic"
+                  >
+                    {sourceLabel}
+                  </span>
+                )}
+              </div>
               <div className="mb-1.5 flex flex-wrap gap-1 text-[10px]">
                 <span
                   className="rounded-full border border-border/50 bg-muted/60 px-1.5 py-0.5 text-muted-foreground"

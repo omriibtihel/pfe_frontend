@@ -17,7 +17,7 @@ const METRIC_TOOLTIPS: Record<string, string> = {
 
 const METRIC_PRIORITY = [
   "roc_auc", "f1", "pr_auc", "accuracy", "precision", "recall",
-  "r2", "rmse", "mae", "mse"
+  "r2", "rmse", "mae", "mse", "mape"
 ];
 
 // eslint-disable-next-line react-refresh/only-export-components

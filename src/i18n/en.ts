@@ -2009,6 +2009,12 @@ const en = {
           help: "Interpretable version of MSE: returned in the target's unit. Sensitive to large errors. Recommended if the clinical unit matters for communication.",
           range: "Interpret based on clinical unit",
         },
+        mape: {
+          label: "Mean Absolute % Error (MAPE)",
+          desc: "Error expressed as a percentage of the target",
+          help: "Mean of |(y_true - y_pred) / y_true|. Expressed as a percentage, unit-independent. Samples with y_true = 0 are skipped (division by zero). Avoid when the target is near zero.",
+          range: "Excellent < 10% | Good 10–20% | Acceptable 20–50% | Poor > 50%",
+        },
         r2: {
           label: "Explained variance (R²)",
           desc: "Share of variability explained by the model",

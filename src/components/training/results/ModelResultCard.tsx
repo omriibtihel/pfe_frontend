@@ -144,6 +144,7 @@ const METRIC_THEME: Record<string, { color: keyof typeof ACCENT_PRESETS; icon: I
   rmse:               { color: 'stone',   icon: Gauge },
   mae:                { color: 'stone',   icon: Gauge },
   mse:                { color: 'stone',   icon: Gauge },
+  mape:               { color: 'stone',   icon: Gauge },
 };
 
 const RATIO_LIKE_METRICS = new Set([

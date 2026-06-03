@@ -2011,6 +2011,12 @@ const fr = {
           help: "Version interprétable du MSE : retourné dans l'unité de la variable cible. Sensible aux grandes erreurs. Recommandé si l'unité clinique est importante pour la communication.",
           range: "Interpréter selon l'unité clinique",
         },
+        mape: {
+          label: "Erreur absolue moyenne en % (MAPE)",
+          desc: "Erreur exprimée en pourcentage de la cible",
+          help: "Moyenne de |(y_true - y_pred) / y_true|. Exprimée en pourcentage, indépendante de l'unité. Échantillons avec y_true = 0 ignorés (division par zéro). À éviter si la cible est proche de 0.",
+          range: "Excellent < 10% | Bon 10–20% | Acceptable 20–50% | Médiocre > 50%",
+        },
         r2: {
           label: "Variance expliquée (R²)",
           desc: "Proportion de la variabilité expliquée par le modèle",

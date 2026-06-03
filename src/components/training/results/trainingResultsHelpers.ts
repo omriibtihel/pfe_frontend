@@ -179,6 +179,7 @@ const METRIC_TO_SUMMARY_KEY: Partial<Record<MetricType, keyof MetricsSummary>> =
   mae: 'mae',
   mse: 'mse',
   rmse: 'rmse',
+  mape: 'mape',
   r2: 'r2',
 };
 
@@ -202,6 +203,7 @@ const METRIC_DISPLAY_LABELS: Partial<Record<MetricType, { label: string; short: 
   mae: { label: 'MAE', short: 'MAE' },
   mse: { label: 'MSE', short: 'MSE' },
   rmse: { label: 'RMSE', short: 'RMSE' },
+  mape: { label: 'MAPE', short: 'MAPE' },
   r2: { label: 'R²', short: 'R²' },
 };
 
@@ -212,7 +214,7 @@ const CLASSIFICATION_PRIORITY: MetricType[] = [
   'recall_weighted', 'precision_weighted',
   'f1_micro', 'recall_micro', 'precision_micro',
 ];
-const REGRESSION_PRIORITY: MetricType[] = ['r2', 'rmse', 'mae', 'mse'];
+const REGRESSION_PRIORITY: MetricType[] = ['r2', 'rmse', 'mae', 'mape', 'mse'];
 
 const CLASSIFICATION_FALLBACK: MetricType[] = ['roc_auc', 'f1', 'accuracy'];
 const REGRESSION_FALLBACK: MetricType[] = ['rmse', 'mae', 'r2'];
