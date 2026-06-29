@@ -15,14 +15,24 @@
 import { useCallback, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
+  Activity,
+  AlignLeft,
   AlertTriangle,
   ArrowDown,
   ArrowRight,
   ArrowUp,
+  BarChart3,
+  Check,
   Download,
   FileText,
+  Info,
+  KeyRound,
+  ListChecks,
   Loader2,
+  ShieldAlert,
   Target,
+  Wand2,
+  type LucideIcon,
 } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
@@ -48,6 +58,8 @@ interface ReportState {
   risk_level: string;
   /** threshold_pct from the backend when available — used to refine the gauge. */
   threshold_pct: number;
+  /** Whether the task is classification — drives the "what to change" empty note. */
+  is_classification: boolean;
   summary: string;
   key_factors: ReportFactor[];
   context: string;
@@ -61,6 +73,7 @@ const EMPTY_STATE: ReportState = {
   prediction: null,
   risk_level: '',
   threshold_pct: 50,
+  is_classification: true,
   summary: '',
   key_factors: [],
   context: '',
@@ -165,26 +178,10 @@ function StatusBadge({ status, lang }: { status?: string; lang: ReportLang }) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// ScoreGauge — semi-circle SVG
-//
-// Geometry: centre (GCX, GCY), radius GR.
-// 0 % → left point (angle = −π), 100 % → right point (angle = 0).
-// Every arc spans [0°, 180°], so largeArc is always 0.
+// ScoreMeter — professional linear score indicator with a threshold marker
 // ─────────────────────────────────────────────────────────────────────────────
 
-const GCX = 120;
-const GCY = 128;
-const GR  = 98;
-
-function pctToArcPoint(pct: number) {
-  const a = (pct / 100) * Math.PI - Math.PI; // [−π, 0]
-  return {
-    x: GCX + GR * Math.cos(a),
-    y: GCY + GR * Math.sin(a),
-  };
-}
-
-function ScoreGauge({
+function ScoreMeter({
   scorePct,
   thresholdPct,
   lang,
@@ -193,99 +190,62 @@ function ScoreGauge({
   thresholdPct: number;
   lang: ReportLang;
 }) {
-  const f = (n: number) => n.toFixed(1);
-
-  const start  = pctToArcPoint(0);
-  const end    = pctToArcPoint(100);
-  const score  = pctToArcPoint(scorePct);
-  const thresh = pctToArcPoint(thresholdPct);
-  const threshAngle = (thresholdPct / 100) * Math.PI - Math.PI;
-
-  // largeArc = 0 always: every arc covers at most 180° of the semi-circle.
+  const fill = Math.max(0, Math.min(100, scorePct));
+  const threshPos = Math.max(0, Math.min(100, thresholdPct));
   const isConcerning = scorePct > thresholdPct;
-  const arcColor     = isConcerning ? '#ef4444' : '#16a34a';
-
-  const threshLabelAnchor = thresholdPct < 50 ? 'end' : 'start';
-  const threshLabelDx     = thresholdPct < 50 ? -8 : 8;
+  const color = isConcerning ? '#ef4444' : '#16a34a';
 
   return (
-    <div className="flex flex-col items-center shrink-0">
-      <svg
-        viewBox="0 0 240 145"
-        width="240"
-        height="145"
-        aria-label={lang === 'fr' ? `Jauge : ${scorePct}%` : `Gauge: ${scorePct}%`}
-      >
-        {/* Grey background arc */}
-        <path
-          d={`M ${f(start.x)} ${f(start.y)} A ${GR} ${GR} 0 0 1 ${f(end.x)} ${f(end.y)}`}
-          fill="none" stroke="#e5e7eb" strokeWidth={22} strokeLinecap="round"
+    <div className="w-full shrink-0 rounded-xl border border-border/60 bg-card/50 p-4 shadow-sm sm:w-72">
+      {/* Header: label + big score */}
+      <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+        {lang === 'fr' ? "Score de l'analyse" : 'Analysis score'}
+      </p>
+      <div className="mt-1 flex items-baseline gap-1">
+        <span className="text-4xl font-bold leading-none tracking-tight tabular-nums" style={{ color }}>
+          {scorePct}
+        </span>
+        <span className="text-xl font-semibold" style={{ color }}>%</span>
+      </div>
+
+      {/* Track + coloured fill + threshold marker */}
+      <div className="relative mt-4 h-2.5 rounded-full bg-muted">
+        <div
+          className="absolute inset-y-0 left-0 rounded-full transition-all duration-500"
+          style={{ width: `${fill}%`, backgroundColor: color }}
         />
-
-        {/* Coloured score arc (largeArc always 0 — see comment above) */}
-        {scorePct > 0 && scorePct < 100 && (
-          <path
-            d={`M ${f(start.x)} ${f(start.y)} A ${GR} ${GR} 0 0 1 ${f(score.x)} ${f(score.y)}`}
-            fill="none" stroke={arcColor} strokeWidth={22} strokeLinecap="round"
-          />
-        )}
-        {scorePct >= 100 && (
-          <path
-            d={`M ${f(start.x)} ${f(start.y)} A ${GR} ${GR} 0 0 1 ${f(end.x)} ${f(end.y)}`}
-            fill="none" stroke={arcColor} strokeWidth={22} strokeLinecap="round"
-          />
-        )}
-
-        {/* Threshold tick */}
-        <line
-          x1={f(GCX + (GR - 14) * Math.cos(threshAngle))}
-          y1={f(GCY + (GR - 14) * Math.sin(threshAngle))}
-          x2={f(GCX + (GR + 14) * Math.cos(threshAngle))}
-          y2={f(GCY + (GR + 14) * Math.sin(threshAngle))}
-          stroke="#4b5563" strokeWidth={3} strokeLinecap="round"
+        <div
+          className="absolute -top-1 -bottom-1 w-[2px] rounded bg-foreground/70"
+          style={{ left: `${threshPos}%` }}
+          aria-hidden
         />
+      </div>
 
-        {/* Threshold label */}
-        <text
-          x={f(thresh.x + threshLabelDx)}
-          y={f(thresh.y - 10)}
-          textAnchor={threshLabelAnchor}
-          fontSize={9} fill="#4b5563"
-          fontFamily="system-ui, sans-serif"
+      {/* Scale labels (0 / threshold / 100) */}
+      <div className="relative mt-1.5 h-4 text-[10px] text-muted-foreground">
+        <span className="absolute left-0">0%</span>
+        <span className="absolute right-0">100%</span>
+        <span
+          className="absolute -translate-x-1/2 whitespace-nowrap font-medium text-foreground/70"
+          style={{ left: `${threshPos}%` }}
         >
           {lang === 'fr' ? `Alerte ${thresholdPct}%` : `Alert ${thresholdPct}%`}
-        </text>
+        </span>
+      </div>
 
-        {/* Score value */}
-        <text
-          x={GCX} y={GCY - 34}
-          textAnchor="middle"
-          fontSize={34} fontWeight="bold" fill={arcColor}
-          fontFamily="system-ui, sans-serif"
-        >
-          {scorePct}%
-        </text>
-
-        {/* Subtitle */}
-        <text
-          x={GCX} y={GCY - 12}
-          textAnchor="middle"
-          fontSize={10} fill="#6b7280"
-          fontFamily="system-ui, sans-serif"
-        >
-          {lang === 'fr' ? "Score de l'analyse" : 'Analysis score'}
-        </text>
-
-        {/* 0 % / 100 % labels */}
-        <text x={f(start.x - 2)} y={f(start.y + 14)} textAnchor="middle" fontSize={9} fill="#9ca3af" fontFamily="system-ui, sans-serif">0%</text>
-        <text x={f(end.x + 2)}   y={f(end.y + 14)}   textAnchor="middle" fontSize={9} fill="#9ca3af" fontFamily="system-ui, sans-serif">100%</text>
-      </svg>
-
-      <p className="text-[11px] text-center text-muted-foreground -mt-1">
+      {/* Status pill */}
+      <div
+        className={`mt-3 inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium ${
+          isConcerning
+            ? 'bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300'
+            : 'bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300'
+        }`}
+      >
+        {isConcerning ? <AlertTriangle className="h-3.5 w-3.5" /> : <Check className="h-3.5 w-3.5" />}
         {isConcerning
-          ? (lang === 'fr' ? '⚠ Au-dessus du niveau d\'alerte' : '⚠ Above the alert level')
-          : (lang === 'fr' ? '✓ En dessous du niveau d\'alerte' : '✓ Below the alert level')}
-      </p>
+          ? (lang === 'fr' ? "Au-dessus du niveau d'alerte" : 'Above the alert level')
+          : (lang === 'fr' ? "En dessous du niveau d'alerte" : 'Below the alert level')}
+      </div>
     </div>
   );
 }
@@ -467,7 +427,7 @@ export function PredictionReportPanel({
           setReport(prev => {
             if (chunk.section === 'prediction')  return { ...prev, prediction:  chunk.content };
             if (chunk.section === 'risk_level')  return { ...prev, risk_level:  chunk.content };
-            if (chunk.section === 'chart_data')  return { ...prev, threshold_pct: chunk.content.threshold_pct };
+            if (chunk.section === 'chart_data')  return { ...prev, threshold_pct: chunk.content.threshold_pct, is_classification: chunk.content.is_classification };
             if (chunk.section === 'summary')     return { ...prev, summary:     chunk.content };
             if (chunk.section === 'key_factors') return { ...prev, key_factors: chunk.content };
             if (chunk.section === 'context')     return { ...prev, context:     chunk.content };
@@ -515,6 +475,7 @@ export function PredictionReportPanel({
       })),
       // Actionable LLM sections
       whatToChange:    report.what_to_change,
+      isClassification: report.is_classification,
     });
   };
 
@@ -558,30 +519,51 @@ export function PredictionReportPanel({
             </div>
           )}
 
-          {/* Prediction + risk badge */}
+          {/* Prediction — hero card */}
           {report.prediction && (
-            <Section title={t('predictionReport.sections.prediction') as string}>
-              <div className="flex flex-wrap items-center gap-3">
-                <p className="text-base font-semibold">
-                  {report.prediction.label}
-                  {report.prediction.score_pct ? ` — ${report.prediction.score_pct}` : ''}
-                </p>
-                {report.risk_level && (
-                  <RiskBadge level={report.risk_level} lang={lang} />
-                )}
+            <div className="relative overflow-hidden rounded-2xl border border-primary/20 bg-gradient-to-br from-primary/10 via-primary/[0.04] to-transparent p-5 shadow-sm">
+              <div className="pointer-events-none absolute -right-10 -top-10 h-28 w-28 rounded-full bg-primary/10 blur-2xl" />
+              <div className="relative flex flex-wrap items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <div className="flex items-center gap-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                    <Activity className="h-3.5 w-3.5" />
+                    {t('predictionReport.sections.prediction')}
+                  </div>
+                  <p className="mt-1.5 text-2xl font-bold leading-tight tracking-tight">
+                    {report.prediction.label}
+                    {report.prediction.score_pct && (
+                      <span className="ml-2 text-lg font-semibold text-primary">
+                        {report.prediction.score_pct}
+                      </span>
+                    )}
+                  </p>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    {t('predictionReport.confidence')}: {report.prediction.confidence_text}
+                  </p>
+                </div>
+                {report.risk_level && <RiskBadge level={report.risk_level} lang={lang} />}
               </div>
-              <p className="mt-1 text-xs text-muted-foreground">
-                {t('predictionReport.confidence')}: {report.prediction.confidence_text}
-              </p>
-            </Section>
+            </div>
+          )}
+
+          {/* Streaming skeleton — shown until the first narrative section lands */}
+          {loading && !report.summary && (
+            <div className="space-y-3" aria-hidden>
+              {[0, 1, 2].map((i) => (
+                <div
+                  key={i}
+                  className="h-24 animate-pulse rounded-xl border border-border/50 bg-muted/40"
+                />
+              ))}
+            </div>
           )}
 
           {/* Charts — rendered immediately from row.lime + row.score */}
           {showCharts && (
-            <Section title={lang === 'fr' ? 'Vue graphique' : 'Visual overview'}>
+            <Section title={lang === 'fr' ? 'Vue graphique' : 'Visual overview'} icon={BarChart3} accent="violet">
               <div className="flex flex-col sm:flex-row gap-6 items-start">
                 {showGauge && (
-                  <ScoreGauge
+                  <ScoreMeter
                     scorePct={scorePct!}
                     thresholdPct={thresholdPct}
                     lang={lang}
@@ -601,14 +583,14 @@ export function PredictionReportPanel({
 
           {/* Summary */}
           {report.summary && (
-            <Section title={t('predictionReport.sections.summary') as string}>
+            <Section title={t('predictionReport.sections.summary') as string} icon={AlignLeft} accent="sky">
               <p>{report.summary}</p>
             </Section>
           )}
 
           {/* Key factors */}
           {report.key_factors.length > 0 && (
-            <Section title={t('predictionReport.sections.keyFactors') as string}>
+            <Section title={t('predictionReport.sections.keyFactors') as string} icon={KeyRound} accent="amber">
               <ul className="space-y-2">
                 {report.key_factors.map((f, i) => (
                   <li key={i} className="rounded-md border bg-card p-3 text-sm shadow-sm">
@@ -633,26 +615,26 @@ export function PredictionReportPanel({
           )}
 
           {report.context && (
-            <Section title={t('predictionReport.sections.context') as string}>
+            <Section title={t('predictionReport.sections.context') as string} icon={Info} accent="slate">
               <p>{report.context}</p>
             </Section>
           )}
 
           {report.limitations && (
-            <Section title={t('predictionReport.sections.limitations') as string}>
+            <Section title={t('predictionReport.sections.limitations') as string} icon={ShieldAlert} accent="rose">
               <p>{report.limitations}</p>
             </Section>
           )}
 
           {report.next_steps && (
-            <Section title={t('predictionReport.sections.nextSteps') as string}>
+            <Section title={t('predictionReport.sections.nextSteps') as string} icon={ListChecks} accent="emerald">
               <p>{report.next_steps}</p>
             </Section>
           )}
 
           {/* What to change — actionable counterfactuals (DiCE-derived) */}
           {report.what_to_change.length > 0 && (
-            <Section title={lang === 'fr' ? 'Que faudrait-il changer ?' : 'What would need to change?'}>
+            <Section title={lang === 'fr' ? 'Que faudrait-il changer ?' : 'What would need to change?'} icon={Wand2} accent="violet">
               <p className="mb-2 text-xs text-muted-foreground">
                 {lang === 'fr'
                   ? 'Pistes hypothétiques calculées par l\'outil pour rapprocher votre profil de la zone rassurante. Ce ne sont pas des promesses.'
@@ -687,6 +669,21 @@ export function PredictionReportPanel({
             </Section>
           )}
 
+          {/* Explicit note when no actionable change could be computed */}
+          {!loading && report.is_classification && report.what_to_change.length === 0 && (
+            <Section
+              title={lang === 'fr' ? 'Que faudrait-il changer ?' : 'What would need to change?'}
+              icon={Wand2}
+              accent="violet"
+            >
+              <p className="text-xs leading-relaxed text-muted-foreground">
+                {lang === 'fr'
+                  ? "Aucune piste d'ajustement n'a pu être calculée pour ce profil : l'outil n'a pas identifié de changement réaliste qui modifierait le résultat."
+                  : 'No adjustment path could be computed for this profile: the tool did not find a realistic change that would alter the result.'}
+              </p>
+            </Section>
+          )}
+
           {report.disclaimer && (
             <div className="rounded-md border bg-muted/40 p-3 text-xs text-muted-foreground">
               {report.disclaimer}
@@ -716,13 +713,41 @@ export function PredictionReportPanel({
 // Section wrapper
 // ─────────────────────────────────────────────────────────────────────────────
 
-function Section({ title, children }: { title: string; children: React.ReactNode }) {
+type SectionAccent = 'sky' | 'violet' | 'amber' | 'emerald' | 'slate' | 'rose';
+
+const SECTION_TONE: Record<SectionAccent, string> = {
+  sky: 'bg-sky-500/15 text-sky-600 dark:text-sky-300',
+  violet: 'bg-violet-500/15 text-violet-600 dark:text-violet-300',
+  amber: 'bg-amber-500/15 text-amber-600 dark:text-amber-300',
+  emerald: 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-300',
+  slate: 'bg-slate-500/15 text-slate-600 dark:text-slate-300',
+  rose: 'bg-rose-500/15 text-rose-600 dark:text-rose-300',
+};
+
+function Section({
+  title,
+  icon: Icon,
+  accent = 'slate',
+  children,
+}: {
+  title: string;
+  icon?: LucideIcon;
+  accent?: SectionAccent;
+  children: React.ReactNode;
+}) {
   return (
-    <section>
-      <h3 className="mb-1.5 text-sm font-semibold uppercase tracking-wide text-muted-foreground">
-        {title}
-      </h3>
-      <div className="text-sm leading-relaxed">{children}</div>
+    <section className="rounded-xl border border-border/60 bg-card/40 p-4 shadow-sm">
+      <div className="mb-3 flex items-center gap-2">
+        {Icon && (
+          <span
+            className={`inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-lg ${SECTION_TONE[accent]}`}
+          >
+            <Icon className="h-4 w-4" />
+          </span>
+        )}
+        <h3 className="text-sm font-semibold tracking-tight text-foreground">{title}</h3>
+      </div>
+      <div className="text-sm leading-relaxed text-foreground/90">{children}</div>
     </section>
   );
 }

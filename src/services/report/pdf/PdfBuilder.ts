@@ -10,6 +10,7 @@ import {
   C_RULE,
 } from '../theme';
 import type { MLReadiness, RGB } from '../types';
+import { fmtIntPdf, sanitizePdfText } from '@/utils/pdfText';
 
 /**
  * Encapsulates the jsPDF document plus every layout helper used by the
@@ -56,7 +57,7 @@ export class PdfBuilder {
     doc.setTextColor(148, 163, 184);
     doc.text("Rapport d'analyse des donnees", pw / 2, 7.5, { align: 'center' });
     doc.setTextColor(203, 213, 225);
-    doc.text(this._dataset.original_name, pw - M, 7.5, { align: 'right' });
+    doc.text(sanitizePdfText(this._dataset.original_name), pw - M, 7.5, { align: 'right' });
   }
 
   ensureSpace(needed: number): void {
@@ -90,7 +91,7 @@ export class PdfBuilder {
     doc.setFontSize(10.5);
     doc.setFont('helvetica', 'bold');
     doc.setTextColor(...C_DARK);
-    doc.text(title.toUpperCase(), M + 21, this.y + 7.5);
+    doc.text(sanitizePdfText(title).toUpperCase(), M + 21, this.y + 7.5);
     this.y += 16;
   }
 
@@ -101,13 +102,13 @@ export class PdfBuilder {
     this.doc.setFontSize(9);
     this.doc.setFont('helvetica', 'bold');
     this.doc.setTextColor(...C_DARK);
-    this.doc.text(text, this.M, this.y);
+    this.doc.text(sanitizePdfText(text), this.M, this.y);
     this.y += 6;
   }
 
   /** Body paragraph. */
   para(text: string, maxWidth = this.CW): void {
-    const lines = this.doc.splitTextToSize(text, maxWidth);
+    const lines = this.doc.splitTextToSize(sanitizePdfText(text), maxWidth);
     const h = lines.length * 5;
     this.ensureSpace(h + 3);
     this.doc.setFontSize(9);
@@ -119,7 +120,7 @@ export class PdfBuilder {
 
   /** Small muted caption / note. */
   note(text: string, maxWidth = this.CW): void {
-    const lines = this.doc.splitTextToSize(text, maxWidth);
+    const lines = this.doc.splitTextToSize(sanitizePdfText(text), maxWidth);
     const h = lines.length * 4.5;
     this.ensureSpace(h + 2);
     this.doc.setFontSize(8);
@@ -134,7 +135,7 @@ export class PdfBuilder {
     const { doc, M } = this;
     const c = ALERT[kind];
     const icon = kind === 'success' ? 'v' : '!';
-    const lines = doc.splitTextToSize(text, maxWidth - 22);
+    const lines = doc.splitTextToSize(sanitizePdfText(text), maxWidth - 22);
     const h = Math.max(14, lines.length * 5 + 12);
     this.ensureSpace(h + 4);
     doc.setFillColor(...c.bg);
@@ -209,7 +210,7 @@ export class PdfBuilder {
     doc.setFont('helvetica', 'bold');
     doc.setFontSize(19);
     doc.setTextColor(255, 255, 255);
-    const titleLines = doc.splitTextToSize(this._dataset.original_name, pw - 2 * M - 20);
+    const titleLines = doc.splitTextToSize(sanitizePdfText(this._dataset.original_name), pw - 2 * M - 20);
     doc.text(titleLines[0], M, 39);
     if (titleLines.length > 1) {
       doc.setFontSize(14);
@@ -236,7 +237,7 @@ export class PdfBuilder {
           ? [251, 191, 36]
           : [248, 113, 113];
     const kpiData: Array<{ label: string; value: string; color: RGB }> = [
-      { label: 'Observations', value: totalRows.toLocaleString(), color: [255, 255, 255] },
+      { label: 'Observations', value: fmtIntPdf(totalRows), color: [255, 255, 255] },
       { label: 'Variables', value: String(totalCols), color: [255, 255, 255] },
       { label: 'Completude', value: `${completeness}%`, color: completenessColor },
       { label: 'Statut ML', value: mlBadgeLabel, color: mlBadgeColor },

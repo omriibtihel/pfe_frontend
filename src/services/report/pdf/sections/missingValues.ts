@@ -4,6 +4,7 @@ import type { PdfBuilder } from '../PdfBuilder';
 import type { ReportContext, RGB } from '../../types';
 import { C_AMBER, C_DARK, C_GREEN, C_INK, C_RED, C_ROW_ALT, C_TH_BG } from '../../theme';
 import { kindLabel } from '../../format';
+import { fmtIntPdf } from '@/utils/pdfText';
 
 export function renderMissingValues(
   pdf: PdfBuilder,
@@ -51,7 +52,7 @@ export function renderMissingValues(
         level = 'Faible';
         action = 'Imputation simple';
       }
-      return [col, colKind, count.toLocaleString(), `${pct.toFixed(1)}%`, level, action];
+      return [col, colKind, fmtIntPdf(count), `${pct.toFixed(1)}%`, level, action];
     }),
     margin: { left: pdf.M, right: pdf.M },
     styles: { fontSize: 8.5, cellPadding: 3, textColor: C_INK },

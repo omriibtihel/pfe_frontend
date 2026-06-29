@@ -3,6 +3,7 @@ import type { DatasetOut } from '../../../databaseService';
 import type { PdfBuilder } from '../PdfBuilder';
 import type { MLReadiness, ReportContext } from '../../types';
 import { C_DARK, C_INK, C_ROW_ALT, C_TH_BG } from '../../theme';
+import { fmtIntPdf } from '@/utils/pdfText';
 
 export function renderGeneralInfo(
   pdf: PdfBuilder,
@@ -25,7 +26,7 @@ export function renderGeneralInfo(
     head: [],
     body: [
       ['Fichier', dataset.original_name],
-      ['Dimensions', `${totalRows.toLocaleString()} lignes × ${totalCols} colonnes`],
+      ['Dimensions', `${fmtIntPdf(totalRows)} lignes × ${totalCols} colonnes`],
       ['Taille', dataset.size_bytes ? `${(dataset.size_bytes / 1024).toFixed(1)} Ko` : '—'],
       ['Format', dataset.content_type ?? '—'],
       ['Importé le', new Date(dataset.created_at).toLocaleDateString('fr-FR')],

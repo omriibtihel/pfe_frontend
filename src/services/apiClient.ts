@@ -113,6 +113,15 @@ class ApiClient {
     return this.token;
   }
 
+  /**
+   * Absolute API base URL (e.g. "http://127.0.0.1:8000/api").
+   * Needed for transports that bypass axios, like EventSource (SSE), which
+   * cannot use the axios baseURL/interceptors and must build their own URL.
+   */
+  get baseUrl(): string {
+    return import.meta.env.VITE_API_URL || "http://127.0.0.1:8000/api";
+  }
+
   clearToken() {
     this.setToken(null);
   }

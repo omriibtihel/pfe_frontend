@@ -219,6 +219,19 @@ const REGRESSION_PRIORITY: MetricType[] = ['r2', 'rmse', 'mae', 'mape', 'mse'];
 const CLASSIFICATION_FALLBACK: MetricType[] = ['roc_auc', 'f1', 'accuracy'];
 const REGRESSION_FALLBACK: MetricType[] = ['rmse', 'mae', 'r2'];
 
+/**
+ * Metrics guaranteed a column whenever they are selected, regardless of the
+ * `max` cap. accuracy sits last in CLASSIFICATION_PRIORITY (it is deliberately
+ * deprioritised in favour of ROC-AUC / PR-AUC on imbalanced data), so without
+ * pinning it gets evicted from the comparison table as soon as the user selects
+ * 5+ higher-priority metrics — even though it is recommended by default.
+ * Pinning keeps it visible while preserving its priority *position* (so it never
+ * becomes the default sort column).
+ */
+const PINNED_METRICS: Partial<Record<'classification' | 'regression', MetricType[]>> = {
+  classification: ['accuracy'],
+};
+
 export function selectComparisonMetrics(
   selected: MetricType[] | undefined | null,
   taskType: 'classification' | 'regression',
@@ -226,17 +239,32 @@ export function selectComparisonMetrics(
 ): ComparisonMetric[] {
   const priority = taskType === 'regression' ? REGRESSION_PRIORITY : CLASSIFICATION_PRIORITY;
   const selectedSet = new Set(selected ?? []);
-  const items: ComparisonMetric[] = [];
-  const seen = new Set<string>();
+  const pinnedSet = new Set(
+    (PINNED_METRICS[taskType] ?? []).filter((m) => selectedSet.has(m)),
+  );
 
+  // Collect every selected metric in priority order (deduped by summary key).
+  const candidates: ComparisonMetric[] = [];
+  const seen = new Set<string>();
   for (const metric of priority) {
     if (!selectedSet.has(metric)) continue;
     const summaryKey = METRIC_TO_SUMMARY_KEY[metric];
     if (!summaryKey || seen.has(summaryKey)) continue;
     const labels = METRIC_DISPLAY_LABELS[metric] ?? { label: metric, short: metric };
-    items.push({ metric, summaryKey, label: labels.label, shortLabel: labels.short });
+    candidates.push({ metric, summaryKey, label: labels.label, shortLabel: labels.short });
     seen.add(summaryKey);
-    if (items.length >= max) break;
+  }
+
+  let items: ComparisonMetric[];
+  if (candidates.length <= max) {
+    items = candidates;
+  } else {
+    // Over the cap: keep pinned metrics + the highest-priority remaining ones,
+    // then restore priority order so display position is unchanged.
+    const pinned = candidates.filter((c) => pinnedSet.has(c.metric));
+    const rest = candidates.filter((c) => !pinnedSet.has(c.metric));
+    const kept = new Set([...pinned, ...rest.slice(0, max - pinned.length)]);
+    items = candidates.filter((c) => kept.has(c));
   }
 
   if (items.length === 0) {

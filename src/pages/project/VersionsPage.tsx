@@ -34,6 +34,7 @@ import { withDemoPrefix } from "@/demo/paths";
 
 const OP_KEYS = new Set([
   "drop_columns", "rename_columns", "drop_duplicates", "fill_missing",
+  "drop_empty_rows", "drop_empty_cols", "strip_whitespace", "substitute_values",
   "standard_scaling", "minmax_scaling", "robust_scaling",
   "label_encoding", "onehot_encoding", "drop_outliers", "clip_outliers", "set_target",
 ]);
@@ -284,21 +285,25 @@ export function VersionsPage() {
               )}
             </div>
 
-            {/* Operations */}
-            {v.operations.length > 0 && (
-              <div className="flex flex-wrap gap-1">
-                {v.operations.slice(0, 4).map((op, i) => (
-                  <Badge key={i} variant="outline" className="text-[10px]">
-                    {opLabel(op)}
-                  </Badge>
-                ))}
-                {v.operations.length > 4 && (
-                  <Badge variant="outline" className="text-[10px]">
-                    +{v.operations.length - 4}
-                  </Badge>
-                )}
-              </div>
-            )}
+            {/* Operations — distinct applied operations, brief labels */}
+            {(() => {
+              const uniqueOps = Array.from(new Set(v.operations));
+              if (uniqueOps.length === 0) return null;
+              return (
+                <div className="flex flex-wrap gap-1">
+                  {uniqueOps.slice(0, 4).map((op, i) => (
+                    <Badge key={i} variant="outline" className="text-[10px]">
+                      {opLabel(op)}
+                    </Badge>
+                  ))}
+                  {uniqueOps.length > 4 && (
+                    <Badge variant="outline" className="text-[10px]">
+                      +{uniqueOps.length - 4}
+                    </Badge>
+                  )}
+                </div>
+              );
+            })()}
 
             {/* Actions */}
             <div className="flex gap-2 pt-1">

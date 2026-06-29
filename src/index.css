@@ -556,13 +556,13 @@
   /* Vibrant variant with a violet accent — for hero / dashboard headers */
   .bg-mesh-vibrant {
     background:
-      radial-gradient(ellipse 55% 45% at 8% 4%,   hsl(var(--primary)   / 0.30) 0%, transparent 65%),
-      radial-gradient(ellipse 50% 40% at 92% 8%,  hsl(var(--secondary) / 0.28) 0%, transparent 65%),
-      radial-gradient(ellipse 45% 40% at 50% 0%,  hsl(265 85% 65% / 0.18)      0%, transparent 70%),
-      radial-gradient(ellipse 60% 50% at 50% 50%, hsl(var(--accent)    / 0.14) 0%, transparent 75%),
-      radial-gradient(ellipse 45% 40% at 5%  85%, hsl(265 85% 65% / 0.12)      0%, transparent 70%),
-      radial-gradient(ellipse 50% 45% at 95% 78%, hsl(var(--secondary) / 0.20) 0%, transparent 70%),
-      radial-gradient(ellipse 40% 35% at 60% 96%, hsl(var(--accent)    / 0.12) 0%, transparent 70%);
+      radial-gradient(ellipse 55% 45% at 8% 4%,   hsl(var(--primary)   / 0.42) 0%, transparent 66%),
+      radial-gradient(ellipse 50% 40% at 92% 8%,  hsl(var(--secondary) / 0.40) 0%, transparent 66%),
+      radial-gradient(ellipse 45% 40% at 50% 0%,  hsl(265 90% 66% / 0.30)      0%, transparent 70%),
+      radial-gradient(ellipse 60% 50% at 50% 50%, hsl(var(--accent)    / 0.22) 0%, transparent 75%),
+      radial-gradient(ellipse 45% 40% at 5%  85%, hsl(265 90% 66% / 0.22)      0%, transparent 70%),
+      radial-gradient(ellipse 50% 45% at 95% 78%, hsl(var(--secondary) / 0.30) 0%, transparent 70%),
+      radial-gradient(ellipse 40% 35% at 60% 96%, hsl(var(--accent)    / 0.20) 0%, transparent 70%);
   }
 
   /* Floating decorative orbs — soft drift + breathing */

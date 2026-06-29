@@ -14,7 +14,7 @@ export function renderMetricsGuide(doc: jsPDF, ctx: TrainingReportContext, y: nu
     ? [
         [
           'R² (R-carré)',
-          "Part de la variance de la cible expliquée par le modèle. Un R² de 0.90 signifie que 90 % de la variabilité est capturée. Seuil recommandé : ≥ 0.80.",
+          "Part de la variance de la cible expliquée par le modèle. Un R² de 0.90 signifie que 90 % de la variabilité est capturée. Seuil recommandé : >= 0.80.",
         ],
         [
           'RMSE\n(Root Mean Squared Error)',
@@ -44,11 +44,11 @@ export function renderMetricsGuide(doc: jsPDF, ctx: TrainingReportContext, y: nu
         ],
         [
           'F1-Score',
-          "Moyenne harmonique du Recall et de la Precision. Indicateur équilibré, adapté aux jeux de données déséquilibrés. Seuil recommandé en clinique : ≥ 0.80.",
+          "Moyenne harmonique du Recall et de la Precision. Indicateur équilibré, adapté aux jeux de données déséquilibrés. Seuil recommandé en clinique : >= 0.80.",
         ],
         [
           'ROC AUC',
-          "Capacité globale à distinguer les positifs des négatifs, indépendamment du seuil de décision. AUC = 0.5 → aléatoire ; AUC = 1.0 → discrimination parfaite. Seuil recommandé : ≥ 0.80.",
+          "Capacité globale à distinguer les positifs des négatifs, indépendamment du seuil de décision. AUC = 0.5 : aléatoire ; AUC = 1.0 : discrimination parfaite. Seuil recommandé : >= 0.80.",
         ],
         [
           'Spécificité',
@@ -56,7 +56,7 @@ export function renderMetricsGuide(doc: jsPDF, ctx: TrainingReportContext, y: nu
         ],
         [
           'Balanced Accuracy',
-          "Moyenne de Recall et Spécificité. Plus fiable que l'Accuracy standard en présence de classes déséquilibrées. Objectif : ≥ 0.75.",
+          "Moyenne de Recall et Spécificité. Plus fiable que l'Accuracy standard en présence de classes déséquilibrées. Objectif : >= 0.75.",
         ],
       ];
 

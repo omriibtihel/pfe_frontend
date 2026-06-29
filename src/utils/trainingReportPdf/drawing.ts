@@ -2,6 +2,7 @@ import type jsPDF from 'jspdf';
 import { W, H, M, CW, BOT, C, type RGB } from './constants';
 import type { Quality } from './constants';
 import { quality, qualityColor } from './quality';
+import { sanitizePdfText } from '@/utils/pdfText';
 
 // ── Utilitaires de dessin ─────────────────────────────────────────────────────
 export function fill(doc: jsPDF, c: RGB) { doc.setFillColor(c[0], c[1], c[2]); }
@@ -43,7 +44,7 @@ export function section(doc: jsPDF, num: string, title: string, y: number): numb
   doc.setFontSize(13);
   txtc(doc, C.navy);
   // "1. Titre" — numéro et titre dans la même couleur, lisible et direct
-  const label = `${num.replace(/\.$/, '')}. ${title}`;
+  const label = `${num.replace(/\.$/, '')}. ${sanitizePdfText(title)}`;
   doc.text(label, M, y);
 
   // Trait fin discret sous le titre pour aérer la mise en page
@@ -63,7 +64,7 @@ export function subsection(doc: jsPDF, num: string, title: string, y: number): n
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(10);
   txtc(doc, C.navy);
-  doc.text(`${num} ${title}`, M, y);
+  doc.text(`${num} ${sanitizePdfText(title)}`, M, y);
   txtc(doc, C.slate);
   return y + 5;
 }

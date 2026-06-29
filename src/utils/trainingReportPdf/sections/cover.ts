@@ -6,6 +6,7 @@ import type { TrainingReportContext } from '../context';
 import { drawc, fill, finalY, txtc } from '../drawing';
 import { modelName } from '../formatters';
 import { duration } from '../session';
+import { sanitizePdfText } from '@/utils/pdfText';
 
 /**
  * Page de couverture sobre : titre centré + sous-titre + tableau récapitulatif.
@@ -58,7 +59,7 @@ export function renderCover(doc: jsPDF, ctx: TrainingReportContext): number {
     ['Date du rapport', genDate],
     ['Durée totale', duration(session)],
     ['Type de tâche', isReg ? 'Régression' : 'Classification'],
-    ['Variable cible', session.config.targetColumn ?? 'N/A'],
+    ['Variable cible', sanitizePdfText(session.config.targetColumn ?? 'N/A')],
     ['Nombre de modèles évalués', String(session.results.length)],
   ];
 

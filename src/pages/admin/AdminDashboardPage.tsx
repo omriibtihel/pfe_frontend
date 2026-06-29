@@ -14,12 +14,14 @@ import {
   Cell,
 } from "recharts";
 import {
+  AlertTriangle,
   CheckCircle2,
   Clock3,
   RefreshCw,
-  Search,
+  RotateCcw,
   ShieldCheck,
   Sparkles,
+  Trash2,
   UserCheck2,
   UserCog2,
   Users2,
@@ -32,13 +34,13 @@ import AdminLayout from "@/layouts/AdminLayout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
 import adminService, { AdminStats } from "@/services/adminService";
 import { User } from "@/types";
 import { Modal } from "@/components/ui/modal";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import UsersSection from "@/components/admin/UsersSection";
 
 // Cast to silence framer-motion's strict Easing type — runtime accepts the string.
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -64,41 +66,12 @@ function toPercent(value: number, total: number): number {
   return Math.round((value / total) * 100);
 }
 
-function makeStatusLabel(t: (key: string) => string) {
-  return (s?: string) => {
-    const v = (s || "").toUpperCase();
-    if (v === "PENDING" || v === "APPROVED" || v === "REJECTED") {
-      return t(`adminDashboard.statusLabel.${v}`);
-    }
-    return v || "-";
-  };
-}
-
-function makeRoleLabel(t: (key: string) => string) {
-  return (r?: string) => {
-    const v = (r || "").toUpperCase();
-    if (v === "ADMIN" || v === "DOCTOR") {
-      return t(`adminDashboard.roleLabel.${v}`);
-    }
-    return v || "-";
-  };
-}
-
-function statusVariant(s?: string): "default" | "secondary" | "destructive" {
-  const v = (s || "").toUpperCase();
-  if (v === "PENDING") return "secondary";
-  if (v === "REJECTED") return "destructive";
-  return "default";
-}
-
-function initials(name?: string): string {
-  if (!name) return "?";
-  return name
-    .split(" ")
-    .filter(Boolean)
-    .slice(0, 2)
-    .map((part) => part[0]?.toUpperCase())
-    .join("");
+function matchesQuery(user: User, query: string): boolean {
+  if (!query) return true;
+  return (
+    (user.fullName?.toLowerCase().includes(query) ?? false) ||
+    (user.email?.toLowerCase().includes(query) ?? false)
+  );
 }
 
 type KpiCard = {
@@ -114,31 +87,41 @@ type KpiCard = {
 export default function AdminDashboardPage() {
   const { toast } = useToast();
   const { t } = useTranslation();
-  const statusLabel = useMemo(() => makeStatusLabel(t), [t]);
-  const roleLabel = useMemo(() => makeRoleLabel(t), [t]);
 
   const [stats, setStats] = useState<AdminStats | null>(null);
   const [pendingUsers, setPendingUsers] = useState<User[]>([]);
+  const [approvedUsers, setApprovedUsers] = useState<User[]>([]);
+  const [rejectedUsers, setRejectedUsers] = useState<User[]>([]);
 
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [actionLoadingId, setActionLoadingId] = useState<string | null>(null);
   const [search, setSearch] = useState("");
+  const [approvedSearch, setApprovedSearch] = useState("");
+  const [rejectedSearch, setRejectedSearch] = useState("");
 
   const [rejectOpen, setRejectOpen] = useState(false);
   const [rejectTarget, setRejectTarget] = useState<User | null>(null);
   const [rejectReason, setRejectReason] = useState("");
 
+  const [deleteOpen, setDeleteOpen] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState<User | null>(null);
+
   const load = async (showMainLoader = true) => {
     if (showMainLoader) setLoading(true);
 
     try {
-      const [statsResponse, pendingResponse] = await Promise.all([
-        adminService.getStats(),
-        adminService.getPendingUsers(),
-      ]);
+      const [statsResponse, pendingResponse, approvedResponse, rejectedResponse] =
+        await Promise.all([
+          adminService.getStats(),
+          adminService.getPendingUsers(),
+          adminService.getApprovedUsers(),
+          adminService.getRejectedUsers(),
+        ]);
       setStats(statsResponse);
       setPendingUsers(pendingResponse);
+      setApprovedUsers(approvedResponse);
+      setRejectedUsers(rejectedResponse);
     } catch (error) {
       toast({
         title: t("adminDashboard.toastErrTitle"),
@@ -282,13 +265,18 @@ export default function AdminDashboardPage() {
 
   const filteredPending = useMemo(() => {
     const query = search.trim().toLowerCase();
-    if (!query) return pendingUsers;
-    return pendingUsers.filter(
-      (user) =>
-        user.fullName?.toLowerCase().includes(query) ||
-        user.email?.toLowerCase().includes(query)
-    );
+    return pendingUsers.filter((user) => matchesQuery(user, query));
   }, [pendingUsers, search]);
+
+  const filteredApproved = useMemo(() => {
+    const query = approvedSearch.trim().toLowerCase();
+    return approvedUsers.filter((user) => matchesQuery(user, query));
+  }, [approvedUsers, approvedSearch]);
+
+  const filteredRejected = useMemo(() => {
+    const query = rejectedSearch.trim().toLowerCase();
+    return rejectedUsers.filter((user) => matchesQuery(user, query));
+  }, [rejectedUsers, rejectedSearch]);
 
   const approve = async (user: User) => {
     setActionLoadingId(user.id);
@@ -329,6 +317,35 @@ export default function AdminDashboardPage() {
       setRejectOpen(false);
       setRejectTarget(null);
       setRejectReason("");
+      await load(false);
+    } catch (error) {
+      toast({
+        title: t("adminDashboard.toastErrTitle"),
+        description: (error as Error).message,
+        variant: "destructive",
+      });
+    } finally {
+      setActionLoadingId(null);
+    }
+  };
+
+  const openDelete = (user: User) => {
+    setDeleteTarget(user);
+    setDeleteOpen(true);
+  };
+
+  const confirmDelete = async () => {
+    if (!deleteTarget) return;
+
+    setActionLoadingId(deleteTarget.id);
+    try {
+      await adminService.deleteUser(deleteTarget.id);
+      toast({
+        title: t("adminDashboard.toastSuccessTitle"),
+        description: t("adminDashboard.toastDeleted", { name: deleteTarget.fullName }),
+      });
+      setDeleteOpen(false);
+      setDeleteTarget(null);
       await load(false);
     } catch (error) {
       toast({
@@ -400,7 +417,7 @@ export default function AdminDashboardPage() {
               transition={{ delay: 0.04 * index, duration: 0.35 }}
             >
               <Card
-                className={`group relative overflow-hidden border ${kpi.accentClass} bg-gradient-to-br shadow-card transition-all duration-300 hover:-translate-y-1 hover:shadow-premium`}
+                className={`group relative h-full overflow-hidden border ${kpi.accentClass} bg-gradient-to-br shadow-card transition-all duration-300 hover:-translate-y-1 hover:shadow-premium`}
               >
                 <div className="absolute -right-8 -top-8 h-24 w-24 rounded-full bg-foreground/5 blur-xl" />
                 <CardContent className="relative p-5">
@@ -559,111 +576,130 @@ export default function AdminDashboardPage() {
           </Card>
         </section>
 
-        <Card className="ai-surface-strong overflow-hidden">
-          <CardHeader className="space-y-3">
-            <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-              <div>
-                <CardTitle className="text-xl">{t("adminDashboard.pendingTableTitle")}</CardTitle>
-                <p className="mt-1 text-sm text-muted-foreground">
-                  {t("adminDashboard.pendingTableHint")}
-                </p>
-              </div>
+        <UsersSection
+          accent="amber"
+          icon={Clock3}
+          title={t("adminDashboard.pendingTableTitle")}
+          hint={t("adminDashboard.pendingTableHint")}
+          count={pendingUsers.length}
+          searchValue={search}
+          onSearchChange={setSearch}
+          searchPlaceholder={t("adminDashboard.searchPlaceholder")}
+          users={filteredPending}
+          loading={loading}
+          emptyIcon={CheckCircle2}
+          emptyTitle={t("adminDashboard.emptyTitle")}
+          emptyHint={t("adminDashboard.emptyHint")}
+          renderActions={(user) => {
+            const isBusy = actionLoadingId === user.id;
+            return (
+              <>
+                <Button
+                  size="sm"
+                  className="rounded-lg"
+                  onClick={() => approve(user)}
+                  disabled={isBusy}
+                >
+                  <CheckCircle2 className="mr-1.5 h-4 w-4" />
+                  {t("adminDashboard.approve")}
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="rounded-lg border-destructive/30 text-destructive hover:bg-destructive hover:text-destructive-foreground"
+                  onClick={() => openReject(user)}
+                  disabled={isBusy}
+                >
+                  <XCircle className="mr-1.5 h-4 w-4" />
+                  {t("adminDashboard.reject")}
+                </Button>
+              </>
+            );
+          }}
+        />
 
-              <div className="relative w-full md:w-80">
-                <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                <Input
-                  className="h-10 rounded-xl border-border/60 bg-background/70 pl-10 backdrop-blur-xl"
-                  placeholder={t("adminDashboard.searchPlaceholder")}
-                  value={search}
-                  onChange={(event) => setSearch(event.target.value)}
-                />
-              </div>
-            </div>
-          </CardHeader>
+        <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
+        <UsersSection
+          variant="cards"
+          scrollable
+          accent="emerald"
+          icon={UserCheck2}
+          title={t("adminDashboard.approved.title")}
+          hint={t("adminDashboard.approved.hint")}
+          count={approvedUsers.length}
+          searchValue={approvedSearch}
+          onSearchChange={setApprovedSearch}
+          searchPlaceholder={t("adminDashboard.approved.searchPlaceholder")}
+          users={filteredApproved}
+          loading={loading}
+          emptyIcon={Users2}
+          emptyTitle={t("adminDashboard.approved.emptyTitle")}
+          emptyHint={t("adminDashboard.approved.emptyHint")}
+          renderActions={(user) => {
+            const isBusy = actionLoadingId === user.id;
+            const isAdmin = user.role === "admin";
+            return (
+              <Button
+                size="sm"
+                variant="outline"
+                className="rounded-lg border-destructive/30 text-destructive hover:bg-destructive hover:text-destructive-foreground disabled:opacity-40"
+                onClick={() => openDelete(user)}
+                disabled={isBusy || isAdmin}
+                title={isAdmin ? t("adminDashboard.roleLabel.ADMIN") : undefined}
+              >
+                <Trash2 className="mr-1.5 h-4 w-4" />
+                {t("adminDashboard.approved.delete")}
+              </Button>
+            );
+          }}
+        />
 
-          <CardContent>
-            {loading ? (
-              <div className="space-y-3">
-                {[0, 1, 2, 3].map((item) => (
-                  <div key={item} className="h-14 rounded-xl animate-shimmer" />
-                ))}
-              </div>
-            ) : filteredPending.length === 0 ? (
-              <div className="flex flex-col items-center justify-center gap-2 rounded-2xl border border-dashed py-14 text-center">
-                <CheckCircle2 className="h-8 w-8 text-emerald-500" />
-                <p className="font-medium">{t("adminDashboard.emptyTitle")}</p>
-                <p className="text-sm text-muted-foreground">{t("adminDashboard.emptyHint")}</p>
-              </div>
-            ) : (
-              <div className="overflow-x-auto scrollbar-modern">
-                <table className="w-full min-w-[760px] text-sm">
-                  <thead>
-                    <tr className="border-b border-border/60 text-left text-xs uppercase tracking-wide text-muted-foreground">
-                      <th className="py-3 pr-4 font-semibold">{t("adminDashboard.th.user")}</th>
-                      <th className="py-3 pr-4 font-semibold">{t("adminDashboard.th.role")}</th>
-                      <th className="py-3 pr-4 font-semibold">{t("adminDashboard.th.status")}</th>
-                      <th className="py-3 text-right font-semibold">{t("adminDashboard.th.actions")}</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {filteredPending.map((user) => (
-                      <tr
-                        key={user.id}
-                        className="border-b border-border/50 transition-colors hover:bg-muted/35"
-                      >
-                        <td className="py-3 pr-4">
-                          <div className="flex items-center gap-3">
-                            <span className="inline-flex h-10 w-10 items-center justify-center rounded-xl border bg-muted/70 font-semibold">
-                              {initials(user.fullName)}
-                            </span>
-                            <div>
-                              <p className="font-semibold">{user.fullName}</p>
-                              <p className="text-xs text-muted-foreground">{user.email}</p>
-                            </div>
-                          </div>
-                        </td>
-                        <td className="py-3 pr-4">
-                          <Badge variant="secondary" className="rounded-full px-3">
-                            {roleLabel(user.role)}
-                          </Badge>
-                        </td>
-                        <td className="py-3 pr-4">
-                          <Badge variant={statusVariant(user.status)} className="rounded-full px-3">
-                            {statusLabel(user.status)}
-                          </Badge>
-                        </td>
-                        <td className="py-3 text-right">
-                          <div className="flex justify-end gap-2">
-                            <Button
-                              size="sm"
-                              className="rounded-lg"
-                              onClick={() => approve(user)}
-                              disabled={actionLoadingId === user.id}
-                            >
-                              <CheckCircle2 className="mr-2 h-4 w-4" />
-                              {t("adminDashboard.approve")}
-                            </Button>
-
-                            <Button
-                              size="sm"
-                              variant="destructive"
-                              className="rounded-lg"
-                              onClick={() => openReject(user)}
-                              disabled={actionLoadingId === user.id}
-                            >
-                              <XCircle className="mr-2 h-4 w-4" />
-                              {t("adminDashboard.reject")}
-                            </Button>
-                          </div>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </CardContent>
-        </Card>
+        <UsersSection
+          variant="cards"
+          scrollable
+          accent="rose"
+          icon={UserX2}
+          title={t("adminDashboard.rejected.title")}
+          hint={t("adminDashboard.rejected.hint")}
+          count={rejectedUsers.length}
+          searchValue={rejectedSearch}
+          onSearchChange={setRejectedSearch}
+          searchPlaceholder={t("adminDashboard.rejected.searchPlaceholder")}
+          users={filteredRejected}
+          loading={loading}
+          emptyIcon={UserX2}
+          emptyTitle={t("adminDashboard.rejected.emptyTitle")}
+          emptyHint={t("adminDashboard.rejected.emptyHint")}
+          renderActions={(user) => {
+            const isBusy = actionLoadingId === user.id;
+            const isAdmin = user.role === "admin";
+            return (
+              <>
+                <Button
+                  size="sm"
+                  className="rounded-lg"
+                  onClick={() => approve(user)}
+                  disabled={isBusy}
+                >
+                  <RotateCcw className="mr-1.5 h-4 w-4" />
+                  {t("adminDashboard.rejected.reapprove")}
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="rounded-lg border-destructive/30 text-destructive hover:bg-destructive hover:text-destructive-foreground disabled:opacity-40"
+                  onClick={() => openDelete(user)}
+                  disabled={isBusy || isAdmin}
+                  title={isAdmin ? t("adminDashboard.roleLabel.ADMIN") : undefined}
+                >
+                  <Trash2 className="mr-1.5 h-4 w-4" />
+                  {t("adminDashboard.approved.delete")}
+                </Button>
+              </>
+            );
+          }}
+        />
+        </div>
       </motion.div>
 
       <Modal
@@ -709,6 +745,47 @@ export default function AdminDashboardPage() {
             onChange={(event) => setRejectReason(event.target.value)}
             rows={4}
           />
+        </div>
+      </Modal>
+
+      <Modal
+        isOpen={deleteOpen}
+        onClose={() => setDeleteOpen(false)}
+        onOpenChange={setDeleteOpen}
+        title={t("adminDashboard.deleteModal.title")}
+        description={
+          deleteTarget
+            ? t("adminDashboard.deleteModal.descUser", { name: deleteTarget.fullName })
+            : undefined
+        }
+        size="lg"
+        footer={
+          <div className="flex justify-end gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setDeleteOpen(false)}
+              disabled={actionLoadingId === deleteTarget?.id}
+            >
+              {t("adminDashboard.cancel")}
+            </Button>
+            <Button
+              variant="destructive"
+              size="sm"
+              onClick={confirmDelete}
+              disabled={!deleteTarget || actionLoadingId === deleteTarget?.id}
+            >
+              <Trash2 className="mr-2 h-4 w-4" />
+              {t("adminDashboard.deleteModal.confirm")}
+            </Button>
+          </div>
+        }
+      >
+        <div className="flex items-start gap-3 rounded-xl border border-destructive/30 bg-destructive/5 p-4">
+          <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-destructive" />
+          <p className="text-sm text-muted-foreground">
+            {t("adminDashboard.deleteModal.warning")}
+          </p>
         </div>
       </Modal>
     </AdminLayout>

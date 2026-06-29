@@ -63,11 +63,11 @@ const VIEW_MODE_KEY = "mediq.dashboard.viewMode";
 const SORT_KEY = "mediq.dashboard.sortBy";
 
 const PALETTES = [
-  "from-primary/70 via-secondary/60 to-accent/60",
-  "from-secondary/70 via-accent/60 to-primary/60",
-  "from-accent/70 via-primary/60 to-secondary/60",
-  "from-primary/70 via-accent/60 to-secondary/60",
-  "from-secondary/70 via-primary/60 to-accent/60",
+  "from-primary via-secondary to-accent",
+  "from-secondary via-accent to-primary",
+  "from-accent via-primary to-secondary",
+  "from-primary via-[hsl(265_90%_66%)] to-secondary",
+  "from-secondary via-primary to-accent",
 ];
 
 function projectGradient(name: string): string {
@@ -276,23 +276,23 @@ export function DashboardPage() {
       {/* === Dashboard-scoped background — layered on top of the AppLayout aurora === */}
       <div className="pointer-events-none fixed inset-0 overflow-hidden">
         {/* Vibrant mesh wash (with violet accent) */}
-        <div className="absolute inset-0 bg-mesh-vibrant opacity-95" />
+        <div className="absolute inset-0 bg-mesh-vibrant opacity-100" />
         {/* Floating color orbs — slow breathing motion */}
-        <div className="animate-breathing absolute -left-32 top-[10%] h-[420px] w-[420px] rounded-full bg-primary/25 blur-[120px]" />
+        <div className="animate-breathing absolute -left-32 top-[10%] h-[420px] w-[420px] rounded-full bg-primary/40 blur-[110px]" />
         <div
-          className="animate-breathing absolute -right-24 top-[25%] h-[380px] w-[380px] rounded-full bg-secondary/25 blur-[120px]"
+          className="animate-breathing absolute -right-24 top-[25%] h-[380px] w-[380px] rounded-full bg-secondary/40 blur-[110px]"
           style={{ animationDelay: "-3s" }}
         />
         <div
-          className="animate-breathing absolute left-1/3 top-[55%] h-[340px] w-[340px] rounded-full blur-[110px]"
-          style={{ animationDelay: "-6s", background: "hsl(265 85% 65% / 0.18)" }}
+          className="animate-breathing absolute left-1/3 top-[55%] h-[340px] w-[340px] rounded-full blur-[100px]"
+          style={{ animationDelay: "-6s", background: "hsl(265 90% 66% / 0.30)" }}
         />
         <div
-          className="animate-breathing absolute right-1/4 bottom-[5%] h-[300px] w-[300px] rounded-full bg-accent/20 blur-[110px]"
+          className="animate-breathing absolute right-1/4 bottom-[5%] h-[300px] w-[300px] rounded-full bg-accent/32 blur-[100px]"
           style={{ animationDelay: "-1.5s" }}
         />
         {/* SVG connection lines — subtle data viz feel */}
-        <div className="absolute inset-x-0 top-[200px] h-[600px] bg-connection-lines opacity-40" />
+        <div className="absolute inset-x-0 top-[200px] h-[600px] bg-connection-lines opacity-60" />
         {/* Twinkling decorative dots — very subtle constellation */}
         <span className="absolute left-[8%]   top-[12%] h-px w-px rounded-full bg-primary/50   shadow-[0_0_4px_0px] shadow-primary/30   animate-twinkle-slow" />
         <span className="absolute left-[22%]  top-[6%]  h-px w-px rounded-full bg-secondary/40 shadow-[0_0_3px_0px] shadow-secondary/30 animate-twinkle-slow" />
@@ -305,7 +305,7 @@ export function DashboardPage() {
       </div>
 
       <motion.div
-        className="relative mx-auto w-full max-w-[clamp(1100px,75vw,1850px)] space-y-6 sm:space-y-8 lg:space-y-10 2xl:space-y-12"
+        className="relative mx-auto w-full max-w-[clamp(1100px,75vw,1850px)] space-y-5 sm:space-y-6 lg:space-y-8"
         initial="initial"
         animate="animate"
         variants={staggerContainer}
@@ -313,19 +313,19 @@ export function DashboardPage() {
         {/* ===== BENTO: HERO + ASIDE (stats + tip) ===== */}
         <motion.section
           variants={staggerItem}
-          className="grid gap-4 sm:gap-5 lg:grid-cols-12 lg:items-start lg:gap-6"
+          className="grid gap-4 sm:gap-5 lg:grid-cols-12 lg:items-stretch lg:gap-6"
         >
           {/* HERO */}
           <div className="ai-surface-strong shadow-card-glow relative flex flex-col overflow-hidden rounded-2xl p-5 sm:rounded-3xl sm:p-6 lg:col-span-8 lg:p-7 2xl:p-9">
             {/* Floating decorative orbs — drift slowly */}
-            <div className="animate-drift-orbit pointer-events-none absolute -left-24 top-4 h-56 w-56 rounded-full bg-primary/25 blur-3xl" />
+            <div className="animate-drift-orbit pointer-events-none absolute -left-24 top-4 h-56 w-56 rounded-full bg-primary/40 blur-3xl" />
             <div
-              className="animate-drift-orbit pointer-events-none absolute -right-20 bottom-0 h-64 w-64 rounded-full bg-secondary/25 blur-3xl"
+              className="animate-drift-orbit pointer-events-none absolute -right-20 bottom-0 h-64 w-64 rounded-full bg-secondary/40 blur-3xl"
               style={{ animationDelay: "-6s" }}
             />
             <div
               className="animate-drift-orbit pointer-events-none absolute right-1/3 top-1/2 h-40 w-40 rounded-full blur-3xl"
-              style={{ animationDelay: "-12s", background: "hsl(265 85% 65% / 0.22)" }}
+              style={{ animationDelay: "-12s", background: "hsl(265 90% 66% / 0.34)" }}
             />
             {/* Inner top highlight — adds depth */}
             <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-primary/40 to-transparent" />
@@ -363,7 +363,7 @@ export function DashboardPage() {
               <JourneyPipeline t={t} />
 
               {/* CTA */}
-              <div className="flex w-full">
+              <div className="mt-auto flex w-full pt-1">
                 <Button
                   data-tour="dashboard-new-project"
                   className="group/cta relative h-11 w-full gap-2 overflow-hidden bg-gradient-to-r from-primary via-[hsl(265_85%_60%)] to-secondary shadow-lg shadow-primary/30 transition-all hover:-translate-y-0.5 hover:shadow-xl hover:shadow-primary/40 sm:w-auto"
@@ -383,10 +383,10 @@ export function DashboardPage() {
             <ProfileMenu variant="card" />
 
             {/* Stats panel — one cohesive card with rows */}
-            <div className="ai-surface shadow-card-glow relative overflow-hidden rounded-2xl bg-card/75 sm:rounded-3xl">
-              <div className="pointer-events-none absolute -right-10 -top-10 h-32 w-32 rounded-full bg-primary/15 blur-2xl" />
-              <div className="pointer-events-none absolute -left-10 -bottom-10 h-32 w-32 rounded-full bg-secondary/10 blur-2xl" />
-              <div className="relative grid grid-cols-1 divide-y divide-border/40 md:grid-cols-3 md:divide-x md:divide-y-0 lg:grid-cols-1 lg:divide-x-0 lg:divide-y">
+            <div className="ai-surface shadow-card-glow relative flex-1 overflow-hidden rounded-2xl bg-card/75 sm:rounded-3xl">
+              <div className="pointer-events-none absolute -right-10 -top-10 h-32 w-32 rounded-full bg-primary/22 blur-2xl" />
+              <div className="pointer-events-none absolute -left-10 -bottom-10 h-32 w-32 rounded-full bg-secondary/16 blur-2xl" />
+              <div className="relative grid h-full grid-cols-1 divide-y divide-border/40 md:grid-cols-3 md:divide-x md:divide-y-0 lg:grid-cols-1 lg:grid-rows-3 lg:divide-x-0 lg:divide-y">
                 <CompactStatRow
                   icon={<Layers className="h-4 w-4" />}
                   label={t("dashboard.totalProjects")}
@@ -416,11 +416,11 @@ export function DashboardPage() {
 
         {/* ===== TIP (full-width strip below the bento) ===== */}
         <motion.div variants={fadeInUp}>
-          <Card className="ai-surface group relative overflow-hidden border-primary/25 bg-gradient-to-r from-primary/[0.12] via-[hsl(265_85%_65%/0.05)] to-accent/[0.04] transition-all duration-300 hover:-translate-y-0.5 hover:border-primary/40 hover:shadow-lg hover:shadow-primary/10">
-            <div className="pointer-events-none absolute -right-10 -top-10 h-36 w-36 animate-breathing rounded-full bg-primary/20 blur-2xl" />
-            <div className="pointer-events-none absolute -left-12 -bottom-12 h-28 w-28 animate-breathing rounded-full bg-accent/15 blur-2xl" style={{ animationDelay: "-4s" }} />
-            <CardContent className="relative flex flex-col gap-3 py-4 sm:flex-row sm:items-center sm:gap-4">
-              <div className="relative flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-primary/25 to-secondary/20 ring-1 ring-primary/30 shadow-sm sm:h-11 sm:w-11">
+          <Card className="ai-surface group relative overflow-hidden border-primary/30 bg-gradient-to-r from-primary/[0.18] via-[hsl(265_90%_66%/0.10)] to-accent/[0.08] transition-all duration-300 hover:-translate-y-0.5 hover:border-primary/45 hover:shadow-lg hover:shadow-primary/15">
+            <div className="pointer-events-none absolute -right-10 -top-10 h-36 w-36 animate-breathing rounded-full bg-primary/28 blur-2xl" />
+            <div className="pointer-events-none absolute -left-12 -bottom-12 h-28 w-28 animate-breathing rounded-full bg-accent/22 blur-2xl" style={{ animationDelay: "-4s" }} />
+            <CardContent className="relative flex flex-col gap-2.5 py-3 sm:flex-row sm:items-center sm:gap-3.5">
+              <div className="relative flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-primary/25 to-secondary/20 ring-1 ring-primary/30 shadow-sm sm:h-10 sm:w-10">
                 <span className="pointer-events-none absolute inset-0 rounded-xl bg-primary/30 blur-md opacity-60 transition-opacity duration-300 group-hover:opacity-100" />
                 <Lightbulb className="relative h-4 w-4 text-primary sm:h-5 sm:w-5" />
               </div>
@@ -796,13 +796,13 @@ function ProjectItem({
         transition={{ delay: index * 0.03, duration: 0.25 }}
       >
         <Card
-          className="ai-surface ring-gradient-hover group relative cursor-pointer overflow-hidden border-border/60 bg-card/80 transition-all hover:-translate-y-0.5 hover:border-primary/40 hover:shadow-lg hover:shadow-primary/10"
+          className="ai-surface ring-gradient-hover group relative cursor-pointer overflow-hidden border-border/60 bg-card/80 transition-all hover:-translate-y-0.5 hover:border-primary/45 hover:shadow-lg hover:shadow-primary/15"
           onClick={onOpen}
         >
           <CardContent className="flex items-center gap-3 p-3 sm:gap-4 sm:p-4">
             <div
               className={cn(
-                "flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl bg-gradient-to-br text-xs font-bold text-white shadow-md sm:h-12 sm:w-12 sm:text-sm",
+                "flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl bg-gradient-to-br text-xs font-bold text-white shadow-md ring-1 ring-white/25 sm:h-12 sm:w-12 sm:text-sm",
                 gradient
               )}
             >
@@ -862,24 +862,25 @@ function ProjectItem({
       <Card
         className={cn(
           "ai-surface ring-gradient-hover group relative h-full cursor-pointer overflow-hidden border-border/60 bg-card/80 transition-all duration-300",
-          "hover:border-primary/40 hover:shadow-2xl hover:shadow-primary/15",
+          "hover:border-primary/45 hover:shadow-2xl hover:shadow-primary/20",
           isOpening && "opacity-70"
         )}
         onClick={onOpen}
       >
         {/* Top gradient accent — thicker bar with subtle shimmer on hover */}
-        <div className={cn("relative h-1 bg-gradient-to-r overflow-hidden", gradient)}>
-          <span className="pointer-events-none absolute inset-0 -translate-x-full bg-gradient-to-r from-transparent via-white/50 to-transparent transition-transform duration-1000 group-hover:translate-x-full" />
+        <div className={cn("relative h-1.5 bg-gradient-to-r overflow-hidden", gradient)}>
+          <span className="pointer-events-none absolute inset-0 -translate-x-full bg-gradient-to-r from-transparent via-white/60 to-transparent transition-transform duration-1000 group-hover:translate-x-full" />
         </div>
-        {/* Glow on hover */}
-        <div className="pointer-events-none absolute inset-0 bg-gradient-to-br from-primary/[0.06] via-transparent to-secondary/[0.06] opacity-0 transition-opacity duration-300 group-hover:opacity-100" />
-        <div className="pointer-events-none absolute -top-16 -right-16 h-32 w-32 rounded-full bg-primary/10 blur-2xl opacity-0 transition-opacity duration-500 group-hover:opacity-100" />
+        {/* Persistent soft tint + stronger glow on hover */}
+        <div className="pointer-events-none absolute inset-0 bg-gradient-to-br from-primary/[0.04] via-transparent to-secondary/[0.04]" />
+        <div className="pointer-events-none absolute inset-0 bg-gradient-to-br from-primary/[0.12] via-transparent to-secondary/[0.12] opacity-0 transition-opacity duration-300 group-hover:opacity-100" />
+        <div className="pointer-events-none absolute -top-16 -right-16 h-32 w-32 rounded-full bg-primary/20 blur-2xl opacity-0 transition-opacity duration-500 group-hover:opacity-100" />
 
         <CardContent className="relative flex h-full flex-col gap-3 p-4 sm:gap-4 sm:p-5">
           <div className="flex items-start gap-3">
             <div
               className={cn(
-                "flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-xl bg-gradient-to-br text-sm font-bold text-white shadow-lg",
+                "flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-xl bg-gradient-to-br text-sm font-bold text-white shadow-lg ring-1 ring-white/25",
                 gradient
               )}
             >

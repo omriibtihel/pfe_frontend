@@ -144,12 +144,12 @@ export function LoginPage() {
           <motion.div variants={fieldVariants} className="space-y-1.5">
             <div className="flex items-center justify-between">
               <Label htmlFor="password">{t("auth.login.passwordLabel")}</Label>
-              <button
-                type="button"
+              <Link
+                to="/forgot-password"
                 className="text-xs text-muted-foreground transition-colors hover:text-foreground"
               >
                 {t("auth.login.forgotPassword")}
-              </button>
+              </Link>
             </div>
             <div className="relative">
               <motion.span

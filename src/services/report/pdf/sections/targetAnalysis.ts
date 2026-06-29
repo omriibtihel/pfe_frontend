@@ -3,6 +3,7 @@ import type { PdfBuilder } from '../PdfBuilder';
 import type { ReportContext } from '../../types';
 import { C_ACCENT, C_AMBER, C_DARK, C_GREEN, C_INK, C_RED, C_ROW_ALT, C_TH_BG } from '../../theme';
 import { fmt, kindLabel } from '../../format';
+import { fmtIntPdf } from '@/utils/pdfText';
 
 export function renderTargetAnalysis(
   pdf: PdfBuilder,
@@ -51,7 +52,7 @@ export function renderTargetAnalysis(
       ['Valeurs uniques', nUnique != null ? String(nUnique) : '—'],
       [
         'Valeurs manquantes',
-        tp.missing > 0 ? `${tp.missing.toLocaleString()} (${tp.missing_pct.toFixed(1)}%)` : 'Aucune',
+        tp.missing > 0 ? `${fmtIntPdf(tp.missing)} (${tp.missing_pct.toFixed(1)}%)` : 'Aucune',
       ],
     ] as [string, string][],
     margin: { left: pdf.M, right: pdf.M },
@@ -99,7 +100,7 @@ export function renderTargetAnalysis(
         } else {
           level = 'Très minoritaire';
         }
-        return [value, count.toLocaleString(), `${pct.toFixed(1)}%`, level];
+        return [value, fmtIntPdf(count), `${pct.toFixed(1)}%`, level];
       }),
       margin: { left: pdf.M, right: pdf.M },
       styles: { fontSize: 9, cellPadding: 3.5, textColor: C_INK },

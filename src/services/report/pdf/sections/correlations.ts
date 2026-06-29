@@ -47,5 +47,5 @@ export function renderCorrelations(pdf: PdfBuilder, correlationData: Correlation
   });
   pdf.y = pdf.getLastY() + 4;
 
-  pdf.note('Corrélation ≠ causalité. À interpréter en tenant compte du contexte métier.');
+  pdf.note("Corrélation n'implique pas causalité. À interpréter en tenant compte du contexte métier.");
 }

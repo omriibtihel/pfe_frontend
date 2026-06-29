@@ -5,6 +5,7 @@ import {
   buildClassificationView,
   type ClassificationView,
 } from '@/components/training/results/trainingResultsHelpers';
+import { deepSanitizePdf } from '@/utils/pdfText';
 
 /**
  * Per-model detail fetched alongside the lightweight `session.results`.
@@ -47,11 +48,13 @@ export async function fetchModelEnrichments(
       if (curvesRes.status === 'rejected') {
         console.warn(`PDF: failed to fetch curves for model ${id}`, curvesRes.reason);
       }
-      map.set(id, {
+      // Sanitize all dynamic strings (feature/label names, clinical text) so
+      // the standard PDF font never receives an unrenderable glyph.
+      map.set(id, deepSanitizePdf({
         detail: detailRes.status === 'fulfilled' ? detailRes.value : null,
         explainability: explRes.status === 'fulfilled' ? explRes.value : null,
         curves: curvesRes.status === 'fulfilled' ? curvesRes.value : null,
-      });
+      }));
     }),
   );
   return map;

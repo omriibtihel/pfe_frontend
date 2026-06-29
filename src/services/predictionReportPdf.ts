@@ -13,6 +13,7 @@ import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 
 import type { ReportChange, ReportFactor, ReportLang, ReportPrediction } from './predictionReportService';
+import { deepSanitizePdf } from '@/utils/pdfText';
 
 // ── Public types ──────────────────────────────────────────────────────────────
 
@@ -45,6 +46,8 @@ export interface PredictionReportPdfInput {
   chartFactors?: PdfChartFactor[];
   // LLM-generated actionable sections (optional — skipped when empty)
   whatToChange?: ReportChange[];
+  /** Classification task — controls the "what to change" empty-state note. */
+  isClassification?: boolean;
 }
 
 // ── Localized strings for the PDF chrome ──────────────────────────────────────
@@ -82,6 +85,7 @@ const STRINGS = {
     endOfReport: 'Fin du rapport',
     whatToChange: 'Que faudrait-il changer ?',
     whatToChangeIntro: "Pistes hypothétiques pour rapprocher le profil de la zone rassurante. Ce ne sont pas des promesses.",
+    whatToChangeEmpty: "Aucune piste d'ajustement n'a pu être calculée pour ce profil : l'outil n'a pas identifié de changement réaliste qui modifierait le résultat.",
     cfFactor: 'Facteur',
     cfCurrent: 'Actuel',
     cfTarget: 'Cible',
@@ -118,6 +122,7 @@ const STRINGS = {
     endOfReport: 'End of report',
     whatToChange: 'What would need to change?',
     whatToChangeIntro: 'Hypothetical paths to move the profile closer to the reassuring zone. These are not promises.',
+    whatToChangeEmpty: 'No adjustment path could be computed for this profile: the tool did not find a realistic change that would alter the result.',
     cfFactor: 'Factor',
     cfCurrent: 'Current',
     cfTarget: 'Target',
@@ -134,6 +139,10 @@ const COLOR_TEXT: [number, number, number] = [17, 24, 39];        // gray-900
 const COLOR_MUTED: [number, number, number] = [107, 114, 128];    // gray-500
 const COLOR_WARNING_BG: [number, number, number] = [254, 243, 199]; // amber-100
 const COLOR_WARNING_BORDER: [number, number, number] = [217, 119, 6]; // amber-600
+const COLOR_NAVY: [number, number, number] = [11, 22, 46];           // header band
+const COLOR_NAVY_SUB: [number, number, number] = [203, 213, 225];    // slate-300 (on navy)
+const COLOR_BRAND: [number, number, number] = [147, 197, 253];       // blue-300 (on navy)
+const COLOR_BAND_BG: [number, number, number] = [239, 246, 255];     // blue-50 (heading band)
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -153,71 +162,88 @@ function ensureRoom(doc: jsPDF, cursor: number, needed: number): number {
   return cursor;
 }
 
-function drawHeader(doc: jsPDF, input: PredictionReportPdfInput, t: typeof STRINGS.fr): number {
+function drawHeader(doc: jsPDF, input: PredictionReportPdfInput, t: Strings):number {
   const date = input.generatedAt ?? new Date();
+
+  // Navy header band with bottom accent rule.
+  const BAND_H = 32;
+  doc.setFillColor(...COLOR_NAVY);
+  doc.rect(0, 0, PAGE_W, BAND_H, 'F');
+  doc.setFillColor(...COLOR_PRIMARY);
+  doc.rect(0, BAND_H - 2, PAGE_W, 2, 'F');
+
+  // Branding
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(8);
+  doc.setTextColor(...COLOR_BRAND);
+  doc.text('MEDIQ', MARGIN, 10);
 
   // Title
   doc.setFont('helvetica', 'bold');
-  doc.setFontSize(18);
-  doc.setTextColor(...COLOR_PRIMARY);
-  doc.text(t.title, MARGIN, MARGIN + 4);
+  doc.setFontSize(17);
+  doc.setTextColor(255, 255, 255);
+  doc.text(t.title, MARGIN, 21);
 
-  // Metadata block
+  // Metadata — right-aligned, light on navy
   doc.setFont('helvetica', 'normal');
-  doc.setFontSize(9);
-  doc.setTextColor(...COLOR_MUTED);
+  doc.setFontSize(8);
+  doc.setTextColor(...COLOR_NAVY_SUB);
   const meta = [
     `${t.project}: ${input.projectName}`,
     `${t.model}: ${input.modelName}${input.modelVersion ? ` (v${input.modelVersion})` : ''}`,
     `${t.date}: ${formatDate(date, input.lang)}`,
   ];
-  meta.forEach((line, i) => doc.text(line, MARGIN, MARGIN + 12 + i * 4));
+  meta.forEach((line, i) => doc.text(line, PAGE_W - MARGIN, 9.5 + i * 4.5, { align: 'right' }));
 
-  // Separator
-  doc.setDrawColor(...COLOR_MUTED);
-  doc.setLineWidth(0.2);
-  const sepY = MARGIN + 12 + meta.length * 4 + 2;
-  doc.line(MARGIN, sepY, PAGE_W - MARGIN, sepY);
-
-  // Pedagogical intro line
+  // Pedagogical intro line below the band.
   doc.setFont('helvetica', 'italic');
   doc.setFontSize(9);
   doc.setTextColor(...COLOR_MUTED);
-  doc.text(t.intro, MARGIN, sepY + 5);
+  doc.text(t.intro, MARGIN, BAND_H + 7);
 
-  return sepY + 11;
+  return BAND_H + 14;
 }
 
 /**
- * Numbered badge ahead of a section title so the report reads as a
- * step-by-step walkthrough. Returns the x-offset where the title text
- * should start.
+ * Section heading drawn as a light full-width band with a left accent bar and
+ * an optional numbered step chip — reads as a clean, step-by-step walkthrough.
  */
-function drawStepBadge(doc: jsPDF, step: number, cursor: number): number {
-  const badgeR = 3.2;
-  const cx = MARGIN + badgeR;
-  const cy = cursor - 1.6;
-  doc.setFillColor(...COLOR_PRIMARY);
-  doc.circle(cx, cy, badgeR, 'F');
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(8);
-  doc.setTextColor(255, 255, 255);
-  doc.text(String(step), cx, cy + 1.1, { align: 'center' });
-  return MARGIN + badgeR * 2 + 2.5;
-}
-
 function drawSectionHeading(
   doc: jsPDF,
   title: string,
   cursor: number,
   step?: number,
 ): number {
-  const x = step !== undefined ? drawStepBadge(doc, step, cursor) : MARGIN;
+  const H = 9;
+  cursor = ensureRoom(doc, cursor, H + 4);
+
+  // Band background + left accent bar.
+  doc.setFillColor(...COLOR_BAND_BG);
+  doc.roundedRect(MARGIN, cursor, CONTENT_W, H, 1.5, 1.5, 'F');
+  doc.setFillColor(...COLOR_PRIMARY);
+  doc.rect(MARGIN, cursor, 1.8, H, 'F');
+
+  const midY = cursor + H / 2;
+  let x = MARGIN + 5;
+
+  // Numbered step chip.
+  if (step !== undefined) {
+    doc.setFillColor(...COLOR_PRIMARY);
+    doc.circle(x + 2.6, midY, 2.8, 'F');
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(8);
+    doc.setTextColor(255, 255, 255);
+    doc.text(String(step), x + 2.6, midY + 1.1, { align: 'center' });
+    x += 9;
+  }
+
+  // Title (navy, mixed case for a professional look).
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(11);
-  doc.setTextColor(...COLOR_PRIMARY);
-  doc.text(title.toUpperCase(), x, cursor);
-  return cursor + 5;
+  doc.setTextColor(...COLOR_NAVY);
+  doc.text(title, x, midY + 1.7);
+
+  return cursor + H + 5;
 }
 
 function drawSection(
@@ -245,31 +271,35 @@ function drawPredictionBox(
   doc: jsPDF,
   pred: ReportPrediction,
   cursor: number,
-  t: typeof STRINGS.fr,
+  t: Strings,
   step?: number,
 ): number {
   cursor = ensureRoom(doc, cursor, 30);
   cursor = drawSectionHeading(doc, t.prediction, cursor, step);
 
-  const boxH = 18;
+  const boxH = 19;
   cursor = ensureRoom(doc, cursor, boxH + 4);
+  // Soft card with a primary left accent bar (no hard border — cleaner look).
   doc.setFillColor(245, 247, 250);
-  doc.setDrawColor(...COLOR_PRIMARY);
-  doc.setLineWidth(0.4);
-  doc.roundedRect(MARGIN, cursor, CONTENT_W, boxH, 2, 2, 'FD');
+  doc.roundedRect(MARGIN, cursor, CONTENT_W, boxH, 2, 2, 'F');
+  doc.setFillColor(...COLOR_PRIMARY);
+  doc.rect(MARGIN, cursor, 2, boxH, 'F');
 
+  // Label (dark) + score (primary accent).
   doc.setFont('helvetica', 'bold');
-  doc.setFontSize(13);
+  doc.setFontSize(14);
   doc.setTextColor(...COLOR_TEXT);
-  const labelText = pred.score_pct
-    ? `${pred.label} — ${pred.score_pct}`
-    : pred.label;
-  doc.text(labelText, MARGIN + 4, cursor + 7);
+  doc.text(pred.label, MARGIN + 6, cursor + 8);
+  if (pred.score_pct) {
+    const labelW = doc.getTextWidth(pred.label);
+    doc.setTextColor(...COLOR_PRIMARY);
+    doc.text(pred.score_pct, MARGIN + 6 + labelW + 4, cursor + 8);
+  }
 
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(9);
   doc.setTextColor(...COLOR_MUTED);
-  doc.text(`${t.confidence}: ${pred.confidence_text}`, MARGIN + 4, cursor + 13);
+  doc.text(`${t.confidence}: ${pred.confidence_text}`, MARGIN + 6, cursor + 14.5);
 
   return cursor + boxH + 8;
 }
@@ -278,7 +308,7 @@ function drawKeyFactors(
   doc: jsPDF,
   factors: ReportFactor[],
   cursor: number,
-  t: typeof STRINGS.fr,
+  t: Strings,
   step?: number,
 ): number {
   if (!factors.length) return cursor;
@@ -320,7 +350,7 @@ function drawKeyFactors(
 function drawFinalDisclaimer(
   doc: jsPDF,
   text: string,
-  t: typeof STRINGS.fr,
+  t: Strings,
 ): void {
   doc.addPage();
   const pageHeight = doc.internal.pageSize.getHeight();
@@ -367,7 +397,7 @@ function drawFinalDisclaimer(
   doc.text(t.endOfReport, PAGE_W / 2, pageHeight - MARGIN - 6, { align: 'center' });
 }
 
-function drawPaginationFooter(doc: jsPDF, t: typeof STRINGS.fr): void {
+function drawPaginationFooter(doc: jsPDF, t: Strings):void {
   const pageCount = doc.getNumberOfPages();
   const pageHeight = doc.internal.pageSize.getHeight();
   for (let i = 1; i <= pageCount; i++) {
@@ -386,7 +416,7 @@ function drawPaginationFooter(doc: jsPDF, t: typeof STRINGS.fr): void {
 
 // ── Chart helpers ─────────────────────────────────────────────────────────────
 
-type Strings = typeof STRINGS.fr;
+type Strings = typeof STRINGS.fr | typeof STRINGS.en;
 
 // Color constants for chart drawing
 const COLOR_RED:   [number, number, number] = [239, 68,  68];   // red-500
@@ -608,9 +638,34 @@ function drawWhatToChange(
   return (finalY ?? cursor) + 6;
 }
 
+/**
+ * Explicit note rendered when no counterfactual could be computed, so the
+ * report never silently omits the "what to change" step for a classification.
+ */
+function drawWhatToChangeEmpty(
+  doc: jsPDF,
+  cursor: number,
+  t: Strings,
+  step?: number,
+): number {
+  cursor = ensureRoom(doc, cursor, 22);
+  cursor = drawSectionHeading(doc, t.whatToChange, cursor, step);
+
+  doc.setFont('helvetica', 'italic');
+  doc.setFontSize(9);
+  doc.setTextColor(...COLOR_MUTED);
+  const lines = doc.splitTextToSize(t.whatToChangeEmpty, CONTENT_W);
+  cursor = ensureRoom(doc, cursor, lines.length * 4.5 + 4);
+  doc.text(lines, MARGIN, cursor);
+  return cursor + lines.length * 4.5 + 6;
+}
+
 // ── Public entry point ────────────────────────────────────────────────────────
 
-export function downloadPredictionReportPdf(input: PredictionReportPdfInput): void {
+export function downloadPredictionReportPdf(rawInput: PredictionReportPdfInput): void {
+  // Clean every dynamic (LLM-generated / user) string so jsPDF's standard font
+  // never receives a glyph it can't render (arrows, emojis, narrow NBSP, …).
+  const input = deepSanitizePdf(rawInput);
   const t = STRINGS[input.lang];
   const doc = new jsPDF({ unit: 'mm', format: 'a4' });
 
@@ -645,6 +700,8 @@ export function downloadPredictionReportPdf(input: PredictionReportPdfInput): vo
   }
   if (input.whatToChange && input.whatToChange.length > 0) {
     cursor = drawWhatToChange(doc, input.whatToChange, cursor, t, step++);
+  } else if (input.isClassification) {
+    cursor = drawWhatToChangeEmpty(doc, cursor, t, step++);
   }
 
   // Disclaimer rendered once on a dedicated final page.

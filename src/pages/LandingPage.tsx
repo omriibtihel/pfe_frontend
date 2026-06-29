@@ -510,9 +510,9 @@ export default function LandingPage() {
                 className="flex flex-wrap gap-5 text-sm text-muted-foreground"
               >
                 {[
-                  t("landing.hero.trustTrial"),
-                  t("landing.hero.trustNoCard"),
-                  t("landing.hero.trustGdpr"),
+                  t("landing.hero.trustFree"),
+                  t("landing.hero.trustNoCode"),
+                  t("landing.hero.trustInstant"),
                 ].map((label) => (
                   <div key={label} className="flex items-center gap-1.5">
                     <CheckCircle2 className="w-4 h-4 text-emerald-500" />
@@ -788,9 +788,9 @@ export default function LandingPage() {
 
                   <div className="flex flex-wrap items-center justify-center gap-6 text-sm text-muted-foreground">
                     {[
-                      t("landing.cta.trustTrial"),
-                      t("landing.cta.trustNoCard"),
-                      t("landing.cta.trustSupport"),
+                      t("landing.cta.trustFree"),
+                      t("landing.cta.trustNoSetup"),
+                      t("landing.cta.trustReports"),
                     ].map((label) => (
                       <div key={label} className="flex items-center gap-1.5">
                         <CheckCircle2 className="w-4 h-4 text-emerald-500" />

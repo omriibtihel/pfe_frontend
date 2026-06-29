@@ -18,6 +18,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/comp
 import { Progress } from '@/components/ui/progress';
 import { staggerContainer, staggerItem } from '@/components/ui/page-transition';
 import { useToast } from '@/hooks/use-toast';
+import { useTrainingSessionEvents } from '@/hooks/useTrainingSessionEvents';
 import { AppLayout } from '@/layouts/AppLayout';
 import { trainingService } from '@/services/trainingService';
 import type { ModelResult, TrainingSession } from '@/types';
@@ -103,16 +104,28 @@ export function TrainingResultsPage() {
     loadSession(false);
   }, [loadSession]);
 
-  useEffect(() => {
-    if (!session) return;
-    if (session.status !== 'queued' && session.status !== 'running') return;
+  const isSessionRunning =
+    session?.status === 'queued' || session?.status === 'running';
 
-    const timer = window.setInterval(() => {
+  // Live progress via SSE push (with built-in polling fallback). The hook only
+  // tracks progress, so we refetch the full session (incl. partial results) as
+  // models complete and once training finishes.
+  const live = useTrainingSessionEvents(projectId, sessionId, {
+    enabled: Boolean(isSessionRunning),
+    onComplete: () => {
       void loadSession(true);
-    }, 1500);
+    },
+    onError: () => {
+      void loadSession(true);
+    },
+  });
 
-    return () => window.clearInterval(timer);
-  }, [session, loadSession]);
+  // Refetch results each time a model finishes (live.index advances).
+  useEffect(() => {
+    if (!isSessionRunning) return;
+    if (live.index == null) return;
+    void loadSession(true);
+  }, [live.index, isSessionRunning, loadSession]);
 
   const handleSaveModel = useCallback(
     async (modelId: string) => {
@@ -254,8 +267,13 @@ export function TrainingResultsPage() {
     );
   }
 
-  const progressValue = Math.max(0, Math.min(100, Number(session.progress ?? 0)));
   const isRunning = session.status === 'queued' || session.status === 'running';
+  // Prefer the live SSE value while running (snappier than the persisted one).
+  const progressValue = Math.max(
+    0,
+    Math.min(100, isRunning && live.progress > 0 ? live.progress : Number(session.progress ?? 0)),
+  );
+  const liveCurrentModel = (isRunning && live.currentModel) || session.currentModel;
   const hasResults = session.results.length > 0;
   const isRegression = session.config?.taskType === 'regression';
 
@@ -294,10 +312,10 @@ export function TrainingResultsPage() {
                           ? t('trainingResults.page.stateQueued')
                           : t('trainingResults.page.stateRunning')}
                       </p>
-                      {session.currentModel ? (
+                      {liveCurrentModel ? (
                         <p className="mt-0.5 truncate text-xs text-muted-foreground">
                           {t('trainingResults.page.currentModelLabel')}{' '}
-                          <span className="font-medium text-primary">{session.currentModel}</span>
+                          <span className="font-medium text-primary">{liveCurrentModel}</span>
                         </p>
                       ) : null}
                     </div>

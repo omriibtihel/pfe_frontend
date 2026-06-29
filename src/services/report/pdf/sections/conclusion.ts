@@ -56,9 +56,9 @@ export function renderConclusion(
 
   const verdictRows: [string, string][] = [];
   const verdictLabel: Record<MLReadiness['level'], string> = {
-    ready: "✓  Prêt pour l'entraînement",
-    ready_with_prep: '⚠  Prêt avec prétraitements recommandés',
-    not_ready: '✗  Non prêt sans nettoyage complémentaire',
+    ready: "Prêt pour l'entraînement",
+    ready_with_prep: 'Prêt avec prétraitements recommandés',
+    not_ready: 'Non prêt sans nettoyage complémentaire',
   };
   verdictRows.push(['Statut global', verdictLabel[mlReadiness.level]]);
 

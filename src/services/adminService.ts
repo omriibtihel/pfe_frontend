@@ -15,6 +15,12 @@ type BackendUser = {
   email: string;
   role: string;
   status: string;
+  phone?: string | null;
+  address?: string | null;
+  date_of_birth?: string | null;
+  specialty?: string | null;
+  hospital?: string | null;
+  profile_photo?: string | null;
 };
 
 function toUserRole(role: string): UserRole {
@@ -35,6 +41,12 @@ function mapBackendUser(u: BackendUser): User {
     email: u.email,
     role: toUserRole(u.role),
     status: toAccountStatus(u.status),
+    phone: u.phone ?? undefined,
+    address: u.address ?? undefined,
+    dateOfBirth: u.date_of_birth ?? undefined,
+    specialty: u.specialty ?? undefined,
+    hospital: u.hospital ?? undefined,
+    profilePhoto: u.profile_photo ?? undefined,
     createdAt: "",
     updatedAt: "",
   };
@@ -48,6 +60,20 @@ export const adminService = {
   async getPendingUsers(): Promise<User[]> {
     const res = await apiClient.get<BackendUser[]>("/admin/users/pending");
     return res.map(mapBackendUser);
+  },
+
+  async getApprovedUsers(): Promise<User[]> {
+    const res = await apiClient.get<BackendUser[]>("/admin/users/approved");
+    return res.map(mapBackendUser);
+  },
+
+  async getRejectedUsers(): Promise<User[]> {
+    const res = await apiClient.get<BackendUser[]>("/admin/users/rejected");
+    return res.map(mapBackendUser);
+  },
+
+  async deleteUser(id: string): Promise<void> {
+    await apiClient.delete(`/admin/users/${id}`);
   },
 
   async approveUser(id: string): Promise<void> {

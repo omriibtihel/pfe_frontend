@@ -1,5 +1,6 @@
 import type { PdfBuilder } from '../PdfBuilder';
 import type { MLReadiness, ReportContext } from '../../types';
+import { fmtIntPdf } from '@/utils/pdfText';
 
 export function renderExecutiveSummary(
   pdf: PdfBuilder,
@@ -26,7 +27,7 @@ export function renderExecutiveSummary(
   const sentences: string[] = [];
 
   sentences.push(
-    `Ce dataset contient ${totalRows.toLocaleString()} observations et ${totalCols} variables ` +
+    `Ce dataset contient ${fmtIntPdf(totalRows)} observations et ${totalCols} variables ` +
       `(${numericCount} numérique${numericCount > 1 ? 's' : ''}, ` +
       `${catCount} catégorielle${catCount > 1 ? 's' : ''}).`,
   );

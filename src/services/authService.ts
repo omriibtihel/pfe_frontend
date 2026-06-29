@@ -112,6 +112,19 @@ export const authService = {
     return mapMeToUser(me);
   },
 
+  async forgotPassword(email: string): Promise<string> {
+    const res = await apiClient.postJson<{ message: string }>("/auth/forgot-password", { email });
+    return res.message;
+  },
+
+  async resetPassword(token: string, newPassword: string): Promise<string> {
+    const res = await apiClient.postJson<{ message: string }>("/auth/reset-password", {
+      token,
+      new_password: newPassword,
+    });
+    return res.message;
+  },
+
   async logout(): Promise<void> {
     apiClient.clearToken();
   },

@@ -19,7 +19,7 @@ interface FileUploadProps {
 }
 
 export function FileUpload({
-  accept = ".csv,.xlsx,.xls",
+  accept = ".csv,.xlsx,.xls,.sav",
   maxSize = 50,
   onUpload,
   className,
@@ -137,7 +137,7 @@ export function FileUpload({
         <p className="font-medium text-foreground mb-1">{label}</p>
         <p className="text-sm text-muted-foreground mb-2">{description}</p>
         <p className="text-xs text-muted-foreground">
-          Formats: CSV, Excel • Max: {maxSize}MB
+          Formats: CSV, Excel, SPSS (.sav) • Max: {maxSize}MB
         </p>
         {error && (
           <p className="text-sm text-destructive mt-2">{error}</p>

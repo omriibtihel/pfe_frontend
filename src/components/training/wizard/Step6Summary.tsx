@@ -21,6 +21,7 @@ import { Progress } from "@/components/ui/progress";
 import type { TrainingConfig } from "@/types";
 import { trainingService, type TrainingValidationResponse } from "@/services/trainingService";
 import { loadPrepConfig } from "@/utils/prepConfig";
+import { useTrainingSessionEvents } from "@/hooks/useTrainingSessionEvents";
 
 interface Step6Props {
   projectId: string;
@@ -51,34 +52,27 @@ export function Step6Summary({ projectId, config, onStartTraining, onGoToResults
   const [validation, setValidation] = useState<TrainingValidationResponse>(EMPTY_VALIDATION);
   const [validating, setValidating] = useState(false);
 
-  const pollingRef = useRef<number | null>(null);
   const validationSeqRef = useRef(0);
 
-  const stopPolling = () => {
-    if (pollingRef.current) {
-      window.clearInterval(pollingRef.current);
-      pollingRef.current = null;
-    }
-  };
-
-  const refresh = async (sid: string) => {
-    const s = await trainingService.getSession(projectId, sid);
-    const st = (s.status || "queued") as TrainStatus;
-    setStatus(st);
-
-    const session = s as { progress?: number; errorMessage?: string; error_message?: string };
-    const p = typeof session.progress === "number" ? session.progress : 0;
-    setProgress(Math.max(0, Math.min(100, p)));
-
-    const err = session.errorMessage || session.error_message;
-    if (err) setError(String(err));
-
-    if (st === "succeeded" || st === "failed") stopPolling();
-  };
+  // Live progress: SSE push (with automatic polling fallback) while the
+  // session is queued/running.
+  const live = useTrainingSessionEvents(projectId, sessionId, {
+    enabled: status === "queued" || status === "running",
+    onComplete: () => {
+      setStatus("succeeded");
+      setProgress(100);
+    },
+    onError: (message) => {
+      setStatus("failed");
+      setError(message);
+    },
+  });
 
   useEffect(() => {
-    return () => stopPolling();
-  }, []);
+    if (status !== "queued" && status !== "running") return;
+    if (live.status === "running") setStatus("running");
+    if (live.progress > 0) setProgress(live.progress);
+  }, [live.status, live.progress, status]);
 
   const runValidation = async (showNetworkErrorInList: boolean): Promise<TrainingValidationResponse> => {
     validationSeqRef.current += 1;
@@ -183,24 +177,11 @@ export function Step6Summary({ projectId, config, onStartTraining, onGoToResults
       return;
     }
 
+    // Hand off to the live tracker: setting the session id (with status
+    // queued/running) enables the SSE subscription, which drives progress and
+    // the terminal succeeded/failed transitions via its callbacks above.
+    setStatus("running");
     setSessionId(sid);
-
-    try {
-      await refresh(sid);
-    } catch (e: unknown) {
-      setStatus("failed");
-      setError(e instanceof Error ? e.message : t("training.step6.errSession"));
-      return;
-    }
-
-    stopPolling();
-    pollingRef.current = window.setInterval(() => {
-      refresh(sid).catch((e: unknown) => {
-        setStatus("failed");
-        setError(e instanceof Error ? e.message : t("training.step6.errSession"));
-        stopPolling();
-      });
-    }, 1200);
   };
 
   const displayConfig = useMemo(() => {
@@ -436,6 +417,12 @@ export function Step6Summary({ projectId, config, onStartTraining, onGoToResults
                     plural: config.models.length > 1 ? "s" : "",
                   })}
                 </p>
+                {live.currentModel && (
+                  <p className="mt-0.5 truncate text-xs text-muted-foreground">
+                    <span className="font-medium text-primary">{live.currentModel}</span>
+                    {live.index && live.total ? ` (${live.index}/${live.total})` : ""}
+                  </p>
+                )}
               </div>
               <Badge className="ml-auto" variant="secondary">
                 {status}

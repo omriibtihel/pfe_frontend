@@ -1,8 +1,9 @@
 import { fireEvent, render, screen } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 
-import type { ModelResult, TrainingSession } from '@/types';
+import type { MetricType, ModelResult, TrainingSession } from '@/types';
 import { columnLowerIsBetter, ModelsComparisonTable } from './ModelsComparisonTable';
+import { selectComparisonMetrics } from './trainingResultsHelpers';
 
 // ── Fixtures ──────────────────────────────────────────────────────────────────
 
@@ -90,6 +91,42 @@ describe('columnLowerIsBetter', () => {
       expect(columnLowerIsBetter(metric)).toBe(false);
     },
   );
+});
+
+// ── selectComparisonMetrics — accuracy pinning ───────────────────────────────
+
+describe('selectComparisonMetrics — accuracy is pinned for classification', () => {
+  const metricsOf = (cols: ReturnType<typeof selectComparisonMetrics>) =>
+    cols.map((c) => c.metric);
+
+  it('keeps accuracy even when 5+ higher-priority metrics are selected', () => {
+    const selected: MetricType[] = [
+      'accuracy', 'precision', 'recall', 'f1', 'roc_auc', 'pr_auc',
+    ];
+    const cols = selectComparisonMetrics(selected, 'classification', 5);
+
+    expect(metricsOf(cols)).toContain('accuracy');
+    expect(cols).toHaveLength(5);
+    // accuracy is evicted before pinning; precision (lowest non-pinned) is dropped instead
+    expect(metricsOf(cols)).not.toContain('precision');
+  });
+
+  it('preserves priority order — accuracy stays last, not the default sort column', () => {
+    const selected: MetricType[] = [
+      'accuracy', 'precision', 'recall', 'f1', 'roc_auc', 'pr_auc',
+    ];
+    const cols = selectComparisonMetrics(selected, 'classification', 5);
+
+    expect(metricsOf(cols)).toEqual(['roc_auc', 'pr_auc', 'f1', 'recall', 'accuracy']);
+    expect(cols[0]?.metric).toBe('roc_auc');
+  });
+
+  it('does not force accuracy when the user explicitly deselected it', () => {
+    const selected: MetricType[] = ['roc_auc', 'pr_auc', 'f1', 'recall', 'precision'];
+    const cols = selectComparisonMetrics(selected, 'classification', 5);
+
+    expect(metricsOf(cols)).not.toContain('accuracy');
+  });
 });
 
 // ── ModelsComparisonTable — sort integration tests ───────────────────────────

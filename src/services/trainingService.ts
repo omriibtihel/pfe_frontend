@@ -365,8 +365,16 @@ export const trainingService = {
    * The caller is responsible for closing the EventSource when done.
    */
   getSessionEventSource(projectId: string, sessionId: string, lastSeq = -1): EventSource {
-    const url = `/api/projects/${projectId}/training/sessions/${sessionId}/events?last_seq=${lastSeq}`;
-    return new EventSource(url, { withCredentials: true });
+    // EventSource cannot set Authorization headers, so the JWT is passed as a
+    // query param (the backend `get_current_user_sse` dependency accepts ?token=).
+    // The URL must be absolute (the dev server on :8080 has no /api proxy; the API
+    // lives on :8000) — reuse the same base URL as the axios client.
+    const base = apiClient.baseUrl.replace(/\/+$/, "");
+    const params = new URLSearchParams({ last_seq: String(lastSeq) });
+    const token = apiClient.getToken();
+    if (token) params.set("token", token);
+    const url = `${base}/projects/${projectId}/training/sessions/${sessionId}/events?${params.toString()}`;
+    return new EventSource(url);
   },
 
   // ── Balance analysis ──────────────────────────────────────────────────────

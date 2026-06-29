@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import { motion, useReducedMotion } from "framer-motion";
 import {
@@ -78,8 +78,25 @@ export function SignupPage() {
     setFormData((prev) => ({ ...prev, [field]: value }));
   };
 
+  // Date du jour au format YYYY-MM-DD (heure locale) — borne max du champ date de naissance.
+  const todayStr = useMemo(() => {
+    const now = new Date();
+    const offset = now.getTimezoneOffset();
+    return new Date(now.getTime() - offset * 60_000).toISOString().slice(0, 10);
+  }, []);
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+
+    if (formData.dateOfBirth && formData.dateOfBirth > todayStr) {
+      toast({
+        title: t("auth.signup.errorTitle"),
+        description: t("auth.signup.dobFutureError"),
+        variant: "destructive",
+      });
+      return;
+    }
+
     setIsLoading(true);
 
     try {
@@ -97,9 +114,12 @@ export function SignupPage() {
         profilePhoto: profilePhoto ?? undefined,
       };
 
-      const result = await signup(signupPayload);
+      await signup(signupPayload);
 
-      toast({ title: t("auth.signup.successTitle"), description: result.message });
+      toast({
+        title: t("auth.signup.successTitle"),
+        description: t("auth.signup.successDescription"),
+      });
       navigate("/login");
     } catch (error) {
       toast({
@@ -222,6 +242,7 @@ export function SignupPage() {
                 <Input
                   id="dateOfBirth"
                   type="date"
+                  max={todayStr}
                   value={formData.dateOfBirth}
                   onChange={(e) => updateField("dateOfBirth", e.target.value)}
                   onFocus={() => setFocusedField("dateOfBirth")}
